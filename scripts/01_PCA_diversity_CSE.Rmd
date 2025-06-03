@@ -1,0 +1,103 @@
+---
+title: "Uganda tsetse population genetics"
+author: "Norah Saarman"
+date: "2025-06-03"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(adegenet)
+library(hierfstat)
+library(ggplot2)
+library(scatterplot3d)
+library(vcfR)
+library(LEA)
+library(bgchm)
+```
+# Importing data as genind object
+```{r import}
+# Import from file
+vcf <- read.vcfR("pine_random_subset.recode.vcf")
+
+# Convert the VCF object to a genind object
+genind_obj <- vcfR2genind(vcf)
+
+# Extract population labels:
+# - regexpr("^[A-Za-z]+", ...) finds the match of 
+# one or more letters at the beginning of each name
+# - regmatches() extracts that matching substring.
+pop_labels <- regmatches(indNames(genind_obj), regexpr("^[^-_]+", indNames(genind_obj)))
+
+#replace Ps01-Ps08 with Ps
+pop_labels <- gsub("^Ps\\d+", "Ps", pop_labels)
+
+# Assign the extracted labels as pop names
+pop(genind_obj) <- pop_labels
+
+# Which 17 pops should be included? 
+# Only confident about 13 of them...
+genind_sub <- genind_obj[genind_obj@pop %in% c("ZXPd02",
+  "ZXPd03", "ZXPd04", "XCPd03", "DQPd02","BCPy03", 
+  "GSPy04", "JLPy02", "LJPy02", "WSPy01", "WXPy01", 
+  "ZDPy06","ZDPy07")]
+```
+
+# Visualize genetic variation with PCA
+```{r pca}
+# Compute PCA on the subset
+pca_result3 <- dudi.pca(genind_sub, cent = FALSE, 
+    scale = TRUE, scannf = FALSE, nf = 4)
+
+# Choose colors by site/pop
+colors <- c(colorRampPalette(c("red", "orange",
+  "yellow"))(5),colorRampPalette(c("blue", "cyan",
+  "purple"))(10))
+site_colors <- c("ZXPd02"=colors[1], 
+                 "ZXPd03"=colors[2], 
+                 "ZXPd04"=colors[3], 
+                 "XCPd03"=colors[4], 
+                 "DQPd02"=colors[5], 
+                 "BCPy03"=colors[6], 
+                 "GSPy04"=colors[8], 
+                 "JLPy02"=colors[9], 
+                 "LJPy02"=colors[10], 
+                 "WSPy01"=colors[11], 
+                 "WXPy01"=colors[12], 
+                 "ZDPy06"=colors[13], 
+                 "ZDPy07"=colors[14])
+
+# Extract population codes 
+pop_codes <- as.character(pop(genind_sub))
+
+# Index the named color vector by the pop_group
+# by sampled site
+pop_colors <- site_colors[pop_codes]
+
+# Define layout: Two columns, the second column 
+# is reserved for the legend
+layout(matrix(c(1, 2), nrow = 1), 
+       widths = c(3.5,0.5))  # 7:1 ratio
+
+# First panel: PCA plot
+par(mar = c(5, 4, 4, 2))  # Reset margins
+plot(pca_result3$li[,1:2],
+     col = pop_colors,
+     pch = 19,
+     xlab = "PC1",
+     ylab = "PC2",
+     main = "PCA - Hybrid Cline")
+
+# Second panel: Legend (ensures it appears on the right)
+par(mar = c(5, 0, 4, 0))  # Remove margins
+plot.new()  # Create an empty plot space
+legend("center", 
+       legend = names(site_colors),
+       col = site_colors,
+       pch = 19,
+       cex = 0.8,
+       title = "Populations")
+```
