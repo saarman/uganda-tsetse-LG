@@ -16,8 +16,8 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
       3. Linking GitHub with RStudio (creating a PAT, cloning, committing, pushing)  
 
 - **`metadata/`** (e.g., sample metadata, lookup tables)      
-  – Small reference files (e.g., sample metadata, lookup tables).  
-  - Large raw genomic and geospatial inputs, as well as final outputs, are stored externally (see below).
+  – Small reference files (e.g., sample metadata, lookup tables).      
+  – Large raw genomic and geospatial inputs, as well as final outputs, are stored externally (see below).
           
 - **`data/`** (ignored by GitHub; see `data/README.md` for external locations)
 
