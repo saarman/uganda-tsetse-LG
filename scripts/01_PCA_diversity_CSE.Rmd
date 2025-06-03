@@ -26,9 +26,9 @@ require(poppr)
 Using adegenet and base R
 
 ```{R, import}
-# 1. CSV file "./downloads/pulsatilla_genotypes.csv" --> data frame 
+# 1. CSV file "./data/uganda_genotypes.csv" --> data frame 
 # with base R function read.csv()
-Flr <- read.csv("./downloads/pulsatilla_genotypes.csv", header=TRUE)
+Flr <- read.csv("./data/uganda_genotypes.csv", header=TRUE)
 
 # 2. Select only adults with base R indexing of data frame 
 # rows where OffID==0, all columns
