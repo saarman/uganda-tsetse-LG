@@ -42,11 +42,8 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
     - Run `01_prepare_data.R` to load and format data.
     - Then run subsequent scripts in numeric order (e.g., `02_run_PCA.R`, `03_build_RF_model.R`, etc.).
 
-4. For HPC setup (RStudio + Slurm), see:
-   `docs/HPC_instructions.md`
-
-5. For GitHub ⇄ RStudio integration, see:
-   `docs/Git_RStudio_setup.md`
+4. For HPC setup (RStudio + Slurm), and GitHub ⇄ RStudio integration, see:
+   `docs/README.md`
 
 
 ## Citation & License
