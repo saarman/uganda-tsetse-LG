@@ -16,130 +16,116 @@ RStudio Configuration:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, warning=FALSE, results=FALSE, message=FALSE}
 library(adegenet)
-library(hierfstat)
-library(ggplot2)
+library(geosphere)
+library(igraph)
 library(scatterplot3d)
-library(vcfR)
-library(LEA)
-library(bgchm)
-require(pegas)       
-require(PopGenReport)
+
+require(ggplot2)
 require(dplyr)
-require(poppr) 
-```
-# Importing data as genind object
-Using adegenet and base R
 
+#library(hierfstat)
+#require(pegas)       
+#require(PopGenReport)
+#require(poppr) 
+```
+
+# Importing data as genind object from .gen
 ```{R, import}
-# 1. CSV file "./data/uganda_genotypes.csv" --> data frame 
-# with base R function read.csv()
-Flr <- read.csv("./data/uganda_genotypes.csv", header=TRUE)
+# 1. Genepop .gen file "./input/Gff_11loci_allsites_genepop.gen" 
+Gff.genind <- read.genepop("../input/Gff_11loci_allsites_genepop.gen", ncode = 3)
 
-# 2. Select only adults with base R indexing of data frame 
-# rows where OffID==0, all columns
-Flr <- Flr[Flr$OffID==0,]
+# Metadata with base R function read.csv()
+Gff <- read.csv("../input/Gff_11loci_allsites_indinfo.txt", header=TRUE, sep = "\t")
 
-# 3. Combine columns with base R function paste()
-Flr <- data.frame(Flr[,1:5],loc1 = paste(Flr[,6],  Flr[,7], sep=":"), 
-                            loc2 = paste(Flr[,8],  Flr[,9], sep=":"), 
-                            loc3 = paste(Flr[,10], Flr[,11], sep=":"), 
-                            loc4 = paste(Flr[,12], Flr[,13], sep=":"), 
-                            loc5 = paste(Flr[,14], Flr[,15], sep=":"),  
-                            loc6 = paste(Flr[,16], Flr[,17], sep=":"),  
-                            loc7 = paste(Flr[,18], Flr[,19], sep=":"))
-# 4. Create genind object with "adegenet" function df2genind() 
-# using NA.char = "NA"
-Flr.genind <- df2genind(X=Flr[,c(6:12)], sep=":", ncode=NULL,
-                        ind.names= Flr$ID, loc.names=names(Flr[,c(6:12)]), pop=Flr$Population,
-                        NA.char="NA", ploidy=2, type="codom", strata=NULL, hierarchy=NULL)
+# Add site code to @pop slot
+Gff.genind@pop <- as.factor(Gff$SiteCode)
 
-# 5. Check genind object
-Flr.genind
-summary(Flr.genind)
-```
-
-# Count the number of individuals in each pop
-```{r}
-table(Flr$Population)
-```
-
-
-## Extract population labels:
-
-```
-# - regexpr("^[A-Za-z]+", ...) finds the match of 
-# one or more letters at the beginning of each name
-# - regmatches() extracts that matching substring.
-pop_labels <- regmatches(indNames(genind_obj), regexpr("^[^-_]+", indNames(genind_obj)))
-
-#replace Ps01-Ps08 with Ps
-pop_labels <- gsub("^Ps\\d+", "Ps", pop_labels)
-
-# Assign the extracted labels as pop names
-pop(genind_obj) <- pop_labels
-
-# Which 17 pops should be included? 
-# Only confident about 13 of them...
-genind_sub <- genind_obj[genind_obj@pop %in% c("ZXPd02",
-  "ZXPd03", "ZXPd04", "XCPd03", "DQPd02","BCPy03", 
-  "GSPy04", "JLPy02", "LJPy02", "WSPy01", "WXPy01", 
-  "ZDPy06","ZDPy07")]
+# Check genind object
+Gff.genind
+summary(Gff.genind)
 ```
 
 # Visualize genetic variation with PCA
-```{r pca}
+
+All samples:
+```{r pca-all}
+# replace NAs with locus means for PCA
+gen_tab <- tab(Gff.genind, NA.method = "mean")  
+
 # Compute PCA on the subset
-pca_result3 <- dudi.pca(genind_sub, cent = FALSE, 
-    scale = TRUE, scannf = FALSE, nf = 4)
+pca_result3 <- dudi.pca(gen_tab, cent = FALSE, scale = TRUE, scannf = FALSE, nf = 4)
 
-# Choose colors by site/pop
-colors <- c(colorRampPalette(c("red", "orange",
-  "yellow"))(5),colorRampPalette(c("blue", "cyan",
-  "purple"))(10))
-site_colors <- c("ZXPd02"=colors[1], 
-                 "ZXPd03"=colors[2], 
-                 "ZXPd04"=colors[3], 
-                 "XCPd03"=colors[4], 
-                 "DQPd02"=colors[5], 
-                 "BCPy03"=colors[6], 
-                 "GSPy04"=colors[8], 
-                 "JLPy02"=colors[9], 
-                 "LJPy02"=colors[10], 
-                 "WSPy01"=colors[11], 
-                 "WXPy01"=colors[12], 
-                 "ZDPy06"=colors[13], 
-                 "ZDPy07"=colors[14])
+# Extract percent variance explained for PC1 and PC2
+var_explained <- round(100 * pca_result3$eig / sum(pca_result3$eig), 1)
 
-# Extract population codes 
-pop_codes <- as.character(pop(genind_sub))
+# Generate ~86 visually distinct colors
+set.seed(123)  # for reproducibility
+n_pops <- nlevels(pop(Gff.genind))
+color_palette <- colorRampPalette(c("red", "orange", "yellow", "green", "cyan", "blue", "purple"))(n_pops)
 
-# Index the named color vector by the pop_group
-# by sampled site
-pop_colors <- site_colors[pop_codes]
+# Map population levels to colors
+site_levels <- levels(pop(Gff.genind))
+site_colors <- setNames(color_palette, site_levels)
 
-# Define layout: Two columns, the second column 
-# is reserved for the legend
-layout(matrix(c(1, 2), nrow = 1), 
-       widths = c(3.5,0.5))  # 7:1 ratio
+# Get color for each individual
+pop_colors <- site_colors[as.character(pop(Gff.genind))]
 
-# First panel: PCA plot
-par(mar = c(5, 4, 4, 2))  # Reset margins
-plot(pca_result3$li[,1:2],
+# Layout: 2 panels (main plot + legend)
+layout(matrix(c(1, 2), nrow = 1), widths = c(6, 2))
+
+# PCA plot
+#pdf("../figures/PCA-all-2D.pdf", width = 14, height = 10)
+par(mar = c(5, 4, 4, 2))
+plot(pca_result3$li[, 1:2],
      col = pop_colors,
      pch = 19,
-     xlab = "PC1",
-     ylab = "PC2",
-     main = "PCA - Hybrid Cline")
+     xlab = paste0("PC1 (", var_explained[1], "%)"),
+     ylab = paste0("PC2 (", var_explained[2], "%)"))
 
-# Second panel: Legend (ensures it appears on the right)
-par(mar = c(5, 0, 4, 0))  # Remove margins
-plot.new()  # Create an empty plot space
+# Legend panel
+par(mar = c(1,1,1,1))  # increase space to avoid clipping
+plot.new()
 legend("center", 
-       legend = names(site_colors),
+       legend = site_levels,
        col = site_colors,
        pch = 19,
-       cex = 0.8,
-       title = "Populations")
+       cex = 0.6,
+       title = "Populations", 
+       ncol = 3,
+       bty = "n")  # <- no border
+#dev.off()
+
+# 3D PCA plot
+#pdf("../figures/PCA-all-3D.pdf", width = 14, height = 10)
+par(mar = c(5, 4, 4, 2))
+s3d <- scatterplot3d(pca_result3$li[, 1:3],
+                     color = pop_colors,
+                     pch = 19,
+                     xlab = paste0("PC1 (", var_explained[1], "%)"),
+                     ylab = paste0("PC2 (", var_explained[2], "%)"),
+                     zlab = paste0("PC3 (", var_explained[3], "%)"),
+                     angle = 55,
+                     box = TRUE)
+
+# Legend panel
+par(mar = c(1, 1, 1, 1))
+plot.new()
+legend("center",
+       legend = site_levels,
+       col = site_colors,
+       pch = 19,
+       cex = 0.6,
+       title = "Populations",
+       ncol = 3,
+       bty = "n")
+
+
+#dev.off()
+
 ```
+
+Subset of northern cluster at K=2:
+  
+Subset of southern cluster at K=2:
