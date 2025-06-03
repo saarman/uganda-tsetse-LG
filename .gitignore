@@ -47,3 +47,34 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Ignore data and output folders (except their README.md files)
+data/*
+!data/README.md
+
+results/*
+!results/README.md
+
+# Ignore large figures
+figures/fignore*
+
+# Ignore RStudio project/user files
+.Rproj.user/
+*.Rhistory
+*.RData
+*.Rapp.history
+
+# Ignore common OS files
+.DS_Store
+Thumbs.db
+
+# Ignore logs or temporary files
+logs/
+*.log
+
+# Ignore Python caches
+__pycache__/
+*.py[cod]
+
+# Ignore all GIS rasters
+*.tif
