@@ -23,8 +23,9 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
 
 - **`results/`** (ignored by GitHub; see `results/README.md` for external locations)
 
-- **`figures/`**  (ignored by GitHub; see `figures/README.md` for list of figures)
-  High-resolution output figures from published/popgen/ML analyses.
+- **`figures/`**  (see `figures/README.md` for list of figures; larger files ignored by GitHub)      
+  – Small output figures from popgen/LG/randomforest analyses.      
+  – Large high-resolution figures ignored, see `figures/fignored`
 
 
 ## Getting started
