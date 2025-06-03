@@ -7,29 +7,22 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
 
 ## Folder structure
 
-- **`scripts/`**  
+- **`scripts/`**  (see `scripts/README.md` for table of contents)
   – R, Python, and Bash scripts in numbered order (e.g., `01_prepare_data.R`, `02_run_PCA.R`).
 
-- **`docs/`**  
-  Long-form documentation:
-  - `HPC_instructions.md` (RStudio + Slurm setup)
-  - `Git_RStudio_setup.md` (GitHub⇄RStudio details)
-  - `GoogleDrive_links.md` (external data locations)
-  - `TOC_scripts.md` (annotated list of all major analysis scripts)
+- **`docs/`**  (Long-form documentation; see `docs/README.md` for details)
+      1. Connecting to RStudio on CHPC
+      2. Submitting Slurm (interactive & batch) jobs
+      3. Linking GitHub with RStudio (creating a PAT, cloning, committing, pushing)
 
-- **`metadata/`**  
+- **`metadata/`** 
   – Small reference files (e.g., sample metadata, lookup tables).
-  - Other information/instructions:
-  1. `HPC_instructions.md` – How to start RStudio/Slurm on CHPC.  
-  2. `Git_RStudio_setup.md` – How to link GitHub and RStudio (personal access token, etc.).  
-  3. `GoogleDrive_links.md` – Where to find TIFs, external data sources.  
-  4. `scripts_TOC.md` – Annotated list of each major script and its purpose.
 
 - **`data/`** (ignored by GitHub; see `data/README.md` for external locations)
 
 - **`results/`** (ignored by GitHub; see `results/README.md` for external locations)
 
-- **`figures/`**  (ignored by GitHub)
+- **`figures/`**  (ignored by GitHub; see `figures/README.md` for list of figures)
   High-resolution output figures from published/popgen/ML analyses.
 
 
