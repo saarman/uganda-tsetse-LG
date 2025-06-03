@@ -7,9 +7,9 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
 
 ## Folder structure
 
-- **`scripts/`**  (see `scripts/README.md` for table of contents) 
-  – R, Python, and Bash scripts in numbered order (e.g., `01_prepare_data.R`, `02_run_PCA.R`).
-
+- **`scripts/`**  (see `scripts/README.md` for table of contents)   
+  – R, Python, and Bash scripts in numbered order (e.g., `01_prepare_data.R`, `02_run_PCA.R`).  
+  
 - **`docs/`**  (Long-form documentation; see `docs/README.md` for details)  
       1. Connecting to RStudio on CHPC  
       2. Submitting Slurm (interactive & batch) jobs  
