@@ -2,10 +2,8 @@
 
 **Brief overview:**  
 This repository supports population-genetics and landscape-genetics analyses of *Glossina fuscipes fuscipes* (tsetse fly) in Uganda.  
-Core objectives include mapping genetic clusters, modeling connectivity via Random Forest, and conducting leave-one-point-out cross-validation.
 
-The repository contains all code and small metadata files for our landscape‐genetics analyses of *Glossina fuscipes fuscipes* in Uganda.  
-Large raw genomic and geospatial inputs, as well as final outputs, are stored externally (see below).
+Core objectives include mapping genetic clusters, modeling connectivity via Random Forest, and conducting leave-one-point-out cross-validation. The repository contains all code and small metadata files for our landscape‐genetics analyses of *Glossina fuscipes fuscipes* in Uganda.  Large raw genomic and geospatial inputs, as well as final outputs, are stored externally (see below).
 
 ## Folder structure
 
