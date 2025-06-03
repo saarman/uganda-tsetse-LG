@@ -17,7 +17,7 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
 
 - **`metadata/`** (e.g., sample metadata, lookup tables)      
   – Small reference files (e.g., sample metadata, lookup tables).      
-  – Large raw genomic and geospatial inputs, as well as final outputs, are stored externally (see below).
+  – *NOTE*: Does not include large raw genomic and geospatial inputs, these are stored externally (see below).
           
 - **`data/`** (ignored by GitHub; see `data/README.md` for external locations)
 
