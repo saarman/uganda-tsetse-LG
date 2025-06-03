@@ -17,16 +17,51 @@ library(scatterplot3d)
 library(vcfR)
 library(LEA)
 library(bgchm)
+require(pegas)       
+require(PopGenReport)
+require(dplyr)
+require(poppr) 
 ```
 # Importing data as genind object
-```{r import}
-# Import from file
-vcf <- read.vcfR("pine_random_subset.recode.vcf")
+Using adegenet and base R
 
-# Convert the VCF object to a genind object
-genind_obj <- vcfR2genind(vcf)
+```{R, import}
+# 1. CSV file "./downloads/pulsatilla_genotypes.csv" --> data frame 
+# with base R function read.csv()
+Flr <- read.csv("./downloads/pulsatilla_genotypes.csv", header=TRUE)
 
-# Extract population labels:
+# 2. Select only adults with base R indexing of data frame 
+# rows where OffID==0, all columns
+Flr <- Flr[Flr$OffID==0,]
+
+# 3. Combine columns with base R function paste()
+Flr <- data.frame(Flr[,1:5],loc1 = paste(Flr[,6],  Flr[,7], sep=":"), 
+                            loc2 = paste(Flr[,8],  Flr[,9], sep=":"), 
+                            loc3 = paste(Flr[,10], Flr[,11], sep=":"), 
+                            loc4 = paste(Flr[,12], Flr[,13], sep=":"), 
+                            loc5 = paste(Flr[,14], Flr[,15], sep=":"),  
+                            loc6 = paste(Flr[,16], Flr[,17], sep=":"),  
+                            loc7 = paste(Flr[,18], Flr[,19], sep=":"))
+# 4. Create genind object with "adegenet" function df2genind() 
+# using NA.char = "NA"
+Flr.genind <- df2genind(X=Flr[,c(6:12)], sep=":", ncode=NULL,
+                        ind.names= Flr$ID, loc.names=names(Flr[,c(6:12)]), pop=Flr$Population,
+                        NA.char="NA", ploidy=2, type="codom", strata=NULL, hierarchy=NULL)
+
+# 5. Check genind object
+Flr.genind
+summary(Flr.genind)
+```
+
+# Count the number of individuals in each pop
+```{r}
+table(Flr$Population)
+```
+
+
+## Extract population labels:
+
+```
 # - regexpr("^[A-Za-z]+", ...) finds the match of 
 # one or more letters at the beginning of each name
 # - regmatches() extracts that matching substring.
