@@ -7,17 +7,18 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
 
 ## Folder structure
 
-- **`scripts/`**  (see `scripts/README.md` for table of contents)
+- **`scripts/`**  (see `scripts/README.md` for table of contents) 
   – R, Python, and Bash scripts in numbered order (e.g., `01_prepare_data.R`, `02_run_PCA.R`).
 
-- **`docs/`**  (Long-form documentation; see `docs/README.md` for details)
-      1. Connecting to RStudio on CHPC
-      2. Submitting Slurm (interactive & batch) jobs
-      3. Linking GitHub with RStudio (creating a PAT, cloning, committing, pushing)
+- **`docs/`**  (Long-form documentation; see `docs/README.md` for details)  
+      1. Connecting to RStudio on CHPC  
+      2. Submitting Slurm (interactive & batch) jobs  
+      3. Linking GitHub with RStudio (creating a PAT, cloning, committing, pushing)  
 
-- **`metadata/`** 
-  – Small reference files (e.g., sample metadata, lookup tables).
-
+- **`metadata/`** (e.g., sample metadata, lookup tables)
+  – Small reference files (e.g., sample metadata, lookup tables).  
+  - Large raw genomic and geospatial inputs, as well as final outputs, are stored externally (see below).
+          
 - **`data/`** (ignored by GitHub; see `data/README.md` for external locations)
 
 - **`results/`** (ignored by GitHub; see `results/README.md` for external locations)
