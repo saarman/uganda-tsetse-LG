@@ -60,6 +60,6 @@ Large raw genomic and geospatial inputs, as well as final outputs, are stored ex
 ## Citation & License
 
 If you use these scripts or refer to our data, please cite:  
-> Saarman NP et al. (2025) “Landscape genetics of *Glossina fuscipes fuscipes* in Uganda,” *Journal of Vector Ecology*, DOI:XXX.  
+> Saarman NP et al. (2025) “Landscape genetics of *Glossina fuscipes fuscipes* in Uganda,” In prepartion for publication in *Insects: Spatial Population Genetics in Insects*, [URL:https://www.mdpi.com/journal/insects/special_issues/C9FL984799](https://www.mdpi.com/journal/insects/special_issues/C9FL984799).
 
 Licensed under MIT. See `LICENSE` for full terms.
