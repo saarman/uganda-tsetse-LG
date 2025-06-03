@@ -14,7 +14,7 @@ This document explains how to:
 
 2. Configure a new RStudio session:  
    - **Cluster:** notchpeak  
-   - **R version:** R 4.0.3 (Geospatial packages)  
+   - **R version:** R 4.4.0 (Geospatial packages)  
    - **Number of cores:** 4 (up to 32 available)  
    - **Wall time (hours):** 100 (max 336 per allocation; choose at least 24)  
    - **Account:** saarman-np  
