@@ -15,7 +15,7 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
       2. Submitting Slurm (interactive & batch) jobs  
       3. Linking GitHub with RStudio (creating a PAT, cloning, committing, pushing)  
 
-- **`metadata/`** (e.g., sample metadata, lookup tables)      
+- **`input/`** (e.g., sample metadata, lookup tables)      
   – Small reference files (e.g., sample metadata, lookup tables).      
   – *NOTE*: Does not include large raw genomic and geospatial inputs, these are stored externally (see below).
           
