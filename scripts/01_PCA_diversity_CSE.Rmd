@@ -314,16 +314,12 @@ Now 68 pops with group size ranges from 15-50.
 
 # Genetic diversity
 
-Convert to hierfstat format
+Estimate allelic richness (standardized/rarefied) with pegas
 ```{r}
+library(pegas)
 library(hierfstat)
 
 genind_hf <- genind2hierfstat(Gff.genind_rf)
-```
-
-Estimate allelic richness (standardized/rarefied)
-```{r}
-library(pegas)
 
 # This function rarefies allelic richness to the smallest sample size
 allelic_richness <- allelic.richness(genind_hf)
@@ -346,28 +342,255 @@ div_stats <- poppr(Gff.genind_rf)
 # View a summary table
 div_stats
 ```
-For F-statistics, you can use hierfstat::basic.stats() but need to split by population first... and basic.stats(genind_hf) will not do this for you automatically. Maybe you would need to run over a loop of pops, and subsample each population first, than basic.stats(@pop)
+Hierfstat, separating by pop and rarefying to min samples size with 100 replications with own code:
+```{r}
+# Load required libraries
+library(adegenet)
+library(hierfstat)
+
+# -----------------------------------------------------
+# Set rarefaction parameters
+# -----------------------------------------------------
+
+# Minimum number of individuals per population to include
+min_n <- 15
+
+# Number of random resampling repetitions per population
+n_reps <- 100
+
+# -----------------------------------------------------
+# Split the genind object by population
+# -----------------------------------------------------
+
+# seppop() returns a list of genind objects, one for each population
+pop_list <- seppop(Gff.genind_rf)
+
+# -----------------------------------------------------
+# For each pop, repeat random sampling n_reps times
+# -----------------------------------------------------
+# For each replicate:
+# - Randomly sample min_n individuals (with no replacement)
+# - Convert to hierfstat format
+# - Run basic.stats()
+# - Extract and average FIS, Ho (observed heterozygosity), and He (expected heterozygosity)
+
+results <- lapply(names(pop_list), function(pname) {
+  g <- pop_list[[pname]]
+
+  # Skip populations with fewer than min_n individuals
+  if (nInd(g) < min_n) return(NULL)
+
+  # Repeat rarefied sampling n_reps times
+  replicate(n_reps, {
+    # Randomly sample min_n individuals
+    inds <- sample(1:nInd(g), min_n)
+    g_sub <- g[inds, ]
+
+    # Convert to hierfstat format and compute basic stats
+    hf <- genind2hierfstat(g_sub)
+    bs <- basic.stats(hf)
+
+    # Return vector of average values across loci
+    c(
+      FIS = mean(bs$Fis, na.rm = TRUE),
+      Ho  = mean(bs$Ho, na.rm = TRUE),
+      He  = mean(bs$Hs, na.rm = TRUE)
+    )
+  }) |>
+    t() |>                  # transpose so each row = one replicate
+    as.data.frame()         # convert to data frame for easy averaging
+})
+
+# -----------------------------------------------------
+# Average results across replicates for each population
+# -----------------------------------------------------
+
+# Keep only populations where stats were successfully computed
+names(results) <- names(pop_list)[sapply(results, is.data.frame)]
+
+# Compute mean FIS, Ho, He across replicates
+summary_stats <- do.call(rbind, lapply(results, function(df) {
+  colMeans(df, na.rm = TRUE)
+}))
+
+# Format as a final summary table
+summary_df <- data.frame(
+  Population = rownames(summary_stats),
+  round(summary_stats, 3),  # round to 3 decimal places
+  row.names = NULL
+)
+```
+
+Compile results from the three code chunks into one data frame
+```{r}
+# 1. Convert allelic richness (mean_ar) to a data frame
+ar_df <- data.frame(
+  Population = names(mean_ar),
+  Allelic_Richness = as.numeric(mean_ar),
+  row.names = NULL
+)
+
+# 2. Convert poppr results (div_stats) to a data frame
+#    (assumes div_stats has rownames corresponding to populations)
+div_stats_df <- data.frame(
+  Population = div_stats$Pop,
+  div_stats[ , setdiff(names(div_stats), "Pop") ],
+  row.names = NULL
+)
+
+# 3. 'summary_df' from the hierfstat rarefaction step already has:
+#      Population | FIS | Ho | He
+#    (no conversion needed)
+
+# 4. Merge all three data frames by "Population"
+#    Use Reduce() for a sequential full join
+summary_df <- Reduce(function(x, y) {
+  merge(x, y, by = "Population", all = TRUE)
+}, list(ar_df, div_stats_df, summary_df))
+
+# 5. Save the combined summary to a CSV file
+#write.csv(summary_df, "../input/summary_df.csv", row.names = FALSE)
+
+# 6. Print the final table
+print(summary_df)
+```
 
 # Cavalli-Sforza and Edwards' Distance (CSE)
 
-Pairwise within clusters "north" and "south"
+Pairwise within cluster "north"
 ```{r}
-# Loop through K2 clusters
-for (region in c("north", "south")) {
 
-  # Subset genind and metadata
-  meta_sub <- Gff_rf[Gff_rf$K2 == region, ]
-  gen_sub <- Gff.genind_rf[pop(Gff.genind_rf) %in% meta_sub$SiteCode]
+# Subset genind and metadata
+meta_sub <- Gff_rf[Gff_rf$K2 == "north", ]
+gen_sub <- Gff.genind_rf[pop(Gff.genind_rf) %in% meta_sub$SiteCode]
 
-  # Convert to genpop (aggregates by population)
-  genpop_sub <- genind2genpop(gen_sub)
+# Convert to genpop (aggregates by population)
+genpop_sub <- genind2genpop(gen_sub)
 
-  # Compute Cavalli-Sforza and Edwards’ distance
-  cse_dist <- dist.genpop(genpop_sub, method = 2)  # method = 2 → CSE distance
+# Compute Cavalli-Sforza and Edwards’ distance
+cse_dist <- dist.genpop(genpop_sub, method = 2)  # method = 2 → CSE distance
 
-  # Display as a matrix
-  cse_matrix <- as.matrix(cse_dist)
+# Display as a matrix
+cse_north <- as.matrix(cse_dist)
+```
 
-  cat("\n--- Cavalli-Sforza and Edwards' distance for", region, "---\n")
-  print(round(cse_matrix, 4))
-}```
+Pairwise within cluster "south"
+```{r}
+
+# Subset genind and metadata
+meta_sub <- Gff_rf[Gff_rf$K2 == "south", ]
+gen_sub <- Gff.genind_rf[pop(Gff.genind_rf) %in% meta_sub$SiteCode]
+
+# Convert to genpop (aggregates by population)
+genpop_sub <- genind2genpop(gen_sub)
+
+# Compute Cavalli-Sforza and Edwards’ distance
+cse_dist <- dist.genpop(genpop_sub, method = 2)  # method = 2 → CSE distance
+
+# Display as a matrix
+cse_south <- as.matrix(cse_dist)
+```
+
+Combine CSE output into a single dataframe for downstream analysis:
+```{r}
+# -----------------------------------------------------
+# 1. Create a metadata data frame for coordinates and cluster
+# -----------------------------------------------------
+meta_coords <- unique(Gff_rf[, c("SiteCode", "SiteLat", "SiteLong", "K2")])
+names(meta_coords) <- c("SiteCode", "lat", "long", "cluster")
+
+# -----------------------------------------------------
+# 2. Process the "north" CSE matrix
+# -----------------------------------------------------
+north_df <- as.data.frame(as.table(cse_north), stringsAsFactors = FALSE)
+names(north_df) <- c("Var1", "Var2", "CSEdistance")
+
+# Keep only one triangle (Var1 < Var2 alphabetically)
+north_df <- subset(north_df, Var1 < Var2)
+
+# Merge to get lat1, long1, and Pop1_cluster
+north_df <- merge(
+  north_df,
+  meta_coords,
+  by.x = "Var1",
+  by.y = "SiteCode",
+  all.x = TRUE,
+  suffixes = c("", ".ignore")
+)
+names(north_df)[names(north_df) == "lat"]       <- "lat1"
+names(north_df)[names(north_df) == "long"]      <- "long1"
+names(north_df)[names(north_df) == "cluster"]   <- "Pop1_cluster"
+
+# Merge to get lat2, long2, and Pop2_cluster
+north_df <- merge(
+  north_df,
+  meta_coords,
+  by.x = "Var2",
+  by.y = "SiteCode",
+  all.x = TRUE,
+  suffixes = c("", ".ignore")
+)
+names(north_df)[names(north_df) == "lat"]       <- "lat2"
+names(north_df)[names(north_df) == "long"]      <- "long2"
+names(north_df)[names(north_df) == "cluster"]   <- "Pop2_cluster"
+
+# Select and order columns
+north_df <- north_df[, c(
+  "Var1", "Var2", "CSEdistance",
+  "lat1", "long1", "lat2", "long2",
+  "Pop1_cluster", "Pop2_cluster"
+)]
+
+# -----------------------------------------------------
+# 3. Process the "south" CSE matrix (analogous steps)
+# -----------------------------------------------------
+south_df <- as.data.frame(as.table(cse_south), stringsAsFactors = FALSE)
+names(south_df) <- c("Var1", "Var2", "CSEdistance")
+
+south_df <- subset(south_df, Var1 < Var2)
+
+south_df <- merge(
+  south_df,
+  meta_coords,
+  by.x = "Var1",
+  by.y = "SiteCode",
+  all.x = TRUE,
+  suffixes = c("", ".ignore")
+)
+names(south_df)[names(south_df) == "lat"]       <- "lat1"
+names(south_df)[names(south_df) == "long"]      <- "long1"
+names(south_df)[names(south_df) == "cluster"]   <- "Pop1_cluster"
+
+south_df <- merge(
+  south_df,
+  meta_coords,
+  by.x = "Var2",
+  by.y = "SiteCode",
+  all.x = TRUE,
+  suffixes = c("", ".ignore")
+)
+names(south_df)[names(south_df) == "lat"]       <- "lat2"
+names(south_df)[names(south_df) == "long"]      <- "long2"
+names(south_df)[names(south_df) == "cluster"]   <- "Pop2_cluster"
+
+south_df <- south_df[, c(
+  "Var1", "Var2", "CSEdistance",
+  "lat1", "long1", "lat2", "long2",
+  "Pop1_cluster", "Pop2_cluster"
+)]
+
+# -----------------------------------------------------
+# 4. Combine "north" and "south" results
+# -----------------------------------------------------
+cse_combined <- rbind(north_df, south_df)
+
+# -----------------------------------------------------
+# 5. Save to CSV
+# -----------------------------------------------------
+#write.csv(cse_combined, "../input/Gff_11loci_68sites_cse.csv", row.names = FALSE)
+
+# -----------------------------------------------------
+# 6. View the first few rows
+# -----------------------------------------------------
+head(cse_combined)
+```
