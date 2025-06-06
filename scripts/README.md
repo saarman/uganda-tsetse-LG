@@ -5,7 +5,7 @@ Below is an annotated list of each major script/notebook in this project, in rec
 - **00_install_packages.R**  
    Installs all required R packages for the Uganda tsetse landscape‐genetics workflow.
 
-- **01_PCA_diversity_CSE.R**  
+- **01_PCA_diversity_CSE.Rmd**  
    Creates raster pixels for Lake Victoria, river kernel raster layer, geodist layer.
  
 - **02_prepare_rasters.R**  
