@@ -1,5 +1,5 @@
 ---
-title: "Uganda tsetse pop gen: PCA, diversity, CSE"
+title: "Uganda tsetse PopGen: PCA, diversity, CSE"
 author: "Norah Saarman"
 date: "2025-06-03"
 output: pdf_document
@@ -16,21 +16,25 @@ RStudio Configuration:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r, warning=FALSE, results=FALSE, message=FALSE}
+```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
 library(adegenet)
 library(geosphere)
 library(igraph)
 library(scatterplot3d)
-require(ggplot2)
-require(dplyr)
+library(ggplot2)
+library(dplyr)
 library(hierfstat)
-require(pegas)       
-require(PopGenReport)
-require(poppr) 
+library(pegas)
+library(PopGenReport)
+library(poppr)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(cowplot)
+library(viridis)
 ```
-
 # Importing data as genind object from .gen
-```{R, import}
+```{r genind}
 # 1. Genepop .gen file "./input/Gff_11loci_allsites_genepop.gen" 
 Gff.genind <- read.genepop("../input/Gff_11loci_allsites_genepop.gen", ncode = 3)
 
@@ -44,8 +48,7 @@ Gff.genind@pop <- as.factor(Gff$SiteCode)
 Gff.genind
 summary(Gff.genind)
 ```
-
-# Visualize genetic variation with PCA
+# Visualize genetic variation with PCA  
 
 All samples:
 ```{r pca-all}
@@ -58,7 +61,7 @@ pca_result3 <- dudi.pca(gen_tab, cent = FALSE, scale = TRUE, scannf = FALSE, nf 
 # Extract percent variance explained for PC1 and PC2
 var_explained <- round(100 * pca_result3$eig / sum(pca_result3$eig), 1)
 
-# Generate ~86 visually distinct colors
+# Generate 86 visually distinct colors
 set.seed(123)  # for reproducibility
 n_pops <- nlevels(pop(Gff.genind))
 color_palette <- colorRampPalette(c("red", "orange", "yellow", "green", "cyan", "blue", "purple"))(n_pops)
@@ -81,7 +84,6 @@ plot(pca_result3$li[, 1:2],
      pch = 19,
      xlab = paste0("PC1 (", var_explained[1], "%)"),
      ylab = paste0("PC2 (", var_explained[2], "%)"))
-
 # Legend panel
 par(mar = c(1,1,1,1))  # increase space to avoid clipping
 plot.new()
@@ -106,7 +108,6 @@ s3d <- scatterplot3d(pca_result3$li[, c(1,3,2)],
                      zlab = paste0("PC2 (", var_explained[2], "%)"), # vertical
                      angle = 55,
                      box = TRUE)
-
 # Legend panel
 par(mar = c(1, 1, 1, 1))
 plot.new()
@@ -118,28 +119,22 @@ legend("center",
        title = "Populations",
        ncol = 3,
        bty = "n")
-
-
 #dev.off()
-
 ```
-
 # Considering K=2 by Evano method
-```{r}
+```{r k2}
 # Add K2 cluster combining "south" and "west" into "south"
 Gff$K2 <- ifelse(Gff$SiteMajCluster %in% c("south", "west"), "south", Gff$SiteMajCluster)
 ```
 PCA for each K2 clusters separately
-```{r}
+```{r pca-k2}
 # PCA for each K2 cluster separately
 for (region in c("north","south")) {
   genind_sub <- Gff.genind[pop(Gff.genind) %in% Gff$SiteCode[Gff$K2 == region]]
-
   # Replace NAs with locus means for PCA
   gen_tab <- tab(genind_sub, NA.method = "mean")
   pca_result <- dudi.pca(gen_tab, cent = FALSE, scale = TRUE, scannf = FALSE, nf = 4)
   var_explained <- round(100 * pca_result$eig / sum(pca_result$eig), 1)
-
   # Color palette
   set.seed(123)
   n_pops <- nlevels(pop(genind_sub))
@@ -147,9 +142,8 @@ for (region in c("north","south")) {
   site_levels <- levels(pop(genind_sub))
   site_colors <- setNames(palette, site_levels)
   pop_colors <- site_colors[as.character(pop(genind_sub))]
-
   layout(matrix(c(1, 2), nrow = 1), widths = c(6, 2.5))
-
+  
   # 2D PCA plot
   #pdf(paste0("../figures/PCA-", region, "-2D.pdf"), width = 14, height = 10)
   par(mar = c(5, 4, 4, 2))
@@ -158,7 +152,6 @@ for (region in c("north","south")) {
        pch = 19,
        xlab = paste0("PC1 (", var_explained[1], "%)"),
        ylab = paste0("PC2 (", var_explained[2], "%)"))
-
   # Legend
   par(mar = c(1, 1, 1, 1))
   plot.new()
@@ -171,7 +164,7 @@ for (region in c("north","south")) {
          ncol = 2,
          bty = "n")
   #dev.off()
-
+  
   # 3D PCA plot
   #pdf(paste0("../figures/PCA-", region, "-3D.pdf"), width = 14, height = 10)
   par(mar = c(5, 1, 4, 2))
@@ -184,8 +177,9 @@ for (region in c("north","south")) {
                 ylab = paste0("PC3 (", var_explained[3], "%)"),
                 zlab = paste0("PC2 (", var_explained[2], "%)"),
                 angle = 55,
-                box = TRUE)
+                box = TRUE) 
   par(mar = c(1, 1, 1, 1))
+  
   plot.new()
   legend("center",
          legend = site_levels,
@@ -195,27 +189,24 @@ for (region in c("north","south")) {
          title ="Populations",
          ncol = 2,
          bty = "n")
+  
   #dev.off()
 }
 ```
-# Choosing sites for Random Forest (K=2)
 
-Filter out any Gff$Cluster == nogroup to avoid admixed individuals, which will inflate the genetic distance within each geographic region. 
+# Choosing sites for Random Forest (K=2)  
 
-Filtering for only largest/most complete genetic sample from each 5 km radius for gps within each Gff$SiteMajCluster independently so that we get best samples from both north and south of the river/Lake Kyoga dividing north and south
+Filter out any Gff$Cluster == nogroup to avoid admixed individuals, which will inflate the genetic distance within each geographic region.  
+
+Filtering for only largest/most complete genetic sample from each 5 km radius for gps within each Gff$SiteMajCluster independently so that we get best samples from both north and south of the river/Lake Kyoga dividing north and south. 
 
 ```{r distm}
-# Load required packages
-library(geosphere)
-library(igraph)
-
 # Create filtered copy of Gff excluding 'nogroup'
 Gff_filt <- Gff[Gff$Cluster != "nogroup", ]
 
 # Ensure Gff$SiteCode matches pop(Gff.genind)
 Gff_filt$SiteCode <- as.character(Gff_filt$SiteCode)
 pop_names <- as.character(pop(Gff.genind))
-
 if (!all(pop_names == Gff_filt$SiteCode)) {
   Gff_filt <- Gff_filt[match(pop_names, Gff_filt$SiteCode), ]
   stopifnot(all(as.character(pop(Gff.genind)) == Gff_filt$SiteCode))
@@ -228,19 +219,15 @@ report_list <- list()
 # Loop through each K2 cluster separately (north/south)
 for (region in c("north","south")) {
   Gff_sub <- Gff_filt[Gff_filt$K2 == region, ]
-
   # Build coordinate matrix
   xy <- cbind(lon = Gff_sub$SiteLong, lat = Gff_sub$SiteLat)
   dist_mat <- distm(xy, fun = distHaversine)
-
   # Define adjacency for <2 km
   threshold_m <- 2000
   adj_mat <- dist_mat < threshold_m
-
   # Create undirected graph of close sites
   g <- graph_from_adjacency_matrix(adj_mat, mode = "undirected", diag = FALSE)
   clust_ids <- components(g)$membership
-
   # For each 5km cluster, pick the SiteCode with the most individuals in Gff.genind
   for (cid in unique(clust_ids)) {
     site_group <- Gff_sub$SiteCode[clust_ids == cid]
@@ -269,17 +256,15 @@ print(report_df)
 Remove smaller sample size(s) of any 2-3 sites within 2 km of each other: 04-OM, 29-KO, 13-GOR, 34-AMI, 35-DK, 39-OC, 53-UWA, 77-NB, 80-SA
 
 Brings total site count down to 75.
-```{r}
+```{r count}
 Gff.genind_rf # group size 8-236
 table(pop(Gff.genind_rf))
 ```
-
 Too imbalanced... 
-
   - Downsample 55-KAF, 78-OK, 79-BU to N individuals (e.g., 50)
   - Remove sites with fewer than n=15
-
-```{r}
+  
+```{r balance}
 # Set thresholds
 min_n <- 15
 max_n <- 50
@@ -287,7 +272,7 @@ max_n <- 50
 # Compute sample sizes per population
 pop_sizes <- table(pop(Gff.genind_rf))
 
-# Keep populations with n ≥ min_n
+# Keep populations with n >= min_n
 pops_to_keep <- names(pop_sizes[pop_sizes >= min_n])
 
 # Indices to retain
@@ -300,7 +285,7 @@ inds_keep <- unlist(lapply(pops_to_keep, function(p) {
   }
 }))
 
-# Subset both genind and metadata
+#Subset both genind and metadata
 Gff.genind_rf <- Gff.genind_rf[inds_keep]
 Gff_rf <- Gff_rf[inds_keep, ]
 
@@ -310,15 +295,12 @@ summary(Gff.genind_rf)
 table(pop(Gff.genind_rf))
 length(unique(Gff_rf$SiteCode))
 ```
-Now 68 pops with group size ranges from 15-50.
+Now 68 pops with group size ranges from 15-50.  
 
-# Genetic diversity
+# Genetic diversity  
 
-Estimate allelic richness (standardized/rarefied) with pegas
-```{r}
-library(pegas)
-library(hierfstat)
-
+Estimate allelic richness (standardized/rarefied) with pegas  
+```{r ar}
 genind_hf <- genind2hierfstat(Gff.genind_rf)
 
 # This function rarefies allelic richness to the smallest sample size
@@ -326,16 +308,10 @@ allelic_richness <- allelic.richness(genind_hf)
 
 # Extract mean rarefied allelic richness per population
 mean_ar <- colMeans(allelic_richness$Ar, na.rm = TRUE)
-
 mean_ar
 ``` 
-
-Most diversity stats use poppr
-```{r}
-# Load libraries
-require(poppr)
-require(adegenet)
-
+Most diversity stats use poppr  
+```{r poppr}
 # Compute per-population stats
 div_stats <- poppr(Gff.genind_rf)
 
@@ -343,53 +319,36 @@ div_stats <- poppr(Gff.genind_rf)
 div_stats
 ```
 Hierfstat, separating by pop and rarefying to min samples size with 100 replications with own code:
-```{r}
-# Load required libraries
-library(adegenet)
-library(hierfstat)
-
-# -----------------------------------------------------
+```{r rarefy}
 # Set rarefaction parameters
-# -----------------------------------------------------
-
 # Minimum number of individuals per population to include
 min_n <- 15
 
 # Number of random resampling repetitions per population
 n_reps <- 100
 
-# -----------------------------------------------------
 # Split the genind object by population
-# -----------------------------------------------------
-
 # seppop() returns a list of genind objects, one for each population
 pop_list <- seppop(Gff.genind_rf)
 
-# -----------------------------------------------------
 # For each pop, repeat random sampling n_reps times
-# -----------------------------------------------------
 # For each replicate:
 # - Randomly sample min_n individuals (with no replacement)
 # - Convert to hierfstat format
 # - Run basic.stats()
 # - Extract and average FIS, Ho (observed heterozygosity), and He (expected heterozygosity)
-
 results <- lapply(names(pop_list), function(pname) {
   g <- pop_list[[pname]]
-
   # Skip populations with fewer than min_n individuals
   if (nInd(g) < min_n) return(NULL)
-
   # Repeat rarefied sampling n_reps times
   replicate(n_reps, {
     # Randomly sample min_n individuals
     inds <- sample(1:nInd(g), min_n)
     g_sub <- g[inds, ]
-
     # Convert to hierfstat format and compute basic stats
     hf <- genind2hierfstat(g_sub)
     bs <- basic.stats(hf)
-
     # Return vector of average values across loci
     c(
       FIS = mean(bs$Fis, na.rm = TRUE),
@@ -401,10 +360,7 @@ results <- lapply(names(pop_list), function(pname) {
     as.data.frame()         # convert to data frame for easy averaging
 })
 
-# -----------------------------------------------------
 # Average results across replicates for each population
-# -----------------------------------------------------
-
 # Keep only populations where stats were successfully computed
 names(results) <- names(pop_list)[sapply(results, is.data.frame)]
 
@@ -420,17 +376,16 @@ summary_df <- data.frame(
   row.names = NULL
 )
 ```
-
-Compile results from the three code chunks into one data frame
-```{r}
-# 1. Convert allelic richness (mean_ar) to a data frame
+Compile results from the three code chunks into one data frame  
+```{r compile}
+# Convert allelic richness (mean_ar) to a data frame
 ar_df <- data.frame(
   Population = names(mean_ar),
   Allelic_Richness = as.numeric(mean_ar),
   row.names = NULL
 )
 
-# 2. Convert poppr results (div_stats) to a data frame
+# Convert poppr results (div_stats) to a data frame
 #    (assumes div_stats has rownames corresponding to populations)
 div_stats_df <- data.frame(
   Population = div_stats$Pop,
@@ -438,28 +393,21 @@ div_stats_df <- data.frame(
   row.names = NULL
 )
 
-# 3. 'summary_df' from the hierfstat rarefaction step already has:
-#      Population | FIS | Ho | He
-#    (no conversion needed)
-
-# 4. Merge all three data frames by "Population"
+# Merge all three data frames by "Population"
 #    Use Reduce() for a sequential full join
 summary_df <- Reduce(function(x, y) {
   merge(x, y, by = "Population", all = TRUE)
 }, list(ar_df, div_stats_df, summary_df))
 
-# 5. Save the combined summary to a CSV file
+# Save the combined summary to a CSV file
 #write.csv(summary_df, "../input/summary_df.csv", row.names = FALSE)
 
-# 6. Print the final table
+# Print the final table
 print(summary_df)
 ```
-
-# Cavalli-Sforza and Edwards' Distance (CSE)
-
+# Cavalli-Sforza and Edwards' Distance (CSE) 
 Pairwise within cluster "north"
-```{r}
-
+```{r north}
 # Subset genind and metadata
 meta_sub <- Gff_rf[Gff_rf$K2 == "north", ]
 gen_sub <- Gff.genind_rf[pop(Gff.genind_rf) %in% meta_sub$SiteCode]
@@ -468,15 +416,14 @@ gen_sub <- Gff.genind_rf[pop(Gff.genind_rf) %in% meta_sub$SiteCode]
 genpop_sub <- genind2genpop(gen_sub)
 
 # Compute Cavalli-Sforza and Edwards’ distance
-cse_dist <- dist.genpop(genpop_sub, method = 2)  # method = 2 → CSE distance
+cse_dist <- dist.genpop(genpop_sub, method = 2)  # method = 2 (CSE distance
 
 # Display as a matrix
 cse_north <- as.matrix(cse_dist)
 ```
-
-Pairwise within cluster "south"
-```{r}
-
+  
+Pairwise within cluster "south"  
+```{r south}
 # Subset genind and metadata
 meta_sub <- Gff_rf[Gff_rf$K2 == "south", ]
 gen_sub <- Gff.genind_rf[pop(Gff.genind_rf) %in% meta_sub$SiteCode]
@@ -485,23 +432,19 @@ gen_sub <- Gff.genind_rf[pop(Gff.genind_rf) %in% meta_sub$SiteCode]
 genpop_sub <- genind2genpop(gen_sub)
 
 # Compute Cavalli-Sforza and Edwards’ distance
-cse_dist <- dist.genpop(genpop_sub, method = 2)  # method = 2 → CSE distance
+cse_dist <- dist.genpop(genpop_sub, method = 2)  # method = 2 (CSE distance)
 
 # Display as a matrix
 cse_south <- as.matrix(cse_dist)
 ```
-
-Combine CSE output into a single dataframe for downstream analysis:
-```{r}
-# -----------------------------------------------------
-# 1. Create a metadata data frame for coordinates and cluster
-# -----------------------------------------------------
+  
+Combine CSE output into a single dataframe for downstream analysis:  
+```{r cse}
+# Create a metadata data frame for coordinates and cluster
 meta_coords <- unique(Gff_rf[, c("SiteCode", "SiteLat", "SiteLong", "K2")])
 names(meta_coords) <- c("SiteCode", "lat", "long", "cluster")
 
-# -----------------------------------------------------
-# 2. Process the "north" CSE matrix
-# -----------------------------------------------------
+# Process the "north" CSE matrix
 north_df <- as.data.frame(as.table(cse_north), stringsAsFactors = FALSE)
 names(north_df) <- c("Var1", "Var2", "CSEdistance")
 
@@ -533,7 +476,6 @@ north_df <- merge(
 names(north_df)[names(north_df) == "lat"]       <- "lat2"
 names(north_df)[names(north_df) == "long"]      <- "long2"
 names(north_df)[names(north_df) == "cluster"]   <- "Pop2_cluster"
-
 # Select and order columns
 north_df <- north_df[, c(
   "Var1", "Var2", "CSEdistance",
@@ -541,14 +483,10 @@ north_df <- north_df[, c(
   "Pop1_cluster", "Pop2_cluster"
 )]
 
-# -----------------------------------------------------
-# 3. Process the "south" CSE matrix (analogous steps)
-# -----------------------------------------------------
+# Process the "south" CSE matrix (analogous steps)
 south_df <- as.data.frame(as.table(cse_south), stringsAsFactors = FALSE)
 names(south_df) <- c("Var1", "Var2", "CSEdistance")
-
 south_df <- subset(south_df, Var1 < Var2)
-
 south_df <- merge(
   south_df,
   meta_coords,
@@ -560,7 +498,6 @@ south_df <- merge(
 names(south_df)[names(south_df) == "lat"]       <- "lat1"
 names(south_df)[names(south_df) == "long"]      <- "long1"
 names(south_df)[names(south_df) == "cluster"]   <- "Pop1_cluster"
-
 south_df <- merge(
   south_df,
   meta_coords,
@@ -572,25 +509,112 @@ south_df <- merge(
 names(south_df)[names(south_df) == "lat"]       <- "lat2"
 names(south_df)[names(south_df) == "long"]      <- "long2"
 names(south_df)[names(south_df) == "cluster"]   <- "Pop2_cluster"
-
 south_df <- south_df[, c(
   "Var1", "Var2", "CSEdistance",
   "lat1", "long1", "lat2", "long2",
   "Pop1_cluster", "Pop2_cluster"
 )]
-
-# -----------------------------------------------------
-# 4. Combine "north" and "south" results
-# -----------------------------------------------------
+# Combine "north" and "south" results
 cse_combined <- rbind(north_df, south_df)
 
-# -----------------------------------------------------
-# 5. Save to CSV
-# -----------------------------------------------------
+# Save to CSV
 #write.csv(cse_combined, "../input/Gff_11loci_68sites_cse.csv", row.names = FALSE)
 
-# -----------------------------------------------------
-# 6. View the first few rows
-# -----------------------------------------------------
+# View the first few rows
 head(cse_combined)
+```
+Create density plots of CSEdistance for each cluster  
+```{r density}
+# Capitalize or rename cluster labels (“Northern”/“Southern”)
+cse_combined <- cse_combined %>%
+  mutate(
+    Pop1_cluster = case_when(
+      Pop1_cluster == "north" ~ "Northern",
+      Pop1_cluster == "south" ~ "Southern",
+      TRUE ~ Pop1_cluster
+    ),
+    Pop2_cluster = case_when(
+      Pop2_cluster == "north" ~ "Northern",
+      Pop2_cluster == "south" ~ "Southern",
+      TRUE ~ Pop2_cluster
+    )
+  )
+# Create two density plots (one for “Northern”, one for “Southern”)
+cluster_names <- unique(
+  cse_combined$Pop1_cluster[cse_combined$Pop1_cluster == cse_combined$Pop2_cluster]
+)
+density_plots <- lapply(cluster_names, function(cl) {
+  df <- filter(cse_combined, Pop1_cluster == cl & Pop2_cluster == cl)
+  ggplot(df, aes(x = CSEdistance)) +
+    geom_density(fill = "grey80", color = "black") +
+    labs(
+      title = paste0(cl, " Genetic Cluster"),
+      x = "CSE Distance",
+      y = "Density"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 9)
+    )
+})
+# Turn each row into an sf LINESTRING, colored by CSE
+lines_list <- lapply(seq_len(nrow(cse_combined)), function(i) {
+  coords <- matrix(
+    c(
+      cse_combined$long1[i], cse_combined$lat1[i],
+      cse_combined$long2[i], cse_combined$lat2[i]
+    ),
+    ncol = 2,
+    byrow = TRUE
+  )
+  st_linestring(coords)
+})
+lines_sf <- st_sf(
+  geometry = st_sfc(lines_list, crs = 4326),
+  CSE = cse_combined$CSEdistance
+)
+# 5. Load Uganda outline as an sf object
+uganda <- ne_countries(scale = "medium", country = "Uganda", returnclass = "sf")
+
+# 6. Build the map with reversed “magma” (yellow→purple) and
+#    move legend to the right, vertically centered
+map_plot <- ggplot() +
+  geom_sf(data = uganda, fill = "white", color = "black") +
+  geom_sf(
+    data = lines_sf,
+    aes(color = CSE),
+    size = 0.6
+  ) +
+  scale_color_viridis_c(
+    name = "CSE",
+    option = "magma",   # use the “magma” palette
+    direction = -1      # reverse so low = yellow, high = purple
+  ) +
+  theme_void() +
+  theme(
+    # place legend at (x=0.95, y=0.50) relative to entire panel
+    legend.position = c(1.3, 0.50),
+    legend.background = element_rect(fill = alpha("white", 0.6), color = NA),
+    legend.title = element_text(size = 9),
+    legend.text = element_text(size = 8)
+  )
+# 7. Combine the two density plots (top) and the map (bottom)
+top_row <- plot_grid(
+  plotlist = density_plots,
+  nrow = 1,
+  rel_widths = rep(1, length(density_plots))
+)
+final_figure <- plot_grid(
+  top_row,
+  map_plot,
+  ncol = 1,
+  rel_heights = c(1, 2)
+)
+
+# Display CSE density plots
+#pdf("../figures/CSE_density.pdf", width = 14, height = 10)
+final_figure
+#dev.off()  
 ```
