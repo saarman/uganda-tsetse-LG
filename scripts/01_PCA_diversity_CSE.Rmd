@@ -32,6 +32,7 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(cowplot)
 library(viridis)
+library(ade4)
 ```
 # Importing data as genind object from .gen
 ```{r genind}
@@ -606,7 +607,7 @@ top_row <- plot_grid(
   nrow = 1,
   rel_widths = rep(1, length(density_plots))
 )
-final_figure <- plot_grid(
+cse_figure <- plot_grid(
   top_row,
   map_plot,
   ncol = 1,
@@ -615,6 +616,165 @@ final_figure <- plot_grid(
 
 # Display CSE density plots
 #pdf("../figures/CSE_density.pdf", width = 14, height = 10)
-final_figure
+cse_figure
+#dev.off()  
+```
+
+  
+# Isolation by Distance & Mantel tests  
+
+```{r ibd}
+cse_combined <- cse_combined %>%
+  mutate(
+    geo_km = distHaversine(
+      cbind(long1, lat1),
+      cbind(long2, lat2)
+    ) / 1000
+  )
+
+# Northern cluster
+north_df  <- filter(cse_combined, Pop1_cluster == "Northern", Pop2_cluster == "Northern")
+pops_n    <- sort(unique(c(north_df$Var1, north_df$Var2)))
+mat_gen_n <- matrix(0, length(pops_n), length(pops_n), dimnames = list(pops_n, pops_n))
+mat_geo_n <- mat_gen_n
+for (i in seq_len(nrow(north_df))) {
+  v1 <- north_df$Var1[i]; v2 <- north_df$Var2[i]
+  mat_gen_n[v1, v2] <- north_df$CSEdistance[i]
+  mat_gen_n[v2, v1] <- north_df$CSEdistance[i]
+  mat_geo_n[v1, v2] <- north_df$geo_km[i]
+  mat_geo_n[v2, v1] <- north_df$geo_km[i]
+}
+gen_dist_n <- as.dist(mat_gen_n)
+geo_dist_n <- as.dist(mat_geo_n)
+mt_n       <- mantel.rtest(gen_dist_n, geo_dist_n, nrepet = 999)
+
+# Southern cluster
+south_df  <- filter(cse_combined, Pop1_cluster == "Southern", Pop2_cluster == "Southern")
+pops_s    <- sort(unique(c(south_df$Var1, south_df$Var2)))
+mat_gen_s <- matrix(0, length(pops_s), length(pops_s), dimnames = list(pops_s, pops_s))
+mat_geo_s <- mat_gen_s
+for (i in seq_len(nrow(south_df))) {
+  v1 <- south_df$Var1[i]; v2 <- south_df$Var2[i]
+  mat_gen_s[v1, v2] <- south_df$CSEdistance[i]
+  mat_gen_s[v2, v1] <- south_df$CSEdistance[i]
+  mat_geo_s[v1, v2] <- south_df$geo_km[i]
+  mat_geo_s[v2, v1] <- south_df$geo_km[i]
+}
+gen_dist_s <- as.dist(mat_gen_s)
+geo_dist_s <- as.dist(mat_geo_s)
+mt_s       <- mantel.rtest(gen_dist_s, geo_dist_s, nrepet = 999)
+
+# panel labels
+label_A <- "A. Northern Mantel test (p < 0.001)"
+label_B <- sprintf("B. Northern correlation (r = %.2f)", mt_n$obs)
+label_C <- "C. Southern Mantel test (p < 0.001)"
+label_D <- sprintf("D. Southern correlation (r = %.2f)", mt_s$obs)
+
+# 2×2 layout, reading rows left-to-right
+par(
+  mfrow = c(2, 2),
+  mar   = c(2, 4, 2, 1),
+  mgp   = c(1.5, .4, 0)  # axis title, label, line
+)
+
+# A: Northern null distribution
+plot(mt_n, main = "", xlab = "Simulated r values")
+mtext(label_A, side = 3, line = 0.5, font =2, adj = 0)
+
+# B: Northern scatter
+plot(
+  as.vector(geo_dist_n),
+  as.vector(gen_dist_n),
+  pch  = 20,
+  xlab = "Geographic distance (km)",
+  ylab = "Genetic distance (CSE)",
+  main = ""
+)
+mtext(label_B, side = 3, line = 0.5, font = 2, adj = 0)
+abline(lm(as.vector(gen_dist_n) ~ as.vector(geo_dist_n)), col = "red")
+
+# C: Southern null distribution
+plot(mt_s, main = "", xlab = "sim")
+mtext(label_C, side = 3, line = 0.5, font = 2, adj = 0)
+
+# D: Southern scatter
+plot(
+  as.vector(geo_dist_s),
+  as.vector(gen_dist_s),
+  pch  = 20,
+  xlab = "Geographic distance (km)",
+  ylab = "Genetic distance (CSE)",
+  main = ""
+)
+mtext(label_D, side = 3, line = 0.5, font = 2, adj = 0)
+abline(lm(as.vector(gen_dist_s) ~ as.vector(geo_dist_s)), col = "red")
+
+ibd_figure <- recordPlot()
+
+
+ibd_figure <- recordPlot()
+# Display plots of IBD
+pdf("../figures/ibd_mantel.pdf", width = 6.5, height = 6.5)
+ibd_figure
+dev.off()  
+```
+
+
+
+
+
+
+```{r mantel}
+library(dplyr)
+library(geosphere)
+library(ade4)
+
+# compute great-circle geographic distance (km)
+cse_combined <- cse_combined %>%
+  mutate(
+    geo_km = distHaversine(
+      cbind(long1, lat1),
+      cbind(long2, lat2)
+    ) / 1000
+  )
+
+# prepare clusters and results list
+clusters <- c("Northern", "Southern")
+mantel_results <- list()
+
+for (cl in clusters) {
+  df <- cse_combined %>% filter(Pop1_cluster == cl, Pop2_cluster == cl)
+  pops <- sort(unique(c(df$Var1, df$Var2)))
+  n    <- length(pops)
+
+  # initialize empty distance matrices
+  mat_gen <- matrix(0, n, n, dimnames = list(pops, pops))
+  mat_geo <- mat_gen
+
+  # fill matrices with pairwise values
+  for (i in seq_len(nrow(df))) {
+    v1 <- df$Var1[i]; v2 <- df$Var2[i]
+    mat_gen[v1, v2] <- df$CSEdistance[i]
+    mat_gen[v2, v1] <- df$CSEdistance[i]
+    mat_geo[v1, v2] <- df$geo_km[i]
+    mat_geo[v2, v1] <- df$geo_km[i]
+  }
+
+  # convert to dist objects
+  gen_dist <- as.dist(mat_gen)
+  geo_dist <- as.dist(mat_geo)
+
+  # run Mantel test with 999 permutations
+  mt <- mantel.rtest(gen_dist, geo_dist, nrepet = 999)
+  mantel_results[[cl]] <- mt
+}
+
+# view Mantel correlation and p-value for each cluster
+mantel_results$Northern
+mantel_results$Southern
+
+# Display plots of IBD
+#pdf("../figures/ibd_mantel.pdf", width = 14, height = 10)
+ibd_figure
 #dev.off()  
 ```
