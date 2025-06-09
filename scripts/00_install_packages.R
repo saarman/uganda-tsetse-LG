@@ -34,5 +34,12 @@ install.packages("cowplot")          # combine multiple ggplot panels into one f
 install.packages("viridis")          # provide “magma” and other Viridis palettes for CSE mapping
 install.packages("ade4")             # perform mantel.rtest 
 
-
+# 02_prepare_rasters.R
+# --------------------------------------------------------------------
+install.packages("raster")
+install.packages("terra")
+install.packages("KernSmooth")
+install.packages("maps")
+install.packages("units")
+install.packages("future.apply")
 
