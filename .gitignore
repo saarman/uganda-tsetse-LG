@@ -78,3 +78,6 @@ __pycache__/
 
 # Ignore all GIS rasters
 *.tif
+
+# Ignore all knitted scripts pdfs
+/scripts/*.pdf

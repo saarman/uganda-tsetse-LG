@@ -2,7 +2,12 @@
 title: "Uganda tsetse PopGen: PCA, diversity, CSE"
 author: "Norah Saarman"
 date: "2025-06-03"
-output: pdf_document
+output:
+  github_document:
+    toc: true
+  pdf_document:
+    toc: true
+    fig_caption: true
 ---
 
 RStudio Configuration:
