@@ -32,7 +32,8 @@ install.packages("rnaturalearth")    # download country boundary shapefiles (Uga
 install.packages("rnaturalearthdata")# underlying spatial data required by rnaturalearth
 install.packages("cowplot")          # combine multiple ggplot panels into one figure
 install.packages("viridis")          # provide “magma” and other Viridis palettes for CSE mapping
-install.packages("ade4")             # perform mantel.rtest 
+install.packages("ade4")             # perform mantel.rtest of isolation by distance (IBD) 
+install.packages("vegan")            # perform Mantel Correlogram for scale of IBD
 
 # 02_prepare_rasters.R
 # --------------------------------------------------------------------

@@ -1,0 +1,127 @@
+---
+title: "Least-cost paths avoiding lakes"
+author: "Norah Saarman"
+date: "2025-06-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Least-cost Avoiding Lakes
+```{r cost_surface, warning=FALSE, message=FALSE}
+library(raster)
+library(gdistance)
+
+# define data directory
+data_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data/"
+
+# load 1=water, 0=land mask
+lakeMask   <- raster(paste0(data_dir,"processed/lake_binary.tif"))
+
+# use mask directly as resistance (water costly, land free)
+costRaster <- lakeMask
+
+# build an 8-neighbour graph where move cost = mean(cell1, cell2)
+tr         <- transition(costRaster,
+                        transitionFunction = function(x) mean(x),
+                        directions         = 8)
+
+# correct for geographic distance (gives metres)
+trCorr     <- geoCorrection(tr, type = "c")
+
+# compute least-cost distance (km) for every pair
+cse_combined <- cse_combined %>%
+  rowwise() %>%
+  mutate(
+    cost_km = as.numeric(
+      costDistance(
+        trCorr,
+        c(long1, lat1),
+        c(long2, lat2)
+      ) / 1000
+    )
+  ) %>%
+  ungroup()
+
+# Northern cluster
+north_df   <- filter(cse_combined,
+                     Pop1_cluster == "Northern",
+                     Pop2_cluster == "Northern")
+pops_n     <- sort(unique(c(north_df$Var1, north_df$Var2)))
+mat_gen_n  <- matrix(0, length(pops_n), length(pops_n),
+                     dimnames = list(pops_n, pops_n))
+mat_cost_n <- mat_gen_n
+for (i in seq_len(nrow(north_df))) {
+  v1 <- north_df$Var1[i]; v2 <- north_df$Var2[i]
+  mat_gen_n[v1, v2]  <- north_df$CSEdistance[i]
+  mat_gen_n[v2, v1]  <- north_df$CSEdistance[i]
+  mat_cost_n[v1, v2] <- north_df$cost_km[i]
+  mat_cost_n[v2, v1] <- north_df$cost_km[i]
+}
+gen_dist_n  <- as.dist(mat_gen_n)
+cost_dist_n <- as.dist(mat_cost_n)
+mt_cost_n   <- mantel.rtest(gen_dist_n, cost_dist_n, nrepet = 999)
+
+# Southern cluster
+south_df   <- filter(cse_combined,
+                     Pop1_cluster == "Southern",
+                     Pop2_cluster == "Southern")
+pops_s     <- sort(unique(c(south_df$Var1, south_df$Var2)))
+mat_gen_s  <- matrix(0, length(pops_s), length(pops_s),
+                     dimnames = list(pops_s, pops_s))
+mat_cost_s <- mat_gen_s
+for (i in seq_len(nrow(south_df))) {
+  v1 <- south_df$Var1[i]; v2 <- south_df$Var2[i]
+  mat_gen_s[v1, v2]  <- south_df$CSEdistance[i]
+  mat_gen_s[v2, v1]  <- south_df$CSEdistance[i]
+  mat_cost_s[v1, v2] <- south_df$cost_km[i]
+  mat_cost_s[v2, v1] <- south_df$cost_km[i]
+}
+gen_dist_s  <- as.dist(mat_gen_s)
+cost_dist_s <- as.dist(mat_cost_s)
+mt_cost_s   <- mantel.rtest(gen_dist_s, cost_dist_s, nrepet = 999)
+
+# panel labels
+label_A <- "A. Northern cost-path Mantel test (p < 0.001)"
+label_B <- sprintf("B. Northern cost r = %.2f", mt_cost_n$obs)
+label_C <- "C. Southern cost-path Mantel test (p < 0.001)"
+label_D <- sprintf("D. Southern cost r = %.2f", mt_cost_s$obs)
+
+# 2×2 layout, rows left→right
+par(mfrow = c(2, 2),
+    mar   = c(4, 4, 2, 1),
+    mgp   = c(1.5, .4, 0))
+
+# A: Northern cost null distribution
+plot(mt_cost_n, main = "", xlab = "Simulated r values")
+mtext(label_A, side = 3, line = 0.5, font = 2, adj = 0)
+
+# B: Northern cost vs genetic
+plot(as.vector(cost_dist_n),
+     as.vector(gen_dist_n),
+     pch  = 20,
+     xlab = "Least-cost distance (km)",
+     ylab = "Genetic distance (CSE)",
+     main = "")
+mtext(label_B, side = 3, line = 0.5, font = 2, adj = 0)
+abline(lm(as.vector(gen_dist_n) ~ as.vector(cost_dist_n)), col = "red")
+
+# C: Southern cost null distribution
+plot(mt_cost_s, main = "", xlab = "Simulated r values")
+mtext(label_C, side = 3, line = 0.5, font = 2, adj = 0)
+
+# D: Southern cost vs genetic
+plot(as.vector(cost_dist_s),
+     as.vector(gen_dist_s),
+     pch  = 20,
+     xlab = "Least-cost distance (km)",
+     ylab = "Genetic distance (CSE)",
+     main = "")
+mtext(label_D, side = 3, line = 0.5, font = 2, adj = 0)
+abline(lm(as.vector(gen_dist_s) ~ as.vector(cost_dist_s)), col = "red")
+
+cost_ibd_figure <- recordPlot()
+```
+
