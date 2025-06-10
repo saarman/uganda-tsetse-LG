@@ -7,6 +7,51 @@
 # Partition: saarman-shared-np (allows multiple simultaneous jobs)  
 # Memory per job: 100G (cluster limit: 1000G total; avoid exceeding half)
 
+# 1. Setup
+#    • Load required libraries
+#    • Set working directory and define data directory
+#    • Define coordinate reference system (CRS) and read template raster
+#
+# 2. Sampling kernel density
+#    • Read pairwise CSE coordinates, transform to equal‐distance CRS
+#    • Compute and save sample kernel density rasters at 40km, 20km, 10km, and 5km bandwidths
+#
+# 3. River & lake‐edge kernel density
+#    • Read & filter river and lake shapefiles, extract and densify boundary lines to points
+#    • Compute and save river/lake kernel density rasters at 10km, 5km, 2km, and 1km bandwidths
+#
+# 4. Binary Lake Layer
+#    • Create a binary lake mask raster (lake=1, land=0)
+#
+# 5. Geographic distance layer
+#    • Create a uniform geographic distance raster (all values = 1)
+#
+# 6. Plotting kernel density output
+#    • Load all sampling and river density rasters
+#    • Plot them together in a multi‐panel layout and save as PDF
+
+# Inputs
+#  - input/Gff_11loci_68sites_cse.csv               # CSV with pairwise CSE distances and coordinates (long1, lat1, long2, lat2)
+#  - data/raw/slope_1KMmedian_MERIT_UgandaClip.tif  # GeoTIFF template for extent and projection
+#  - data/raw/ne_10m_lakes.shp                      # Natural Earth lake shapefile (plus .dbf, .shx, .prj)
+#  - data/raw/Uganda_rivers_shape.shp               # Uganda river shapefile (plus .dbf, .shx, .prj)
+
+# Outputs
+#  - data/processed/sample_kernel_density_40km.tif   # 40 km sampling density
+#  - data/processed/sample_kernel_density_20km.tif   # 20 km sampling density
+#  - data/processed/sample_kernel_density_10km.tif   # 10 km sampling density
+#  - data/processed/sample_kernel_density_5km.tif    # 5 km sampling density
+#  - data/processed/river_kernel_density_10km.tif    # 10 km river+lake edge density
+#  - data/processed/river_kernel_density_5km.tif     # 5 km river+lake edge density
+#  - data/processed/river_kernel_density_2km.tif     # 2 km river+lake edge density
+#  - data/processed/river_kernel_density_1km.tif     # 1 km river+lake edge density
+#  - data/processed/lake_binary.tif                 # binary lake mask (1 = water, 0 = land)
+#  - data/processed/geo_dist_uniform.tif            # uniform geographic distance raster
+#  - figures/supplemental_kernel_maps.pdf           # multi‐panel kernel density plots
+
+########################################
+# 1. Setup
+########################################
 # load only required packages
 library(raster)
 library(sf)
@@ -29,7 +74,7 @@ crs_geo <- 4326     # EPSG code for WGS84
 pixels_raster <- raster(file.path(data_dir, "raw/slope_1KMmedian_MERIT_UgandaClip.tif"))
 
 ########################################
-# Sampling Kernel Density
+# 2. Sampling Kernel Density
 ########################################
 
 # Read pairwise CSE data and extract unique coordinates
@@ -49,7 +94,31 @@ coords_m  <- st_coordinates(points_m)
 proj_temp <- terra::project(terra::rast(pixels_raster), eqd_crs, res = 1000)
 ext_m     <- terra::ext(proj_temp)
 
-# Compute 2D kernel density (20 km bandwidth)
+# --- 40 km bandwidth ---
+
+# Compute 2D kernel density (bandwidth)
+est <- bkde2D(coords_m,
+              bandwidth = c(40000, 40000),
+              gridsize  = c(nrow(proj_temp), ncol(proj_temp)),
+              range.x   = list(c(ext_m$xmin, ext_m$xmax), c(ext_m$ymin, ext_m$ymax)))
+
+# Convert result to raster, project back to WGS84, and match grid
+kd_raster <- raster(list(x = est$x1, y = est$x2, z = est$fhat),
+                    crs = eqd_crs)
+kd_wgs84  <- projectRaster(kd_raster, crs = crs(pixels_raster), res = res(pixels_raster))
+sampling_kd <- resample(kd_wgs84, pixels_raster, method = "bilinear")
+names(sampling_kd) <- "sampling_40km"
+crs(sampling_kd) <- crs(pixels_raster)
+plot(sampling_kd)
+
+# Save output
+writeRaster(sampling_kd,
+            file.path(data_dir, "processed/sample_kernel_density_40km.tif"),
+            overwrite = TRUE)
+
+# --- 20 km bandwidth ---
+
+# Compute 2D kernel density (bandwidth)
 est <- bkde2D(coords_m,
               bandwidth = c(20000, 20000),
               gridsize  = c(nrow(proj_temp), ncol(proj_temp)),
@@ -66,11 +135,55 @@ plot(sampling_kd)
 
 # Save output
 writeRaster(sampling_kd,
-            file.path(data_dir, "processed/sampling_kernel_density_20km.tif"),
+            file.path(data_dir, "processed/sample_kernel_density_20km.tif"),
+            overwrite = TRUE)
+
+# --- 10 km bandwidth ---
+
+# Compute 2D kernel density (bandwidth)
+est <- bkde2D(coords_m,
+              bandwidth = c(10000, 10000),
+              gridsize  = c(nrow(proj_temp), ncol(proj_temp)),
+              range.x   = list(c(ext_m$xmin, ext_m$xmax), c(ext_m$ymin, ext_m$ymax)))
+
+# Convert result to raster, project back to WGS84, and match grid
+kd_raster <- raster(list(x = est$x1, y = est$x2, z = est$fhat),
+                    crs = eqd_crs)
+kd_wgs84  <- projectRaster(kd_raster, crs = crs(pixels_raster), res = res(pixels_raster))
+sampling_kd <- resample(kd_wgs84, pixels_raster, method = "bilinear")
+names(sampling_kd) <- "sampling_10km"
+crs(sampling_kd) <- crs(pixels_raster)
+plot(sampling_kd)
+
+# Save output
+writeRaster(sampling_kd,
+            file.path(data_dir, "processed/sample_kernel_density_10km.tif"),
+            overwrite = TRUE)
+
+# --- 5 km bandwidth ---
+
+# Compute 2D kernel density (bandwidth)
+est <- bkde2D(coords_m,
+              bandwidth = c(5000, 5000),
+              gridsize  = c(nrow(proj_temp), ncol(proj_temp)),
+              range.x   = list(c(ext_m$xmin, ext_m$xmax), c(ext_m$ymin, ext_m$ymax)))
+
+# Convert result to raster, project back to WGS84, and match grid
+kd_raster <- raster(list(x = est$x1, y = est$x2, z = est$fhat),
+                    crs = eqd_crs)
+kd_wgs84  <- projectRaster(kd_raster, crs = crs(pixels_raster), res = res(pixels_raster))
+sampling_kd <- resample(kd_wgs84, pixels_raster, method = "bilinear")
+names(sampling_kd) <- "sampling_5km"
+crs(sampling_kd) <- crs(pixels_raster)
+plot(sampling_kd)
+
+# Save output
+writeRaster(sampling_kd,
+            file.path(data_dir, "processed/sample_kernel_density_5km.tif"),
             overwrite = TRUE)
 
 ########################################
-# River (and Lake Edge) Kernel Density
+# 3. River (and Lake Edge) Kernel Density
 ########################################
 
 # Read lakes https://www.naturalearthdata.com/downloads/10m-physical-vectors/
@@ -215,7 +328,7 @@ writeRaster(river_kd,
             overwrite = TRUE)
 
 ########################################
-# Lake binary mask (using target_lakes)
+# 4. Lake binary mask (using target_lakes)
 ########################################
 
 # target_lakes: sf of lake polygons already filtered to our extent
@@ -240,7 +353,7 @@ writeRaster(
 )
 
 ########################################
-# Uniform geographic distance layer
+# 5. Uniform geographic distance layer
 ########################################
 
 # Copy the template and set every value to 1
@@ -255,3 +368,63 @@ writeRaster(
   filename  = file.path(data_dir, "processed/geo_dist_uniform.tif"),
   overwrite = TRUE
 )
+
+########################################
+# 6. Plot the Kernel Density layers
+########################################
+
+# point to your processed rasters
+proc_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data/processed"
+
+# select the four bandwidths you want
+kmr <- c("1km","2km","5km","10km")
+kms <- c("5km","10km","20km","40km")
+
+# build file paths
+river_files  <- file.path(proc_dir, paste0("river_kernel_density_", kmr, ".tif"))
+sample_files <- file.path(proc_dir, paste0("sample_kernel_density_", kms, ".tif"))
+
+# load all eight rasters
+all_rasters <- c(lapply(river_files, raster),
+                 lapply(sample_files, raster))
+
+# compute a common z‐range for consistent color scales
+zrng <- range(sapply(all_rasters, function(x) cellStats(x, range)))
+
+# Open a wider PDF or plotting window first
+pdf("../figures/supplemental_kernel_maps.pdf", width=8, height=12)
+
+# Option 1: fill by column (still 2 rows × 4 columns layout, but plots fill down each column)
+# par(mfcol = c(2, 4),
+#     mar   = c(1, 1, 1, 0.5),
+#     oma   = c(0, 0, 2, 0))
+
+# Option 2: 4 rows × 2 columns layout
+par(mfrow = c(4, 2),
+    mar   = c(1, 1, 1, 0.5),
+    oma   = c(0, 0, 2, 0))
+
+# Plot rivers (first 4)
+for(i in seq_along(kms)) {
+  r <- raster(file.path(proc_dir, paste0("river_kernel_density_", kmr[i], ".tif")))
+  plot(r,
+       main = paste("River", kmr[i]),
+       zlim = zrng,
+       axes = FALSE,
+       box  = FALSE)
+}
+
+# Plot sampling (next 4)
+for(i in seq_along(kms)) {
+  s <- raster(file.path(proc_dir, paste0("sample_kernel_density_", kms[i], ".tif")))
+  plot(s,
+       main = paste("Sampling", kms[i]),
+       zlim = zrng,
+       axes = FALSE,
+       box  = FALSE)
+}
+
+# Add overall title
+mtext("Kernel Density at Multiple Bandwidths", outer = TRUE, cex = 1.5)
+
+dev.off()

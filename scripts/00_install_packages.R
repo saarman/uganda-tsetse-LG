@@ -36,10 +36,10 @@ install.packages("ade4")             # perform mantel.rtest
 
 # 02_prepare_rasters.R
 # --------------------------------------------------------------------
-install.packages("raster")
-install.packages("terra")
-install.packages("KernSmooth")
-install.packages("maps")
-install.packages("units")
-install.packages("future.apply")
-
+install.packages("raster")        # for reading, projecting, and resampling raster layers
+install.packages("sf")            # for reading and manipulating vector data (lake and river edges)
+install.packages("terra")         # fast raster I/O and reprojection (project, ext, resample)
+install.packages("KernSmooth")    # for 2D kernel density estimation (bkde2D)
+install.packages("maps")          # for base map data and coordinate utilities
+install.packages("units")         # for handling physical units (set_units)
+install.packages("future.apply")  # for parallel apply functions (future_lapply)
