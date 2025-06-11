@@ -15,6 +15,7 @@ Norah Saarman
   (CSE)](#cavalli-sforza-and-edwards-distance-cse)
 - [Isolation by Distance & Mantel
   tests](#isolation-by-distance--mantel-tests)
+- [Mantel Correlogram](#mantel-correlogram)
 
 RStudio Configuration: - **R version:** R 4.4.0 (Geospatial packages)  
 - **Number of cores:** 4 (up to 32 available)  
@@ -22,6 +23,26 @@ RStudio Configuration: - **R version:** R 4.4.0 (Geospatial packages)
 - **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
 - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding
 half)
+
+**Inputs**  
+- `../input/Gff_11loci_allsites_genepop.gen`  
+- `../input/Gff_11loci_allsites_indinfo.txt`
+
+**Outputs**  
+- **In‐memory objects**  
+- `Gff.genind` (genind object with population factors)  
+- `pca_result3` (PCA of all samples)  
+- `pca_result` (PCA for each K2 cluster: north & south)  
+- `cse_combined` (data frame of CSE distances and coordinates)  
+- **Figures**  
+- PCA 2D scatter (`PCA-all-2D.pdf`)  
+- PCA 3D scatter (`PCA-all-3D.pdf`)  
+- Cluster‐specific PCA plots (`PCA-north-2D.pdf`, `PCA-north-3D.pdf`,
+`PCA-south-2D.pdf`, `PCA-south-3D.pdf`)  
+- CSE density plots and map (`CSE_density.pdf`)  
+- IBD/Mantel test panels (`ibd_mantel.pdf`) - Mantel Correlogram
+(`ibd_corr.pdf`) - **CSV**  
+- `../input/Gff_11loci_68sites_cse.csv` (combined CSE table, if written)
 
 ``` r
 library(adegenet)
@@ -40,6 +61,7 @@ library(rnaturalearthdata)
 library(cowplot)
 library(viridis)
 library(ade4)
+library(vegan)
 ```
 
 # Importing data as genind object from .gen
@@ -1714,4 +1736,46 @@ ibd_figure <- recordPlot()
 #pdf("../figures/ibd_mantel.pdf",width=6.5,height=6.5)
 #ibd_figure
 #dev.off()  
+```
+
+# Mantel Correlogram
+
+``` r
+library(vegan)
+# define your exact breakpoints (in km)
+breaks <- c(0, 5, 10, 20, 40, 50, 100, 200, 300, 400, 500)
+
+# Northern cluster correlogram with custom classes
+mc_n <- mantel.correlog(
+  D.eco     = gen_dist_n,
+  D.geo     = geo_dist_n,
+  break.pts = breaks,
+  nperm     = 999,
+  mult      = "holm",
+  r.type    = "pearson",
+  progressive= TRUE
+)
+
+# Southern cluster correlogram with the same classes
+mc_s <- mantel.correlog(
+  D.eco     = gen_dist_s,
+  D.geo     = geo_dist_s,
+  break.pts = breaks,
+  nperm     = 999,
+  mult      = "holm",
+  r.type    = "pearson",
+  progressive= TRUE
+)
+
+# Mantel Correlogram (`ibd_corr.pdf`)
+#pdf("../figures/ibd_corr.pdf", width = 6.5, height = 4)
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+plot(mc_n, main = "Northern correlogram", xlab = "Distance class midpoint (km)", ylab = "Mantel’s r", font.main = 2)
+plot(mc_s, main = "Southern correlogram", xlab = "Distance class midpoint (km)", ylab = "Mantel’s r", font.main = 2)
+```
+
+![](01_PCA_diversity_CSE_files/figure-gfm/ibd_correlogram-1.png)<!-- -->
+
+``` r
+#dev.off() 
 ```

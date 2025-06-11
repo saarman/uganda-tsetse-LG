@@ -9,6 +9,137 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+RStudio Configuration:  
+- **R version:** R 4.4.0 (Geospatial packages)  
+- **Number of cores:** 4 (up to 32 available)   
+- **Account:** saarman-np  
+- **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
+- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Inputs
+  - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2) 
+  - `../data_dir/processed/altitude_1KMmedian_MERIT_UgandaClip.tif` - Median elevation at 1 km resolution (MERIT DEM)  
+  - `../data_dir/processed/slope_1KMmedian_MERIT_UgandaClip.tif` - Median slope (degrees) at 1 km resolution (derived from MERIT DEM)  
+  - `../data_dir/processed/UgandaBiovarsSeasonalAllYears.tif` - Seasonal BioClim variables (all seasons, all years)    
+
+# Outputs
+  - mean.csv
+  - median.csv
+  - mode.csv
+
+# Setup
+```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+# load only required packages
+library(raster)
+library(gdistance)
+library(sp)
+library(foreach)
+library(doParallel)
+
+# define data directory
+data_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
+
+# define coordinate reference system
+crs_geo <- 4326     # EPSG code for WGS84
+
+# Read template raster for extent and projection
+pixels_raster <- raster(file.path(data_dir, "raw/slope_1KMmedian_MERIT_UgandaClip.tif"))
+```
+ 
+# Prepare your cost surface from lake layer
+Assume lake_binary.tif has 1 = water, 0 = land
+```{r cost}
+lakeMask   <- raster(file.path(data_dir,"processed/lake_binary.tif"))
+costRaster <- lakeMask
+
+# build an 8‐neighbour transition where move‐cost = mean(cell1,cell2)
+tr<- transition(costRaster, 
+                transitionFunction = function(x) mean(x), directions         = 8)
+
+# correct for geography so distances in meters
+trCorr     <- geoCorrection(tr, type = "c")
+```
+
+Extract values along lines
+```{r envvar}
+# load your environmental predictors into a RasterStack `env`
+#    adjust paths as needed
+envvars1 <- stack(file.path(data_dir,"processed/UgandaBiovarsSeasonalAllYears.tif"))
+envvars2 <- stack("/uufs/.../UgandaBiovarsQuartersAllYears.tif")
+envvars2 <- dropLayer(envvars2,
+                      c(paste0("BIO",8:11), paste0("BIO",16:19)))
+altitude <- raster("/uufs/.../altitude_1KMmedian_MERIT_UgandaClip.tif")
+slope    <- raster("/uufs/.../slope_1KMmedian_MERIT_UgandaClip.tif")
+rivers   <- raster("/uufs/.../Uganda_rivers_kernel_1km-bwidth.tif")
+kernel   <- raster("/uufs/.../Uganda_kernel_20km_density.tif")
+
+env <- stack(envvars1, envvars2, slope, altitude, rivers, kernel)
+
+# 3. read your pairs table (with long1,lat1,long2,lat2,CSEdistance,cluster…)
+G.table <- read.csv("RF_final_uganda_data.csv", header = TRUE)
+
+# 4. register a 4‐core cluster
+cl <- makeCluster(4)
+registerDoParallel(cl)
+
+# helper for mode
+get_mode <- function(x) {
+  ux <- unique(x[!is.na(x)])
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# 5. parallel loop: costDistance + env summaries
+res <- foreach(i = seq_len(nrow(G.table)), .combine = rbind,
+               .packages = c("raster","gdistance","sp")) %dopar% {
+
+  # extract source/dest coords
+  lon1 <- G.table$long1[i]; lat1 <- G.table$lat1[i]
+  lon2 <- G.table$long2[i]; lat2 <- G.table$lat2[i]
+
+  # least‐cost path length (km)
+  cost_km <- costDistance(trCorr,
+                          c(lon1, lat1),
+                          c(lon2, lat2)) / 1000
+
+  # build a SpatialLines object for that segment
+  ln <- SpatialLines(
+    list(Lines(list(Line(matrix(c(lon1, lat1,
+                                  lon2, lat2),
+                                ncol = 2, byrow = TRUE))),
+               ID = "1")),
+    proj4string = crs(env)
+  )
+
+  # extract cell‐values for every layer along that line
+  vals <- extract(env, ln)[[1]]  # matrix: rows=cells, cols=layers
+
+  # compute mean, median, mode for each layer
+  mean_v   <- colMeans(vals, na.rm = TRUE)
+  median_v <- apply(vals, 2, median, na.rm = TRUE)
+  mode_v   <- apply(vals, 2, get_mode)
+
+  # assemble one row of output
+  data.frame(
+    G.table[i, ],
+    cost_km,
+    mean_v   = as.numeric(mean_v),
+    median_v = as.numeric(median_v),
+    mode_v   = as.numeric(mode_v),
+    row.names = NULL
+  )
+}
+
+stopCluster(cl)
+
+# 6. write out
+write.csv(res,
+          "results/CostPath_Env_Summaries.csv",
+          row.names = FALSE)
+
+```
 # Least-cost Avoiding Lakes
 ```{r cost_surface, warning=FALSE, message=FALSE}
 library(raster)
