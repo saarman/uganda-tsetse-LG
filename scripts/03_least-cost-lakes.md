@@ -1,24 +1,27 @@
----
-title: "Least-cost paths avoiding lakes"
-author: "Norah Saarman"
-date: "2025-06-10"
-output:
-  github_document:
-    toc: true
----
+Least-cost paths avoiding lakes
+================
+Norah Saarman
+2025-06-10
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+- [Setup](#setup)
+- [Inputs](#inputs)
+- [Outputs](#outputs)
+- [1. Prepare your cost surface from lake
+  layer](#1-prepare-your-cost-surface-from-lake-layer)
+- [2. Build and save paths as SpatialLines for each
+  pair](#2-build-and-save-paths-as-spatiallines-for-each-pair)
+
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 4 (up to 32 available)   
+- **Number of cores:** 4 (up to 32 available)  
 - **Account:** saarman-np  
 - **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
-- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)    
+- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding
+half)
 
 # Setup
-```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+
+``` r
 # load only required packages
 library(raster)
 library(gdistance)
@@ -51,17 +54,24 @@ crs_geo <- 4326     # EPSG code for WGS84
 ```
 
 # Inputs
-  - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2) 
-river+lake edge density 
-  - `../data_dir/processed/sample_kernel_density_20km.tif` # 20 km sampling density
-  - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)  
-  
-# Outputs  
-  - `../data_dir/processed/LC_paths.shp`  - Least cost paths spatialLines shapefile
+
+- `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2) river+lake edge density
+- `../data_dir/processed/sample_kernel_density_20km.tif` \# 20 km
+  sampling density
+- `../data_dir/processed/lake_binary.tif` \# binary lake mask (1 =
+  water, 0 = land)
+
+# Outputs
+
+- `../data_dir/processed/LC_paths.shp` - Least cost paths spatialLines
+  shapefile
 
 # 1. Prepare your cost surface from lake layer
+
 Assume lake_binary.tif has 1 = water, 0 = land
-```{r cost}
+
+``` r
 # read your lake mask (0 = land, 1 = lake)
 lakes <- raster(file.path(data_dir, "processed", "lake_binary.tif"))
 
@@ -82,8 +92,10 @@ trCorr <- geoCorrection(tr, type = "c")
 ```
 
 # 2. Build and save paths as SpatialLines for each pair
-** NOTE:** eval = FALSE so that skips on knit
-```{r build_least_cost_paths, warning=FALSE, eval = FALSE}
+
+\*\* NOTE:\*\* eval = FALSE so that skips on knit
+
+``` r
 # assume trCorr (cost transition) and G.table (with long1,lat1,long2,lat2,CSEdistance) exist
 
 # use 4 cores (or however many you want)
@@ -122,8 +134,10 @@ st_write(lines_sf,
          dsn = file.path(data_dir,"processed","LC_paths.shp"),
          delete_layer = TRUE)
 ```
+
 Plot least cost paths with Uganda outline and lakes to check behavior
-```{r plot_least_cost_paths, fig.cap="Least‐cost paths colored by CSE", warning=FALSE}
+
+``` r
 # assumes shape file of least-cost paths have already been created
 lines_sf <- st_read(file.path(data_dir,"processed","LC_paths.shp"), quiet=TRUE)
 
@@ -160,3 +174,11 @@ ggplot() +
     legend.background = element_rect(fill = alpha("white", 0.6), color = NA)
   )
 ```
+
+<figure>
+<img
+src="03_least-cost-lakes_files/figure-gfm/plot_least_cost_paths-1.png"
+alt="Least‐cost paths colored by CSE" />
+<figcaption aria-hidden="true">Least‐cost paths colored by
+CSE</figcaption>
+</figure>

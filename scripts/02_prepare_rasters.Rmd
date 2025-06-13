@@ -17,23 +17,6 @@ RStudio Configuration:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-# Inputs
-  - `../input/Gff_11loci_68sites_cse.csv` (CSV with pairwise CSE distances and coordinates (long1, lat1, long2, lat2))
-  - `../data_dir/raw/slope_1KMmedian_MERIT_UgandaClip.tif` (GeoTIFF template for extent and projection)
-  - `../data_dir/raw/ne_10m_lakes.shp` (Natural Earth lake shapefile (plus .dbf, .shx, .prj))
-  - `../data_dir/raw/Uganda_rivers_shape.shp` (Uganda river shapefile (plus .dbf, .shx, .prj))
-
-# Outputs
-  - `../data_dir/processed/sample_kernel_density_40km.tif` # 40 km sampling density
-  - `../data_dir/processed/sample_kernel_density_20km.tif` # 20 km sampling density
-  - `../data_dir/processed/sample_kernel_density_10km.tif` # 10 km sampling density
-  - `../data_dir/processed/sample_kernel_density_5km.tif` # 5 km sampling density
-  - `../data_dir/processed/river_kernel_density_10km.tif` # 10 km river+lake edge   density  
-  - `../data_dir/processed/river_kernel_density_5km.tif` # 5 km river+lake edge density  
-  - `../data_dir/processed/river_kernel_density_2km.tif` # 2 km river+lake edge density  
-  - `../data_dir/processed/river_kernel_density_1km.tif` # 1 km river+lake edge density  
-  - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)  
-  - `../data_dir/processed/geo_dist_uniform.tif` # uniform geographic distance raster  
 
 # 1. Setup
 ```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
@@ -55,6 +38,24 @@ crs_geo <- 4326     # EPSG code for WGS84
 # Read template raster for extent and projection
 pixels_raster <- raster(file.path(data_dir, "raw/slope_1KMmedian_MERIT_UgandaClip.tif"))
 ```
+# Inputs
+  - `../input/Gff_11loci_68sites_cse.csv` (CSV with pairwise CSE distances and coordinates (long1, lat1, long2, lat2))
+  - `../data_dir/raw/slope_1KMmedian_MERIT_UgandaClip.tif` (GeoTIFF template for extent and projection)
+  - `../data_dir/raw/ne_10m_lakes.shp` (Natural Earth lake shapefile (plus .dbf, .shx, .prj))
+  - `../data_dir/raw/Uganda_rivers_shape.shp` (Uganda river shapefile (plus .dbf, .shx, .prj))
+
+# Outputs
+  - `../data_dir/processed/sample_kernel_density_40km.tif` # 40 km sampling density
+  - `../data_dir/processed/sample_kernel_density_20km.tif` # 20 km sampling density
+  - `../data_dir/processed/sample_kernel_density_10km.tif` # 10 km sampling density
+  - `../data_dir/processed/sample_kernel_density_5km.tif` # 5 km sampling density
+  - `../data_dir/processed/river_kernel_density_10km.tif` # 10 km river+lake edge   density  
+  - `../data_dir/processed/river_kernel_density_5km.tif` # 5 km river+lake edge density  
+  - `../data_dir/processed/river_kernel_density_3km.tif` # 3 km river+lake edge density 
+  - `../data_dir/processed/river_kernel_density_2km.tif` # 2 km river+lake edge density  
+  - `../data_dir/processed/river_kernel_density_1km.tif` # 1 km river+lake edge density  
+  - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)  
+  - `../data_dir/processed/geo_dist_uniform.tif` # uniform geographic distance raster  
 
 # 2. Sampling Kernel Density
 ```{r sampling}
@@ -174,7 +175,9 @@ ext_poly_geo <- st_transform(ext_poly, crs = crs_geo)
 sf_use_s2(FALSE)
 target_lakes <- lakes_ne[st_intersects(lakes_ne, ext_poly_geo, sparse = FALSE), ]
 
-# Convert lake polygons to boundaries (as lines)
+# Save lakes within extent as shapefile
+
+# Convert lake polygons to boundaries (as lines)  
 lake_edges <- st_boundary(target_lakes)
 
 # In case of MULTILINESTRINGs, flatten them to LINESTRINGs
