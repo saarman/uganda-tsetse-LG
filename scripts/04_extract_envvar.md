@@ -1,24 +1,26 @@
----
-title: "Extract environmental variables along paths"
-author: "Norah Saarman"
-date: "2025-06-13"
-output:
-  github_document:
-    toc: true
----
+Extract environmental variables along paths
+================
+Norah Saarman
+2025-06-13
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+- [Setup](#setup)
+- [Inputs](#inputs)
+- [Outputs](#outputs)
+- [1. Load environmental rasters](#1-load-environmental-rasters)
+- [2. Extract mean, median, mode for each env summaries in
+  parallel](#2-extract-mean-median-mode-for-each-env-summaries-in-parallel)
+
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 4 (up to 32 available)   
+- **Number of cores:** 4 (up to 32 available)  
 - **Account:** saarman-np  
 - **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
-- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)    
+- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding
+half)
 
 # Setup
-```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+
+``` r
 # load only required packages
 library(raster)
 library(gdistance)
@@ -51,22 +53,36 @@ crs_geo <- 4326     # EPSG code for WGS84
 ```
 
 # Inputs
-  - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2) 
-  - `../data_dir/processed/altitude_1KMmedian_MERIT_UgandaClip.tif` - Median elevation at 1 km resolution (MERIT DEM)  
-  - `../data_dir/processed/slope_1KMmedian_MERIT_UgandaClip.tif` - Median slope (degrees) at 1 km resolution (derived from MERIT DEM)  
-  - `../data_dir/processed/UgandaBiovarsSeasonalAllYears.tif` - Seasonal BioClim variables (all seasons, all years)    
-  - `../data_dir/processed/river_kernel_density_3km.tif` - 3 km river+lake edge density 
-  - `../data_dir/processed/sample_kernel_density_20km.tif` - 20 km sampling density
-  - `../data_dir/processed/lake_binary.tif` - binary lake mask (1 = water, 0 = land)  
-  - `../data_dir/processed/geo_dist_uniform.tif` - uniform geographic distance raster   
-  - `../data_dir/raw/ne_10m_lakes.shp` - shapefile of lakes  
-  - `../data_dir/processed/LC_paths.shp` - Least cost paths spatialLines shapefile  
-  
-# Outputs  
-  - `../input/Gff_cse_envCostPaths.csv`  - Combined CSE table with coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance in sum of pixels, and mean, median, mode of each Env parameter  
-  
-# 1. Load environmental rasters  
-```{r, rasters}
+
+- `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2)
+- `../data_dir/processed/altitude_1KMmedian_MERIT_UgandaClip.tif` -
+  Median elevation at 1 km resolution (MERIT DEM)  
+- `../data_dir/processed/slope_1KMmedian_MERIT_UgandaClip.tif` - Median
+  slope (degrees) at 1 km resolution (derived from MERIT DEM)  
+- `../data_dir/processed/UgandaBiovarsSeasonalAllYears.tif` - Seasonal
+  BioClim variables (all seasons, all years)  
+- `../data_dir/processed/river_kernel_density_3km.tif` - 3 km river+lake
+  edge density
+- `../data_dir/processed/sample_kernel_density_20km.tif` - 20 km
+  sampling density
+- `../data_dir/processed/lake_binary.tif` - binary lake mask (1 = water,
+  0 = land)  
+- `../data_dir/processed/geo_dist_uniform.tif` - uniform geographic
+  distance raster  
+- `../data_dir/raw/ne_10m_lakes.shp` - shapefile of lakes  
+- `../data_dir/processed/LC_paths.shp` - Least cost paths spatialLines
+  shapefile
+
+# Outputs
+
+- `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance
+  in sum of pixels, and mean, median, mode of each Env parameter
+
+# 1. Load environmental rasters
+
+``` r
 # define WGS84 CRS
 crs_geo <- "+proj=longlat +datum=WGS84 +no_defs"
 
@@ -123,13 +139,20 @@ names(geo_dist) <- "uniform"
 # stack everything except uniform geo_dist into one object
 env <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster)
 plot(env, maxnl = nlayers(env), axes = FALSE, box = FALSE, frame.plot = FALSE)
+```
 
+![](04_extract_envvar_files/figure-gfm/rasters-1.png)<!-- -->
+
+``` r
 # plot slope for example
 plot(env[["slope"]], axes = FALSE, box = FALSE, frame.plot = FALSE)
 ```
 
+![](04_extract_envvar_files/figure-gfm/rasters-2.png)<!-- -->
+
 # 2. Extract mean, median, mode for each env summaries in parallel
-```{r extract, eval=FALSE}
+
+``` r
 # assumes shape file of least-cost paths have already been created
 lines_sf <- st_read(file.path(data_dir,"processed","LC_paths.shp"), quiet=TRUE)
 
