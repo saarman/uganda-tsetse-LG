@@ -44,3 +44,17 @@ install.packages("KernSmooth")    # for 2D kernel density estimation (bkde2D)
 install.packages("maps")          # for base map data and coordinate utilities
 install.packages("units")         # for handling physical units (set_units)
 install.packages("future.apply")  # for parallel apply functions (future_lapply)
+
+# 03_least_cost_paths.R
+# --------------------------------------------------------------------
+install.packages("gdistance")       # build transition matrices and shortest paths (least-cost paths)
+install.packages("sp")              # create and manipulate SpatialLines objects
+install.packages("foreach")         # enable foreach-style iteration (parallel-safe)
+install.packages("doParallel")      # register parallel backend for foreach
+# (already included in 01/02): raster, sf, ggplot2, rnaturalearth, viridis, units, future.apply
+
+# 04_extract_env_along_paths.R
+# --------------------------------------------------------------------
+# (already installed above): raster, gdistance, sp, sf, foreach, doParallel, future.apply
+# no new packages beyond those already installed in steps 01–03
+
