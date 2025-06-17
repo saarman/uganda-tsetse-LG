@@ -265,3 +265,10 @@ Top 18 mean-based predictors retain nearly all the explanatory power of the orig
 env <- stack(filename = file.path(data_dir, "processed", "env_stack.tif"),
             format = "GTiff",
             overwrite = TRUE))
+            
+predictor_stack <- subset(env, model_vars)
+
+prediction_raster <- predict(predictor_stack, rf_mean18_tuned, type = "response")
+
+plot(prediction_raster, main = "Predicted CSE Distance")
+writeRaster(prediction_raster, file.path(data_dir, "predicted_CSEdistance.tif"), format = "GTiff", overwrite = TRUE)
