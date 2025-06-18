@@ -63,7 +63,7 @@ crs_geo <- 4326     # EPSG code for WGS84
   - `../data_dir/processed/LC_paths.shp` - Least cost paths spatialLines shapefile  
   
 # Outputs  
-  - `../input/Gff_cse_envCostPaths.csv`  - Combined CSE table with coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance in sum of pixels, and mean, median, mode of each Env parameter   - `../data_dir/processed/env_stack.tif` - Final raster stack of all predictor variables for later projectin
+  - `../input/Gff_cse_envCostPaths.csv`  - Combined CSE table with coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance in sum of pixels, and mean, median, mode of each Env parameter   - `../data_dir/processed/env_stack.grd` - Final raster stack for prediction including pix_dist
   
 # 1. Load environmental rasters  
 ```{r, rasters}

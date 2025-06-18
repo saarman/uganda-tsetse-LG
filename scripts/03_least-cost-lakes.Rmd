@@ -89,38 +89,39 @@ trCorr <- geoCorrection(tr, type = "c")
 # use 4 cores (or however many you want)
 plan(multisession, workers = 4)
 
-# build least‐cost SpatialLinesDataFrame for each pair
+# build least-cost SpatialLinesDataFrame for each pair
 paths <- future_lapply(seq_len(nrow(G.table)), function(i) {
-  # build shortest‐cost SpatialLines
   from <- c(G.table$long1[i], G.table$lat1[i])
   to   <- c(G.table$long2[i], G.table$lat2[i])
   sl   <- shortestPath(trCorr, from, to, output = "SpatialLines")
-
-  # **assign CRS** (here WGS84 lon/lat)
   sp::proj4string(sl) <- sp::CRS("+proj=longlat +datum=WGS84 +no_defs")
 
-  # wrap in SpatialLinesDataFrame
-  SpatialLinesDataFrame(
-    sl,
-    data = data.frame(
-      CSE       = G.table$CSEdistance[i],
-      row.names = row.names(sl)
-    )
+  # build row-specific metadata
+  metadata <- data.frame(
+    Var1 = G.table$Var1[i],
+    Var2 = G.table$Var2[i],
+    id   = paste(G.table$Var1[i], G.table$Var2[i], sep = "_"),
+    CSE  = G.table$CSEdistance[i],
+    row.names = row.names(sl)
   )
+
+  SpatialLinesDataFrame(sl, data = metadata)
 })
 
-# combine and back to single‐threaded
+# return to single-threaded mode
 plan(sequential)
 
 # combine into one object and convert to sf
 lines_sldf <- do.call(rbind, paths)
 lines_sf   <- st_as_sf(lines_sldf)
-lines_sf <- st_set_crs(lines_sf, 4326) # assign CRS
+lines_sf   <- st_set_crs(lines_sf, 4326)
 
-# write lines to shape file
+# write to shapefile with full metadata
 st_write(lines_sf,
-         dsn = file.path(data_dir,"processed","LC_paths.shp"),
+         dsn = file.path(data_dir, "processed", "LC_paths.shp"),
          delete_layer = TRUE)
+
+lines_sf
 ```
 Plot least cost paths with Uganda outline and lakes to check behavior
 ```{r plot_least_cost_paths, fig.cap="Least‐cost paths colored by CSE", warning=FALSE}
