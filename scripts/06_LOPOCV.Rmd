@@ -211,5 +211,8 @@ stopCluster(cl)
 # Write summary CSV
 write.csv(metrics_all, file.path(output_dir, "LOPOCV_summary.csv"), row.names = FALSE)
 
+# Write summary CSV again within GitHub
+write.csv(metrics_all, "../results/LOPOCV_summary.csv", row.names = FALSE)
+
 metrics_all
 ```
