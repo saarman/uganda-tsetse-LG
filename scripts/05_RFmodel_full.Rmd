@@ -52,10 +52,9 @@ clusterExport(cl, "get_mode")
 
 # Inputs  
   - `../input/Gff_cse_envCostPaths.csv`  - Combined CSE table with coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance in sum of pixels, and mean, median, mode of each Env parameter  
-  
 # Outputs  
-  - Full RF model output
-  - Projection of full RF model
+  - `../results_dir/rf_mean18_tuned.rds`  - Full RF model outpu, readRDS() to load  
+  - `../results_dir/predicted_CSEdistance.tif` - Projection of full RF model, with pix_dist and samp_20km nuetralized by using uniform layers in projection
   
 # 1. Prepare the data
 ```{r, prep}
@@ -223,7 +222,16 @@ rf_mean18_tuned <- tuneRF(
   importance = TRUE
 )
 
+
+# Save the tuned random forest model to disk
+saveRDS(rf_mean18_tuned, file = file.path(results_dir, "rf_mean18_tuned.rds"))
+
+# Preserve as-is for projection
+rf_final <- rf_mean18_tuned
 ```
+FYI: Later, to load the model back into R:
+`rf_mean18_tuned <- readRDS(file.path(results_dir, "rf_mean18_tuned.rds"))`
+
 
 ## Compare full and full tuned models (top 18 mean-only predictors)
 ```{r compare}
@@ -236,6 +244,11 @@ data.frame(
   Rsq = c(rf_mean18$rsq[rf_mean18$ntree], rf_mean18_tuned$rsq[rf_mean18_tuned$ntree])
 )
 
+# pad names to trick varImpPlot
+rownames(rf_mean18$importance) <- paste0("  ", rownames(rf_mean18$importance), "  ")
+rownames(rf_mean18_tuned$importance) <- paste0("  ", rownames(rf_mean18_tuned$importance), "  ")
+
+# plot with varImpPlot
 par(mar = c(5, 30, 2,2))  # bottom, left, top, right
 varImpPlot(rf_mean18, main = "Full Model Importance",cex = 0.6, pch = 19)
 varImpPlot(rf_mean18_tuned, main = "Tuned Full Model Importance",cex = 0.6, pch = 19)
@@ -263,7 +276,6 @@ Top 18 mean-based predictors retain nearly all the explanatory power of the orig
 - BIO13_mean and BIO11S_mean (mean precip. of wettest month, mean temp of coldest season)
 
 # 4. Projection of model
-
 ```{r projection}
 # Load env stack
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
@@ -275,12 +287,10 @@ samp_uniform <- env[["samp_20km"]]
 values(samp_uniform) <- mean(rf_data$samp_20km_mean, na.rm = TRUE)
 env[["samp_20km"]] <- samp_uniform # Replace in raster stack
 
-prediction_raster <- predict(env, rf_mean18_tuned, type = "response")
+prediction_raster <- predict(env, rf_final, type = "response")
 
-# Write Raster to file
-writeRaster(prediction_raster,
-            file.path(data_dir, "processed", "predicted_CSEdistance.tif"),
-            format = "GTiff", overwrite = TRUE)
+# Write Prediction Raster to file
+writeRaster(prediction_raster, file.path(results_dir,"predicted_CSEdistance.tif"), format = "GTiff", overwrite = FALSE)
 ```
 
 ```{r plot-projection}

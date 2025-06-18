@@ -132,13 +132,13 @@ envstack <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster, geo_dist
 writeRaster(envstack,
             filename = file.path(data_dir, "processed", "env_stack.grd"),
             format = "raster",
-            overwrite = TRUE)
+            overwrite = FALSE)
 
 # write to file as .tif as backup
 writeRaster(envstack,
             filename = file.path(data_dir, "processed", "env_stack.tif"),
             format = "GTiff",
-            overwrite = TRUE)
+            overwrite = FALSE)
 write.csv(names(envstack),file.path(data_dir, "processed", "env_stack_layers.csv"))
 ```
 ## Plot as a check an for fun :) 
