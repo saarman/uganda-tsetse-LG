@@ -23,6 +23,8 @@ RStudio Configuration:
 library(randomForest)
 library(doParallel)
 library(raster)
+library(sf)
+library(viridis)
 
 # base directories
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
@@ -262,13 +264,45 @@ Top 18 mean-based predictors retain nearly all the explanatory power of the orig
 
 # 4. Projection of model
 
-env <- stack(filename = file.path(data_dir, "processed", "env_stack.tif"),
-            format = "GTiff",
-            overwrite = TRUE))
-            
-predictor_stack <- subset(env, model_vars)
+```{r projection}
+# Load env stack
+env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
-prediction_raster <- predict(predictor_stack, rf_mean18_tuned, type = "response")
+# Replace samp_20km with neutral constant raster, 
+# retains sampling bias in the model but neutralize 
+# sampling bias during projection
+samp_uniform <- env[["samp_20km"]]
+values(samp_uniform) <- mean(rf_data$samp_20km_mean, na.rm = TRUE)
+env[["samp_20km"]] <- samp_uniform # Replace in raster stack
 
-plot(prediction_raster, main = "Predicted CSE Distance")
-writeRaster(prediction_raster, file.path(data_dir, "predicted_CSEdistance.tif"), format = "GTiff", overwrite = TRUE)
+prediction_raster <- predict(env, rf_mean18_tuned, type = "response")
+
+# Write Raster to file
+writeRaster(prediction_raster,
+            file.path(data_dir, "processed", "predicted_CSEdistance.tif"),
+            format = "GTiff", overwrite = TRUE)
+```
+
+```{r plot-projection}
+# Create base plot with viridis
+plot(prediction_raster,
+     col = viridis::magma(100),
+     main = "Predicted CSE Distance",
+     axes = FALSE,
+     box = FALSE,
+     legend.args = list(text = "CSE Distance", side = 2, line = 2.5, cex = 0.8))
+
+# Overlay lakes in dark gray
+lakes <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
+lakes <- st_transform(lakes, crs = st_crs(prediction_raster))  # match CRS 
+lakes <- st_make_valid(lakes) # fix geometries
+r_ext <- st_as_sfc(st_bbox(prediction_raster)) # extent
+st_crs(r_ext) <- st_crs(prediction_raster) # match CRS
+lakes <- st_intersection(lakes, r_ext) # clip to extent
+plot(st_geometry(lakes), col = "gray20", border = NA, add = TRUE)
+
+# Overlay country outline
+uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", returnclass = "sf")
+uganda <- st_intersection(uganda, r_ext) # clip to extent
+plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
+```

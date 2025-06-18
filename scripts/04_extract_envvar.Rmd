@@ -120,24 +120,29 @@ geo_dist <- raster(
 crs(geo_dist) <- crs_geo
 names(geo_dist) <- "pix_dist"
 
-# stack everything except uniform geo_dist into one object
+# Stack all for extracting mean/median/mode
 env <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster)
 plot(env, maxnl = nlayers(env), axes = FALSE, box = FALSE, frame.plot = FALSE)
 
-#save full stack
+# Save to File: full env stack including pix_dist
+## for later projection, need all layers
 envstack <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster, geo_dist)
+
+# write to file as .grd to retain layer names
 writeRaster(envstack,
             filename = file.path(data_dir, "processed", "env_stack.grd"),
             format = "raster",
             overwrite = TRUE)
+
+# write to file as .tif as backup
 writeRaster(envstack,
             filename = file.path(data_dir, "processed", "env_stack.tif"),
             format = "GTiff",
             overwrite = TRUE)
-
-# plot slope for example
-plot(env[["slope"]], axes = FALSE, box = FALSE, frame.plot = FALSE)
-
+write.csv(names(envstack),file.path(data_dir, "processed", "env_stack_layers.csv"))
+```
+## Plot as a check an for fun
+```{r}
 
 ```
 
