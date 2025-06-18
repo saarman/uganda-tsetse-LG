@@ -1,24 +1,26 @@
----
-title: "LOPOCV: Random Forest Cross-Validation"
-author: "Norah Saarman"
-date: "2025-06-18"
-output:
-  github_document:
-    toc: true
----
+LOPOCV: Random Forest Cross-Validation
+================
+Norah Saarman
+2025-06-18
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+- [Setup](#setup)
+- [Inputs](#inputs)
+- [Outputs](#outputs)
+- [1. Create Fold Files](#1-create-fold-files)
+- [2. Test LOPOCV with first fold](#2-test-lopocv-with-first-fold)
+- [3. Run LOPOCV in Parallel](#3-run-lopocv-in-parallel)
+
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 8 (up to 32 available)   
+- **Number of cores:** 8 (up to 32 available)  
 - **Account:** saarman-np  
 - **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
-- **Memory per job:** 200G (cluster limit: 1000G total; avoid exceeding half)    
+- **Memory per job:** 200G (cluster limit: 1000G total; avoid exceeding
+half)
 
 # Setup
-```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+
+``` r
 # load only required packages
 library(dplyr)
 library(readr)
@@ -33,14 +35,19 @@ dir.create(output_dir, showWarnings = FALSE)
 ```
 
 # Inputs
-  - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2)
-  - `../data_dir/processed/env_stack.grd` - Final raster stack for prediction including pix_dist
-  
-# Outputs  
-  - `../results_dir/lopocv/` - 
-  
+
+- `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2)
+- `../data_dir/processed/env_stack.grd` - Final raster stack for
+  prediction including pix_dist
+
+# Outputs
+
+- `../results_dir/lopocv/` -
+
 # 1. Create Fold Files
-```{r, fold-files}
+
+``` r
 # Load data
 V.table <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
 V.table$id <- paste(V.table$Var1, V.table$Var2, sep = "_")
@@ -56,13 +63,18 @@ V.model <- V.table[, c("CSEdistance", predictor_vars)]
 ```
 
 # 2. Test LOPOCV with first fold
-```{r lopocv-test}
+
+``` r
 # Pick a random site for the test fold
 set.seed(1298373)
 i <- sample(length(sites), 1)
 site <- sites[i]
 cat(sprintf("Testing fold %02d with site = %s\n", i, site))
+```
 
+    ## Testing fold 33 with site = 46-PT
+
+``` r
 # Split into test and train rows
 test_rows  <- V.table %>% filter(Var1 == site | Var2 == site)
 train_rows <- V.table %>% filter(!(Var1 == site | Var2 == site))
@@ -118,16 +130,35 @@ write_csv(
 )
 
 rf_model
-varImpPlot(rf_model)
+```
 
+    ## 
+    ## Call:
+    ##  randomForest(formula = CSEdistance ~ ., data = train_df, ntree = 500,      importance = TRUE) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 6
+    ## 
+    ##           Mean of squared residuals: 0.001193633
+    ##                     % Var explained: 86.06
+
+``` r
+varImpPlot(rf_model)
+```
+
+![](06_LOPOCV_files/figure-gfm/lopocv-test-1.png)<!-- -->
+
+``` r
 cat(sprintf("Fold %02d completed and saved.\n", i))
 ```
 
+    ## Fold 33 completed and saved.
 
+# 3. Run LOPOCV in Parallel
 
-# 3. Run LOPOCV in Parallel 
-** NOTE:** eval = FALSE so that skips on knit
-```{r lopocv, eval = FALSE}
+\*\* NOTE:\*\* eval = FALSE so that skips on knit
+
+``` r
 # Parallel setup
 n_cores <- 8
 cl <- makeCluster(n_cores)
