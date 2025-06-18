@@ -141,9 +141,13 @@ writeRaster(envstack,
             overwrite = TRUE)
 write.csv(names(envstack),file.path(data_dir, "processed", "env_stack_layers.csv"))
 ```
-## Plot as a check an for fun
+## Plot as a check an for fun :) 
 ```{r}
+# plot all envstack
+plot(envstack, axes = FALSE, box = FALSE, frame.plot = FALSE, maxnl = nlayers(envstack))
 
+# plot one layer, slope for example
+plot(envstack[["slope"]], axes = FALSE, box = FALSE, frame.plot = FALSE)
 ```
 
 # 2. Extract mean, median, mode for each env summaries in parallel

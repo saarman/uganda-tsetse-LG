@@ -7,6 +7,7 @@ Norah Saarman
 - [Inputs](#inputs)
 - [Outputs](#outputs)
 - [1. Load environmental rasters](#1-load-environmental-rasters)
+  - [Plot as a check an for fun :)](#plot-as-a-check-an-for-fun-)
 - [2. Extract mean, median, mode for each env summaries in
   parallel](#2-extract-mean-median-mode-for-each-env-summaries-in-parallel)
 
@@ -78,7 +79,9 @@ crs_geo <- 4326     # EPSG code for WGS84
 
 - `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with
   coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance
-  in sum of pixels, and mean, median, mode of each Env parameter
+  in sum of pixels, and mean, median, mode of each Env parameter -
+  `../data_dir/processed/env_stack.tif` - Final raster stack of all
+  predictor variables for later projectin
 
 # 1. Load environmental rasters
 
@@ -134,9 +137,9 @@ names(lakeRaster) <- "lakes"
 geo_dist <- raster(
   file.path(data_dir, "processed", "geo_dist_uniform.tif"))
 crs(geo_dist) <- crs_geo
-names(geo_dist) <- "uniform"
+names(geo_dist) <- "pix_dist"
 
-# stack everything except uniform geo_dist into one object
+# Stack all for extracting mean/median/mode
 env <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster)
 plot(env, maxnl = nlayers(env), axes = FALSE, box = FALSE, frame.plot = FALSE)
 ```
@@ -144,11 +147,39 @@ plot(env, maxnl = nlayers(env), axes = FALSE, box = FALSE, frame.plot = FALSE)
 ![](04_extract_envvar_files/figure-gfm/rasters-1.png)<!-- -->
 
 ``` r
-# plot slope for example
-plot(env[["slope"]], axes = FALSE, box = FALSE, frame.plot = FALSE)
+# Save to File: full env stack including pix_dist
+## for later projection, need all layers
+envstack <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster, geo_dist)
+
+# write to file as .grd to retain layer names
+writeRaster(envstack,
+            filename = file.path(data_dir, "processed", "env_stack.grd"),
+            format = "raster",
+            overwrite = TRUE)
+
+# write to file as .tif as backup
+writeRaster(envstack,
+            filename = file.path(data_dir, "processed", "env_stack.tif"),
+            format = "GTiff",
+            overwrite = TRUE)
+write.csv(names(envstack),file.path(data_dir, "processed", "env_stack_layers.csv"))
 ```
 
-![](04_extract_envvar_files/figure-gfm/rasters-2.png)<!-- -->
+## Plot as a check an for fun :)
+
+``` r
+# plot all envstack
+plot(envstack, axes = FALSE, box = FALSE, frame.plot = FALSE, maxnl = nlayers(envstack))
+```
+
+![](04_extract_envvar_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
+
+``` r
+# plot one layer, slope for example
+plot(envstack[["slope"]], axes = FALSE, box = FALSE, frame.plot = FALSE)
+```
+
+![](04_extract_envvar_files/figure-gfm/unnamed-chunk-1-2.png)<!-- -->
 
 # 2. Extract mean, median, mode for each env summaries in parallel
 
