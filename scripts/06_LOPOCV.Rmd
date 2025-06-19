@@ -24,6 +24,11 @@ library(dplyr)
 library(readr)
 library(randomForest)
 library(doParallel)
+library(ggplot2)
+library(sf)
+library(raster)
+library(rnaturalearth)
+library(rnaturalearthdata)
 
 # Define Paths to directories
 input_dir <- "../input"
@@ -135,21 +140,25 @@ registerDoParallel(cl)
 
 # Run LOPOCV with foreach
 metrics_all <- foreach(i = seq_along(sites), .combine = rbind, .packages = c("dplyr", "randomForest", "readr")) %dopar% {
+
+  # Identify current test site
   site <- sites[i]
   
-  # Split into test and train rows using V.table
+  # Identify rows where site appears as Var1 or Var2 (test set)
   test_rows  <- V.table %>% filter(Var1 == site | Var2 == site)
+  
+  # All other rows go into the training set
   train_rows <- V.table %>% filter(!(Var1 == site | Var2 == site))
 
-  # Find row indices for matching with V.model
+  # Use precomputed pair IDs to match rows in V.model
   test_idx  <- which(V.table$id %in% test_rows$id)
   train_idx <- which(V.table$id %in% train_rows$id)
 
-  # Subset modeling data
+  # Subset predictor data to match training/testing rows
   train_df <- V.model[train_idx, ]
   test_df  <- V.model[test_idx, ]
 
-  # Train model
+  # Train Random Forest model (fixed ntree and default mtry)
   set.seed(42)
   rf_model <- randomForest(
     CSEdistance ~ .,
@@ -158,52 +167,61 @@ metrics_all <- foreach(i = seq_along(sites), .combine = rbind, .packages = c("dp
     importance = TRUE
   )
 
-  # Predict
+  # Predict on both train and test sets
   pred_train <- predict(rf_model, newdata = train_df)
   pred_test  <- predict(rf_model, newdata = test_df)
 
-  # Metrics
-  rsq   <- tail(rf_model$rsq, 1)
-  rmse  <- sqrt(mean((pred_test - test_df$CSEdistance)^2))
-  mae   <- mean(abs(pred_test - test_df$CSEdistance))
-  cor1  <- cor(pred_train, train_df$CSEdistance)
-  cor2  <- cor(pred_test, test_df$CSEdistance)
+  # Calculate model performance metrics
+  ss_res_test  <- sum((test_df$CSEdistance - pred_test)^2)
+  ss_tot_test  <- sum((test_df$CSEdistance - mean(test_df$CSEdistance))^2)
+  rsq_test     <- 1 - (ss_res_test / ss_tot_test)
+
+  ss_res_train <- sum((train_df$CSEdistance - pred_train)^2)
+  ss_tot_train <- sum((train_df$CSEdistance - mean(train_df$CSEdistance))^2)
+  rsq_train    <- 1 - (ss_res_train / ss_tot_train)
+
+  rmse         <- sqrt(mean((pred_test - test_df$CSEdistance)^2))
+  mae          <- mean(abs(pred_test - test_df$CSEdistance))
+  cor_train    <- cor(pred_train, train_df$CSEdistance)
+  cor_test     <- cor(pred_test, test_df$CSEdistance)
+
+  # Extract variable importance measures
   imp <- as.data.frame(importance(rf_model))
   imp_mse <- setNames(as.list(imp[, "%IncMSE"]), paste0("IncMSE_", rownames(imp)))
   imp_purity <- setNames(as.list(imp[, "IncNodePurity"]), paste0("NodePurity_", rownames(imp)))
 
-  # Save model
+  # Save Random Forest model for this fold
   saveRDS(rf_model, file.path(output_dir, sprintf("rf_model_%02d.rds", i)))
 
-  # Save extended metrics to CSV
+  # Save fold-specific metrics to CSV
   write_csv(
+    data.frame(
+      site = site,
+      rsq_train = rsq_train,
+      rsq_test = rsq_test,
+      rmse = rmse,
+      mae = mae,
+      cor_train = cor_train,
+      cor_test = cor_test,
+      imp_mse,
+      imp_purity
+    ),
+    file.path(output_dir, sprintf("metrics_fold_%02d.csv", i))
+  )
+
+  # Return full metrics as a row in combined results
   data.frame(
     site = site,
-    rsq = rsq,
+    rsq_train = rsq_train,
+    rsq_test = rsq_test,
     rmse = rmse,
     mae = mae,
-    cor_train = cor1,
-    cor_test = cor2,
+    cor_train = cor_train,
+    cor_test = cor_test,
     imp_mse,
     imp_purity
-  ),
-  file.path(output_dir, sprintf("metrics_fold_%02d.csv", i))
-)
-
-
-# Combine metrics and importance into single return object
-data.frame(
-  site = site,
-  rsq = rsq,
-  rmse = rmse,
-  mae = mae,
-  cor_train = cor1,
-  cor_test = cor2,
-  imp_mse,
-  imp_purity
-)
+  )
 }
-
 
 # Stop cluster
 stopCluster(cl)
@@ -214,5 +232,108 @@ write.csv(metrics_all, file.path(output_dir, "LOPOCV_summary.csv"), row.names = 
 # Write summary CSV again within GitHub
 write.csv(metrics_all, "../results/LOPOCV_summary.csv", row.names = FALSE)
 
-metrics_all
+metrics_all 
+```
+
+# Visualize LOPOCV results
+Plot and summarize metrics, especially RSQ_test, including %IncMSE
+```{r plot}
+
+# Load summary if metrics_all not created in session
+if (!exists("metrics_all")) {
+  metrics_all <- read.csv("../results/LOPOCV_summary.csv")
+}
+
+# Re-load altitude raster to get extent
+altitude <- raster::raster(
+  file.path("/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data/processed", 
+            "altitude_1KMmedian_MERIT_UgandaClip.tif")
+)
+crs(altitude) <- 4326
+
+# Extract unique site metadata and join with model evaluation metrics
+site_metadata <- V.table %>%
+  dplyr::select(Site = Var1, Latitude = lat1, Longitude = long1, Cluster = Pop1_cluster) %>%
+  distinct(Site, .keep_all = TRUE) %>%
+  arrange(Site)
+
+# Join with LOPOCV metrics (assumes 'metrics_all' includes rsq_test by site)
+site_eval <- site_metadata %>%
+  left_join(metrics_all, by = c("Site" = "site"))
+
+# Prepare site_eval with symbol flag and sorting
+site_eval <- site_eval %>%
+  mutate(Symbol = ifelse(rsq_test < 0.5, "low", "circle")) %>%
+  arrange(desc(rsq_test))  # plot smaller points on top
+
+# Uganda/lakes
+uganda <- ne_countries(scale = "medium", continent = "Africa", returnclass = "sf")
+lakes <- ne_download(scale = 10, type = "lakes", category = "physical", returnclass = "sf")
+uganda <- st_transform(uganda, 4326)
+lakes <- st_transform(lakes, 4326)
+
+# Get extent from altitude raster
+r_ext <- extent(altitude)
+xlim <- c(r_ext@xmin, r_ext@xmax)
+ylim <- c(r_ext@ymin, r_ext@ymax)
+
+# Plot
+ggplot() +
+  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.5) +
+  geom_sf(data = lakes, fill = "gray80", color = NA) +
+
+  # Plot circles for Symbol == "circle"
+  geom_point(
+    data = filter(site_eval, Symbol == "circle"),
+    aes(x = Longitude, y = Latitude, size = rsq_test, fill = Cluster),
+    shape = 21, color = "black", stroke = 0.3
+  ) +
+
+  # Plot asterisks for Symbol == "low"
+  geom_point(
+    data = filter(site_eval, Symbol == "low"),
+    aes(x = Longitude, y = Latitude, color = Cluster),
+    shape = 8, size = 3  # fixed size
+  ) +
+
+  scale_fill_manual(name = "Cluster", values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  scale_color_manual(name = "Cluster", values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  scale_size_continuous(name = "Test R²", range = c(2, 6)) +
+
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
+  theme_minimal() +
+  theme(panel.grid = element_blank()) +
+  labs(title = "LOPOCV Test R² by Sampling Site", x = "Longitude", y = "Latitude")
+
+# Overlapping density plot of R² by cluster
+ggplot(site_eval, aes(x = rsq_test, fill = Cluster)) +
+  geom_density(alpha = 0.5, color = NA) +
+  scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  theme_minimal() +
+  labs(title = "Distribution of Test R² by Genetic Cluster",
+       x = "Test R² (LOPOCV)",
+       y = "Density")
+```
+
+# Explore splitting south into subclusters
+```{r}
+# Load the metadata file
+indinfo <- read.delim("../input/Gff_11loci_allsites_indinfo.txt", header = TRUE, sep = "\t")
+
+# Extract unique mapping of site to subcluster
+site_clusters <- indinfo %>%
+  dplyr::select(Site = SiteCode, Subcluster = SiteMajCluster) %>%
+  distinct()
+
+# Join to site_eval
+site_eval <- site_eval %>%
+  left_join(site_clusters, by = "Site")
+
+ggplot(site_eval, aes(x = rsq_test, fill = Subcluster)) +
+  geom_density(alpha = 0.5, color = NA) +
+  scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
+  theme_minimal() +
+  labs(title = "Distribution of Test R² by Subcluster",
+       x = "Test R² (LOPOCV)",
+       y = "Density")
 ```
