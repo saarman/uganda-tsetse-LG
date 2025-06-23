@@ -25,6 +25,7 @@ library(doParallel)
 library(raster)
 library(sf)
 library(viridis)
+library(dplyr)
 
 # base directories
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
@@ -34,6 +35,10 @@ results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/
 # read the combined CSE + coords table + pix_dist + Env variables
 V.table <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"),
                     header = TRUE)
+# This was added only after completing LOPOCV...
+# Filter out western outlier "50-KB" 
+V.table <- V.table %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB")
 
 # define coordinate reference system
 crs_geo <- 4326     # EPSG code for WGS84
@@ -253,27 +258,10 @@ par(mar = c(5, 30, 2,2))  # bottom, left, top, right
 varImpPlot(rf_mean18, main = "Full Model Importance",cex = 0.6, pch = 19)
 varImpPlot(rf_mean18_tuned, main = "Tuned Full Model Importance",cex = 0.6, pch = 19)
 ```
-That’s a very small improvement from tuning:
-
-Default (mtry = of about 7):  
--  MSE: 0.001178  
--  RSQ: 86.21%
-
-Tuned (mtry = 6):  
--  MSE: 0.001170
--  RSQ: 86.30%
 
 The tuned model performs slightly better, but the gain may not be meaningful... however, it does confirm that the model is stable and that the mean-only predictors carry strong signal.
 
 Top 18 mean-based predictors retain nearly all the explanatory power of the original full model with 42 predictors.
-
-## Top contributors:  
-- pix_dist (geographic distance)  
-- samp_20km_mean (sampling effort)  
-- BIO3_mean (isothermality)  
-- BIO6_mean (min temperature of coldest month)  
-- BIO15_mean (precipitation seasonality)  
-- BIO13_mean and BIO11S_mean (mean precip. of wettest month, mean temp of coldest season)
 
 # 4. Projection of model
 ```{r projection}
@@ -290,10 +278,10 @@ env[["samp_20km"]] <- samp_uniform # Replace in raster stack
 prediction_raster <- predict(env, rf_final, type = "response")
 
 # Write Prediction Raster to file
-writeRaster(prediction_raster, file.path(results_dir,"predicted_CSEdistance.tif"), format = "GTiff", overwrite = FALSE)
+#writeRaster(prediction_raster, file.path(results_dir,"predicted_CSEdistance.tif"), format = "GTiff", overwrite = TRUE)
 ```
 
-```{r plot-projection}
+```{r plot-projection, warning=FALSE}
 # Create base plot with viridis
 plot(prediction_raster,
      col = viridis::magma(100),

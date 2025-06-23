@@ -54,7 +54,7 @@ dir.create(output_dir, showWarnings = FALSE)
 # Load data
 V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
 
-# Filter out western outliers "50-KB" and "54-MS"
+# Filter out western outlier "50-KB" 
 V.table <- V.table_full %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
 
@@ -340,7 +340,28 @@ ggplot(site_metadata, aes(x = rsq_test, fill = Subcluster)) +
        x = "Test R² (LOPOCV)",
        y = "Count")
 
+# reassign Cluster
+site_metadata$Cluster <- site_metadata$Subcluster
+site_metadata$Cluster[site_metadata$Subcluster == "west"]  <- "south"
+
+# Overlapping density plot just S/N
+ggplot(site_metadata, aes(x = rsq_test, fill = Cluster)) +
+  geom_density(alpha = 0.5, color = NA) +
+  scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  theme_minimal() +
+  labs(title = "Distribution of Test R² by Subcluster",
+       x = "Test R² (LOPOCV)", y = "Density")
+
+# Overlapping count plot just S/N
+ggplot(site_metadata, aes(x = rsq_test, fill = Cluster)) +
+  geom_density(alpha = 0.5, color = NA, position = "identity", aes(y = ..count..)) +
+  scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  theme_minimal() +
+  labs(title = "Test R² by Subcluster (Scaled by Count)",
+       x = "Test R² (LOPOCV)",
+       y = "Count")
 ```
+
 
 Which sites are performing worst?
 

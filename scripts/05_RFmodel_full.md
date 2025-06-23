@@ -17,7 +17,6 @@ Norah Saarman
   variables](#3-tune-random-forest-with-chosen-variables)
   - [Compare full and full tuned models (top 18 mean-only
     predictors)](#compare-full-and-full-tuned-models-top-18-mean-only-predictors)
-  - [Top contributors:](#top-contributors)
 - [4. Projection of model](#4-projection-of-model)
 
 RStudio Configuration:  
@@ -37,6 +36,7 @@ library(doParallel)
 library(raster)
 library(sf)
 library(viridis)
+library(dplyr)
 
 # base directories
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
@@ -46,6 +46,10 @@ results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/
 # read the combined CSE + coords table + pix_dist + Env variables
 V.table <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"),
                     header = TRUE)
+# This was added only after completing LOPOCV...
+# Filter out western outlier "50-KB" 
+V.table <- V.table %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB")
 
 # define coordinate reference system
 crs_geo <- 4326     # EPSG code for WGS84
@@ -137,87 +141,87 @@ print(rf_full)
     ##                      Number of trees: 500
     ## No. of variables tried at each split: 24
     ## 
-    ##           Mean of squared residuals: 0.001127682
-    ##                     % Var explained: 86.8
+    ##           Mean of squared residuals: 0.001119129
+    ##                     % Var explained: 86.2
 
 ``` r
 importance(rf_full)
 ```
 
     ##                     %IncMSE IncNodePurity
-    ## pix_dist         57.2233328  3.409299e+00
-    ## BIO1_mean         8.2461974  2.811689e-02
-    ## BIO2_mean         6.2205356  4.695578e-02
-    ## BIO3_mean        13.8628947  3.025302e-01
-    ## BIO4_mean        12.4853783  5.961137e-02
-    ## BIO5_mean         8.8231630  3.931383e-02
-    ## BIO6_mean        12.9434294  1.720245e-01
-    ## BIO7_mean        10.4025482  5.810920e-02
-    ## BIO8S_mean        9.4575906  4.078228e-02
-    ## BIO9S_mean        9.9226692  6.741861e-02
-    ## BIO10S_mean       9.3021209  4.715939e-02
-    ## BIO11S_mean      11.5870313  9.269949e-02
-    ## BIO12_mean        8.8130082  5.721936e-02
-    ## BIO13_mean        9.1743978  8.197544e-02
-    ## BIO14_mean        8.6864026  1.277451e-01
-    ## BIO15_mean        7.3633484  1.075320e-01
-    ## BIO16S_mean       9.1728532  3.020069e-02
-    ## BIO17S_mean      10.3066592  4.639070e-02
-    ## BIO18S_mean       7.8550923  3.375701e-02
-    ## BIO19S_mean       8.3554613  3.849249e-02
-    ## alt_mean          9.2259072  4.515102e-02
-    ## slope_mean       13.2790835  3.670555e-02
-    ## riv_3km_mean     11.2862173  5.355017e-02
-    ## samp_20km_mean   19.0065773  9.865145e-01
-    ## lakes_mean        6.1078728  6.347136e-02
-    ## BIO1_median       7.9683403  3.783837e-02
-    ## BIO2_median      10.6800553  4.941583e-02
-    ## BIO3_median      16.0788413  1.274061e-01
-    ## BIO4_median      12.6134372  4.868474e-02
-    ## BIO5_median       8.5235307  5.481466e-02
-    ## BIO6_median      11.9238451  2.206315e-01
-    ## BIO7_median      13.0870828  4.751271e-02
-    ## BIO8S_median      7.6502585  3.198425e-02
-    ## BIO9S_median     12.4788456  7.800545e-02
-    ## BIO10S_median    10.2763599  4.962403e-02
-    ## BIO11S_median     8.0079633  8.495971e-02
-    ## BIO12_median      7.7370582  4.047373e-02
-    ## BIO13_median     10.8340283  9.814140e-02
-    ## BIO14_median      5.2690494  2.565693e-02
-    ## BIO15_median     13.3920658  7.899323e-02
-    ## BIO16S_median     5.3423100  3.694671e-02
-    ## BIO17S_median     7.8182722  3.743202e-02
-    ## BIO18S_median     7.2606414  2.456747e-02
-    ## BIO19S_median    12.0728952  3.596723e-02
-    ## alt_median       10.5339166  5.992962e-02
-    ## slope_median     10.9756244  4.639782e-02
-    ## riv_3km_median   10.5419488  4.901675e-02
-    ## samp_20km_median 15.7768316  7.665258e-01
-    ## lakes_median     -0.7662631  3.724073e-05
-    ## BIO1_mode        11.0515036  2.911252e-02
-    ## BIO2_mode         9.9009386  6.934078e-02
-    ## BIO3_mode        14.1347022  7.549949e-02
-    ## BIO4_mode        11.4838217  2.897795e-02
-    ## BIO5_mode         8.7336641  3.442985e-02
-    ## BIO6_mode         8.6436310  1.241677e-01
-    ## BIO7_mode        10.2872419  3.256384e-02
-    ## BIO8S_mode        4.9994723  2.639211e-02
-    ## BIO9S_mode       10.3014623  3.179655e-02
-    ## BIO10S_mode      11.6438096  3.904631e-02
-    ## BIO11S_mode       9.7512884  5.379046e-02
-    ## BIO12_mode        6.4835590  2.905746e-02
-    ## BIO13_mode       10.5440452  3.566376e-02
-    ## BIO14_mode        9.7837516  2.884828e-02
-    ## BIO15_mode        8.5634491  7.748932e-02
-    ## BIO16S_mode       9.3822337  3.064583e-02
-    ## BIO17S_mode      10.5342702  4.043393e-02
-    ## BIO18S_mode       7.4106357  2.707043e-02
-    ## BIO19S_mode       9.9145396  6.082623e-02
-    ## alt_mode         10.5745468  2.652980e-02
-    ## slope_mode        9.8089404  3.519143e-02
-    ## riv_3km_mode      7.6268007  4.166634e-02
-    ## samp_20km_mode   13.3788158  3.440249e-01
-    ## lakes_mode       -1.0010015  1.460090e-04
+    ## pix_dist         58.3012131  3.0935298531
+    ## BIO1_mean         9.0020495  0.0301285131
+    ## BIO2_mean         6.4098370  0.0473834223
+    ## BIO3_mean        13.6026451  0.2721208278
+    ## BIO4_mean        10.2607730  0.0613038622
+    ## BIO5_mean        10.4818330  0.0291173353
+    ## BIO6_mean        11.8583425  0.1575919110
+    ## BIO7_mean        10.7247498  0.0484384046
+    ## BIO8S_mean        9.1198968  0.0389941449
+    ## BIO9S_mean        9.1545944  0.0757165381
+    ## BIO10S_mean      10.5581937  0.0348492182
+    ## BIO11S_mean      12.6650592  0.0999023193
+    ## BIO12_mean       10.2105738  0.0420781559
+    ## BIO13_mean       10.3447647  0.0557322008
+    ## BIO14_mean        8.6877132  0.1224180146
+    ## BIO15_mean        9.2166452  0.0942930637
+    ## BIO16S_mean       9.3860539  0.0266651745
+    ## BIO17S_mean       5.5162695  0.0419393147
+    ## BIO18S_mean       5.1426282  0.0318266777
+    ## BIO19S_mean       9.4523005  0.0313136617
+    ## alt_mean          9.6483998  0.0391622442
+    ## slope_mean       10.8249810  0.0391778902
+    ## riv_3km_mean     13.2872838  0.0527211941
+    ## samp_20km_mean   19.3440414  1.0712456972
+    ## lakes_mean        7.4531090  0.0780686943
+    ## BIO1_median       9.1525088  0.0410832893
+    ## BIO2_median       9.3369590  0.0473558188
+    ## BIO3_median      14.0929216  0.0892901654
+    ## BIO4_median      10.1173720  0.0507536064
+    ## BIO5_median       9.6663029  0.0497769331
+    ## BIO6_median      12.7588988  0.2462962100
+    ## BIO7_median      10.6655843  0.0495553419
+    ## BIO8S_median      9.9223161  0.0337600533
+    ## BIO9S_median      9.9244398  0.0804881296
+    ## BIO10S_median     9.5509941  0.0373292693
+    ## BIO11S_median    10.8215075  0.0844560970
+    ## BIO12_median     10.1568111  0.0327408721
+    ## BIO13_median     11.7315217  0.0719496005
+    ## BIO14_median      4.7695670  0.0209310192
+    ## BIO15_median     13.4686933  0.0706187410
+    ## BIO16S_median     8.9510772  0.0425605141
+    ## BIO17S_median    10.9025714  0.0276578250
+    ## BIO18S_median     7.7717184  0.0224679158
+    ## BIO19S_median     9.2931810  0.0334663036
+    ## alt_median       11.5067482  0.0603982245
+    ## slope_median     10.2245463  0.0471151689
+    ## riv_3km_median    7.1750996  0.0521492669
+    ## samp_20km_median 15.8059008  0.5984020935
+    ## lakes_median     -0.8027164  0.0002072142
+    ## BIO1_mode        11.2642008  0.0261941733
+    ## BIO2_mode        10.0272409  0.0582292777
+    ## BIO3_mode        13.2646204  0.0893638675
+    ## BIO4_mode        11.8018707  0.0319873963
+    ## BIO5_mode         8.5177924  0.0239607111
+    ## BIO6_mode         7.8889344  0.0905625124
+    ## BIO7_mode         9.7704289  0.0303038567
+    ## BIO8S_mode        7.5655875  0.0213594257
+    ## BIO9S_mode        9.0357805  0.0330665378
+    ## BIO10S_mode      12.3764817  0.0458989549
+    ## BIO11S_mode      10.8438312  0.0548054849
+    ## BIO12_mode        8.8893019  0.0300983290
+    ## BIO13_mode        9.4327509  0.0315015252
+    ## BIO14_mode        9.4888215  0.0268860615
+    ## BIO15_mode        9.1871791  0.1212897856
+    ## BIO16S_mode       8.6535206  0.0262811613
+    ## BIO17S_mode       7.9266488  0.0311551856
+    ## BIO18S_mode       8.6996598  0.0221932434
+    ## BIO19S_mode      10.2959906  0.0395754563
+    ## alt_mode          9.2601975  0.0278142951
+    ## slope_mode        8.3837670  0.0458055496
+    ## riv_3km_mode      7.3381090  0.0527243831
+    ## samp_20km_mode   11.6645843  0.2253255309
+    ## lakes_mode       -1.0010015  0.0000351668
 
 # 2. Prune variables?
 
@@ -245,7 +249,7 @@ c(mean = rf_mean$rsq[500] * 100,
 ```
 
     ##     mean   median     mode 
-    ## 86.05681 85.53271 85.16006
+    ## 85.52060 84.86890 84.51402
 
 Including mean of env variable along least cost paths performs the best,
 adding median and mode does not greatly improve the model and increases
@@ -294,21 +298,21 @@ sapply(prune_results, function(mod) {
 })
 ```
 
-    ##                 Top5         Top6         Top7         Top8        Top9
-    ## OOB_MSE  0.001378454  0.001233934  0.001234894  0.001189004  0.00119538
-    ## VarExpl 83.863469172 85.555258949 85.544017957 86.081215619 86.00657580
+    ##                 Top5         Top6         Top7         Top8         Top9
+    ## OOB_MSE  0.001407692  0.001338065  0.001307951  0.001236427  0.001206078
+    ## VarExpl 82.641529917 83.500115170 83.871456681 84.753429692 85.127669122
     ##                Top10        Top11        Top12        Top13        Top14
-    ## OOB_MSE  0.001185355  0.001182811  0.001175771  0.001162388  0.001171419
-    ## VarExpl 86.123938248 86.153718082 86.236130074 86.392792836 86.287071970
-    ##                Top15        Top16        Top17        Top18        Top19
-    ## OOB_MSE  0.001168933  0.001173137  0.001170081  0.001167182  0.001179703
-    ## VarExpl 86.316176590 86.266961746 86.302736644 86.336667268 86.190093777
-    ##               Top20        Top21        Top22        Top23        Top24
-    ## OOB_MSE  0.00117958  0.001158376  0.001173274  0.001185691  0.001178741
-    ## VarExpl 86.19153960 86.439755060 86.265359946 86.120005290 86.201365855
+    ## OOB_MSE  0.001205162  0.001188499  0.001177653  0.001183068  0.001183889
+    ## VarExpl 85.138958253 85.344431928 85.478174323 85.411404269 85.401277243
+    ##                Top15        Top16       Top17        Top18        Top19
+    ## OOB_MSE  0.001179652  0.001176377  0.00118273  0.001167503  0.001174329
+    ## VarExpl 85.453528639 85.493909572 85.41557043 85.603339051 85.519159798
+    ##                Top20        Top21        Top22        Top23        Top24
+    ## OOB_MSE  0.001165533  0.001152764  0.001158101  0.001156222  0.001152734
+    ## VarExpl 85.627630199 85.785081355 85.719270871 85.742451545 85.785451021
     ##                Top25
-    ## OOB_MSE  0.001173343
-    ## VarExpl 86.264546750
+    ## OOB_MSE  0.001165264
+    ## VarExpl 85.630943128
 
 % Variance Explained increases rapidly up to around 18 variables, after
 which it plateaus.
@@ -357,32 +361,32 @@ print(rf_mean18)
     ##                      Number of trees: 500
     ## No. of variables tried at each split: 6
     ## 
-    ##           Mean of squared residuals: 0.001186111
-    ##                     % Var explained: 86.12
+    ##           Mean of squared residuals: 0.001169491
+    ##                     % Var explained: 85.58
 
 ``` r
 importance(rf_mean18)
 ```
 
     ##            %IncMSE IncNodePurity
-    ## pix_dist  68.26582     3.7473878
-    ## samp_20km 27.03633     1.5715196
-    ## BIO3      23.04118     0.6027221
-    ## BIO11S    20.15872     0.2429617
-    ## BIO7      15.04943     0.2237217
-    ## BIO6      20.69409     0.3917131
-    ## BIO13     21.42089     0.2866575
-    ## BIO4      16.82231     0.2265064
-    ## alt       20.29698     0.1964753
-    ## BIO5      15.75939     0.1949511
-    ## riv_3km   16.43603     0.1965698
-    ## BIO15     16.92251     0.3976390
-    ## BIO10S    17.09371     0.1568443
-    ## BIO8S     19.27274     0.1617264
-    ## slope     19.32200     0.1392786
-    ## BIO14     15.90573     0.3694579
-    ## BIO1      16.72155     0.1658423
-    ## BIO9S     19.02293     0.2081613
+    ## pix_dist  71.65795     3.5783744
+    ## samp_20km 26.61125     1.3569066
+    ## BIO13     17.21835     0.2040798
+    ## BIO8S     19.43221     0.1802590
+    ## BIO3      21.65268     0.5142565
+    ## riv_3km   18.67469     0.1963006
+    ## BIO9S     17.19416     0.2310162
+    ## BIO7      21.73728     0.2253818
+    ## BIO5      17.93580     0.1972963
+    ## BIO11S    21.52975     0.2382724
+    ## slope     17.26434     0.1276901
+    ## alt       19.67267     0.1843154
+    ## BIO10S    17.90859     0.1263081
+    ## BIO6      17.99176     0.3491119
+    ## BIO14     16.41491     0.3824678
+    ## BIO15     17.00173     0.3248504
+    ## BIO1      17.83020     0.1828608
+    ## BIO12     17.34726     0.1383382
 
 ``` r
 # Tune mtry (number of variables tried at each split)
@@ -400,13 +404,13 @@ rf_mean18_tuned <- tuneRF(
 )
 ```
 
-    ## mtry = 6  OOB error = 0.001163416 
+    ## mtry = 6  OOB error = 0.001171661 
     ## Searching left ...
-    ## mtry = 4     OOB error = 0.001196531 
-    ## -0.02846368 0.01 
+    ## mtry = 4     OOB error = 0.001200961 
+    ## -0.02500702 0.01 
     ## Searching right ...
-    ## mtry = 9     OOB error = 0.001169886 
-    ## -0.005561065 0.01
+    ## mtry = 9     OOB error = 0.001179634 
+    ## -0.006804841 0.01
 
 ![](05_RFmodel_full_files/figure-gfm/tune-1.png)<!-- -->
 
@@ -434,8 +438,8 @@ print(rf_mean18)
     ##                      Number of trees: 500
     ## No. of variables tried at each split: 6
     ## 
-    ##           Mean of squared residuals: 0.001186111
-    ##                     % Var explained: 86.12
+    ##           Mean of squared residuals: 0.001169491
+    ##                     % Var explained: 85.58
 
 ``` r
 print(rf_mean18_tuned)
@@ -448,8 +452,8 @@ print(rf_mean18_tuned)
     ##                      Number of trees: 500
     ## No. of variables tried at each split: 6
     ## 
-    ##           Mean of squared residuals: 0.001176689
-    ##                     % Var explained: 86.23
+    ##           Mean of squared residuals: 0.001168978
+    ##                     % Var explained: 85.59
 
 ``` r
 data.frame(
@@ -460,8 +464,8 @@ data.frame(
 ```
 
     ##                 Model         MSE       Rsq
-    ## 1 Full (default mtry) 0.001186111 0.8611509
-    ## 2  Tuned (mtry =  6 ) 0.001176689 0.8622539
+    ## 1 Full (default mtry) 0.001169491 0.8557882
+    ## 2  Tuned (mtry =  6 ) 0.001168978 0.8558514
 
 ``` r
 # pad names to trick varImpPlot
@@ -479,15 +483,7 @@ varImpPlot(rf_mean18, main = "Full Model Importance",cex = 0.6, pch = 19)
 varImpPlot(rf_mean18_tuned, main = "Tuned Full Model Importance",cex = 0.6, pch = 19)
 ```
 
-![](05_RFmodel_full_files/figure-gfm/compare-2.png)<!-- --> That’s a
-very small improvement from tuning:
-
-Default (mtry = of about 7):  
-- MSE: 0.001178  
-- RSQ: 86.21%
-
-Tuned (mtry = 6):  
-- MSE: 0.001170 - RSQ: 86.30%
+![](05_RFmodel_full_files/figure-gfm/compare-2.png)<!-- -->
 
 The tuned model performs slightly better, but the gain may not be
 meaningful… however, it does confirm that the model is stable and that
@@ -495,16 +491,6 @@ the mean-only predictors carry strong signal.
 
 Top 18 mean-based predictors retain nearly all the explanatory power of
 the original full model with 42 predictors.
-
-## Top contributors:
-
-- pix_dist (geographic distance)  
-- samp_20km_mean (sampling effort)  
-- BIO3_mean (isothermality)  
-- BIO6_mean (min temperature of coldest month)  
-- BIO15_mean (precipitation seasonality)  
-- BIO13_mean and BIO11S_mean (mean precip. of wettest month, mean temp
-  of coldest season)
 
 # 4. Projection of model
 
@@ -522,7 +508,7 @@ env[["samp_20km"]] <- samp_uniform # Replace in raster stack
 prediction_raster <- predict(env, rf_final, type = "response")
 
 # Write Prediction Raster to file
-writeRaster(prediction_raster, file.path(results_dir,"predicted_CSEdistance.tif"), format = "GTiff", overwrite = FALSE)
+#writeRaster(prediction_raster, file.path(results_dir,"predicted_CSEdistance.tif"), format = "GTiff", overwrite = TRUE)
 ```
 
 ``` r
@@ -541,23 +527,11 @@ lakes <- st_make_valid(lakes) # fix geometries
 r_ext <- st_as_sfc(st_bbox(prediction_raster)) # extent
 st_crs(r_ext) <- st_crs(prediction_raster) # match CRS
 lakes <- st_intersection(lakes, r_ext) # clip to extent
-```
-
-    ## Warning: attribute variables are assumed to be spatially constant throughout
-    ## all geometries
-
-``` r
 plot(st_geometry(lakes), col = "gray20", border = NA, add = TRUE)
 
 # Overlay country outline
 uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", returnclass = "sf")
 uganda <- st_intersection(uganda, r_ext) # clip to extent
-```
-
-    ## Warning: attribute variables are assumed to be spatially constant throughout
-    ## all geometries
-
-``` r
 plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```
 

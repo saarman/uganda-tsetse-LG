@@ -142,16 +142,34 @@ Plot least cost paths with Uganda outline and lakes to check behavior
 # assumes shape file of least-cost paths have already been created
 lines_sf <- st_read(file.path(data_dir,"processed","LC_paths.shp"), quiet=TRUE)
 
-# Read and transform lakes, then crop to Uganda
-uganda   <- ne_countries(scale="medium", country="Uganda", returnclass="sf")
-lakes_ne <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet=TRUE)
-lakes_ne <- st_transform(lakes_ne, st_crs(crs_geo))
+# This was added only after completing LOPOCV...
+# Filter out western outlier "50-KB" 
+lines_sf <- lines_sf[
+  lines_sf$Var1 != "50-KB" &
+  lines_sf$Var2 != "50-KB",
+]
 
+# Read and transform lakes, then crop to Uganda
+# Extract map extent
+r_ext <- extent(lakes)
+xlim <- c(r_ext@xmin, r_ext@xmax)
+ylim <- c(r_ext@ymin, r_ext@ymax)
+
+# Natural Earth background
+uganda <- ne_countries(scale = "medium", continent = "Africa", returnclass = "sf") %>% st_transform(4326)
+lakes_ne <- ne_download(scale = 10, type = "lakes", category = "physical", returnclass = "sf") %>% st_transform(4326)
+```
+
+    ## Reading layer `ne_10m_lakes' from data source `/tmp/RtmpeZa9c3/ne_10m_lakes.shp' using driver `ESRI Shapefile'
+    ## Simple feature collection with 1355 features and 41 fields
+    ## Geometry type: MULTIPOLYGON
+    ## Dimension:     XY
+    ## Bounding box:  xmin: -165.9656 ymin: -50.66967 xmax: 177.1544 ymax: 81.95521
+    ## Geodetic CRS:  WGS 84
+
+``` r
 # Clean up invalid geometries
 lakes_ne <- st_make_valid(lakes_ne)
-
-# restrict to lakes inside (or touching) Uganda
-lakes_uga <- st_intersection(lakes_ne, st_geometry(uganda))
 
 # plot least‐cost paths
 ggplot() +
@@ -159,7 +177,7 @@ ggplot() +
   geom_sf(data = lines_sf,
           aes(color = CSE),
           size = 0.6) +
-  geom_sf(data = lakes_uga,
+  geom_sf(data = lakes_ne,
           fill = "lightblue",
           color = NA,
           alpha = 0.5) +
@@ -168,7 +186,7 @@ ggplot() +
     option    = "magma",
     direction = -1
   ) +
-  coord_sf() +
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_void() +
   theme(
     legend.position = c(1.1, 0.5),
