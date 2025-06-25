@@ -36,7 +36,8 @@ library(rnaturalearthdata)
 input_dir <- "../input"
 results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results"
 output_dir <- file.path(results_dir, "lopocv")
-dir.create(output_dir, showWarnings = FALSE)
+#dir.create(output_dir, showWarnings = FALSE)
+scratch_dir <- "/scratch/general/vast/u6036559"
 ```
 
 # Inputs
@@ -154,10 +155,8 @@ varImpPlot(rf_model)
 cat(sprintf("Fold %02d completed and saved.\n", i))
 ```
 
-# 3. Run LOPOCV in Parallel
-
-\*\* NOTE:\*\* eval = FALSE so that skips on knit
-
+# 3. Run LOPOCV in Parallel   
+**NOTE:** eval = FALSE so that it skips on knit
 ```{r lopocv, eval = FALSE}
 # Parallel setup
 n_cores <- 8
@@ -400,7 +399,6 @@ Final decision:\
 # Permutation test for LOPOCV R²
 
 GOAL: Create a 67 x 100 matrix where each cell is the rsq_test value for one LOPOCV fold (site) under a permuted response (CSEdistance)
-
 ```{r permutation-LOPOCV, eval = FALSE}
 # Set number of permutations
 n_perm <- 100
@@ -442,6 +440,10 @@ rsq_null <- foreach(p = 1:n_perm, .combine = cbind, .packages = c("randomForest"
 
     # Fit Random Forest on permuted response
     rf_model <- randomForest(CSEdistance ~ ., data = train_df, ntree = 500)
+    
+    # Save RF model for this permutation–fold pair for spatial eval
+    saveRDS(rf_model, file.path(scratch_dir, 
+          sprintf("rf_model_perm_%02d_fold_%02d.rds",p,i)))
 
     # Predict and compute test R²
     pred_test <- predict(rf_model, newdata = test_df)
@@ -470,12 +472,9 @@ message("Permutation matrix created and saved.")
 
 # Compute Empirical p-values
 
-GOAL: Run wilcox.test() for each column of rsq_null, just like we did using the signed-rank statistic in the previous message. This gives you a distribution of test statistics (or p-values), from which you compute an empirical p-value:
-
-Compares observed R² values to the mean R² across columns (permutated replicate).
-
-
-Compare the distribution of observed R² values (from real LOPOCV) to those from the permuted data
+GOAL: Run wilcox.test() for each column of rsq_null... This provides a distribution of test statistics (or p-values), from which you compute an empirical p-value:  
+ - Compares observed R² values to the mean R² across columns (permutated replicate).
+ - Compare the distribution of observed R² values (from real LOPOCV) to those from the permuted data
 ```{r plot-r2}
 # Load permuted R² matrix and convert to long format
 rsq_null_mat <- as.matrix(read.csv("../results/rsq_LOPOCV_null_matrix.csv"))
@@ -500,7 +499,8 @@ ggplot(plot_df_rsq, aes(x = rsq, fill = type)) +
        y = "Density")
 ```
 
-Calculate a Wilcoxon signed-rank statistic for each column (permuted replicate) and a one-sided p-value as the proportion of permuted statistics ≥ observed.
+## Wilcoxon signed-rank statistic 
+GOAL: Calculate a Wilcoxon signed-rank statistic for each column (permuted replicate) and a one-sided p-value as the proportion of permuted statistics ≥ observed.
 
 ```{r Wilcoxon}
 # Vector of observed R² values (length = number of folds)

@@ -1,0 +1,154 @@
+---
+title: "Least-cost-paths across full RF model resistance surface"
+author: "Norah Saarman"
+date: "2025-06-23"
+output:
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+RStudio Configuration:  
+- **R version:** R 4.4.0 (Geospatial packages)  
+- **Number of cores:** 8 (up to 32 available)   
+- **Account:** saarman-np  
+- **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
+- **Memory per job:** 200G (cluster limit: 1000G total; avoid exceeding half)    
+
+# Setup
+```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+# load only required packages
+library(doParallel)
+library(foreach)
+library(raster)
+library(gdistance)
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# Define Paths to directories
+data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
+results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/"
+output_dir <- paste0(results_dir,"lopocv_spatial")
+dir.create(output_dir, showWarnings = FALSE)
+
+# define coordinate reference system
+crs_geo <- 4326     # EPSG code for WGS84
+```
+
+# Inputs
+  - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2)
+  - `../results_dir/fullRF_CSE_resistance.tif` - Final full model projected resistance surface
+  - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)   
+# Outputs  
+  - `../results_dir/LC_paths_fullRF.shp"` - 
+  
+# Step 1: Prepare least-cost paths from full resistance surface
+**NOTE:** eval = FALSE so that it skips on knit
+```{r paths, eval=FALSE}
+# Set number of cores and register cluster
+n_cores <- 8
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+# Load full model prediction raster as resistance surface
+resistance_rast <- raster(paste0(results_dir, "fullRF_CSE_resistance.tif"))
+
+# Load lake mask and assign high CSE (e.g., 2)
+lake_mask <- raster(file.path(data_dir, "processed", "lake_binary.tif"))
+resistance_rast[lake_mask[,] == 1] <- 2
+
+# Convert resistance raster to transition object
+tr <- transition(1/resistance_rast, transitionFunction = mean, directions = 16)
+tr_corr <- geoCorrection(tr, type = "c")
+
+# Load V.table (after filtering)
+V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
+V.table <- V.table_full %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB") %>%
+  filter(Pop1_cluster == Pop2_cluster) %>%
+  mutate(id = paste(Var1, Var2, sep = "_"))
+
+# Get unique site coordinates
+sites_coords <- V.table %>%
+  dplyr::select(Site = Var1, lon = long1, lat = lat1) %>%
+  distinct()
+
+sites_df <- st_as_sf(sites_coords, coords = c("lon", "lat"), crs = crs_geo) %>%
+  st_transform(crs(resistance_rast))
+
+# Create named SpatialPoints
+sites_sp <- as(sites_df, "Spatial")
+site_index <- setNames(seq_len(nrow(sites_df)), sites_df$Site)
+
+# Get list of site pairs to extract
+site_pairs <- V.table %>%
+  dplyr::select(Var1, Var2, id) %>%
+  distinct()
+
+# Parallel least-cost path computation with metadata
+paths_list <- foreach(k = 1:nrow(site_pairs), .packages = c("gdistance", "sp", "sf")) %dopar% {
+  i <- site_index[site_pairs$Var1[k]]
+  j <- site_index[site_pairs$Var2[k]]
+  
+  path <- tryCatch({
+    shortestPath(tr_corr, sites_sp[i,], sites_sp[j,], output = "SpatialLines")
+  }, error = function(e) NULL)
+
+  if (!is.null(path)) {
+    path_sf <- st_as_sf(path)
+    path_sf$Var1 <- site_pairs$Var1[k]
+    path_sf$Var2 <- site_pairs$Var2[k]
+    path_sf$id   <- site_pairs$id[k]
+    return(path_sf)
+  } else {
+    return(NULL)
+  }
+}
+
+# Stop cluster
+stopCluster(cl)
+
+# Combine list into single sf object
+paths_sf <- do.call(rbind, paths_list)
+st_crs(paths_sf) <- st_crs(resistance_rast)
+
+# Save to shapefile
+st_write(paths_sf, file.path(results_dir, "LC_paths_fullRF.shp"), delete_layer = TRUE)
+
+```
+# Visualize LCPs
+```{r map-paths}
+# Load shapefile of least-cost paths
+lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp")) 
+lcp_sf <- st_transform(lcp_sf, crs = st_crs(crs_geo))
+
+# Load Uganda country boundary and lakes
+uganda <- ne_countries(scale = "medium", country = "Uganda", returnclass = "sf") %>%
+  st_transform(crs = st_crs(crs_geo))
+lakes <- ne_download(scale = 10, type = "lakes", category = "physical", returnclass = "sf") %>%
+  st_transform(st_crs(crs_geo))
+
+# (Optional) Load resistance raster for background
+resistance_rast <- raster(file.path(results_dir, "fullRF_CSE_resistance.tif"))
+
+# Basic plot with paths and country
+ggplot() +
+  geom_raster(data = as.data.frame(rasterToPoints(resistance_rast)) %>%
+                setNames(c("x", "y", "resist")),
+              aes(x = x, y = y, fill = resist)) +
+  scale_fill_viridis_c(option = "C", na.value = "transparent") +
+  geom_sf(data = lakes, fill = "gray80", color = NA) +
+  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.4) +
+  geom_sf(data = lcp_sf, color = "dark blue", size = 0.4, alpha = 0.8) +
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
+  theme_minimal() +
+  theme(panel.grid = element_blank()) +
+  labs(title = "Least-Cost Paths on Resistance Surface",
+       x = "Longitude", y = "Latitude", fill = "Resistance") 
+
+```

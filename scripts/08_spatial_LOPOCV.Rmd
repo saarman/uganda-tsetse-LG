@@ -1,0 +1,443 @@
+---
+title: "LOPOCV: Spatial Cross-Validation"
+author: "Norah Saarman"
+date: "2025-06-18"
+output:
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+RStudio Configuration:  
+- **R version:** R 4.4.0 (Geospatial packages)  
+- **Number of cores:** 8 (up to 32 available)   
+- **Account:** saarman-np  
+- **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
+- **Memory per job:** 200G (cluster limit: 1000G total; avoid exceeding half)    
+
+# Setup
+```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+# load only required packages
+library(doParallel)
+library(foreach)
+library(raster)
+library(gdistance)
+library(sf)
+library(dplyr)
+library(randomForest)
+
+# Define Paths to directories
+data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
+results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/"
+output_dir <- paste0(results_dir,"/lopocv_spatial")
+#dir.create(output_dir, showWarnings = FALSE)
+scratch_dir <- "/scratch/general/vast/u6036559"
+
+# define coordinate reference system
+crs_geo <- 4326     # EPSG code for WGS84
+```
+
+# Inputs
+  - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2)
+  - `../results_dir/fullRF_CSE_resistance.tif` - Final full model projected resistance surface
+  - `../results_dir/LC_paths_fullRF.shp"` - 
+  - `../data_dir/processed/env_stack.grd`  - Final prediction env stack with named layers (18 variables)
+env <- stack(file.path(
+  - `../results_dir/lopocv/rf_model_01.rds` - 67 LOPOCV rf models leaving one point out
+  
+# Outputs  
+  - `../results_dir/spatial_predictions.csv` - Spatial lopocv predicted geodist, CSE_per_unit, predicted CSE
+  - `../results_dir/spatial_eval.csv` - Spatial lopocv evaluation metrics
+
+# 1. Precompute: extract environmental data along each path once
+**NOTE:** eval = FALSE so that it skips on knit
+```{r env-paths, eval = FALSE}
+
+# Input: table of paired sites (endpoints of paths)
+V.table_full <- read.csv("../input/Gff_cse_envCostPaths.csv")
+V.table <- V.table_full %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB") %>%
+  filter(Pop1_cluster == Pop2_cluster) %>%
+  mutate(id = paste(Var1, Var2, sep = "_"))
+sites <- sort(unique(c(V.table$Var1, V.table$Var2)))
+
+# Input: raster of env parameters for prediction
+env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+names(env) <-  c("BIO1_mean", "BIO2_mean", "BIO3_mean", "BIO4_mean", "BIO5_mean", "BIO6_mean", "BIO7_mean", "BIO8S_mean","BIO9S_mean", "BIO10S_mean", "BIO11S_mean", "BIO12_mean", "BIO13_mean", "BIO14_mean", "BIO15_mean", "BIO16S_mean","BIO17S_mean", "BIO18S_mean", "BIO19S_mean", "alt_mean","slope_mean", "riv_3km_mean","samp_20km_mean","lakes_mean","pix_dist")
+crs(env) <- crs_geo
+pix_dist <- env$pix_dist
+crs(pix_dist) <- crs_geo
+
+# Input: shape file of least-cost paths
+lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp"))
+lcp_sf$id <- paste(lcp_sf$Var1, lcp_sf$Var2, sep = "_")
+st_crs(lcp_sf) <- crs_geo
+
+# Output: a list of data.frames, one per path
+path_env_list <- lapply(1:nrow(lcp_sf), function(i) {
+  path_geom <- st_geometry(lcp_sf[i, ]) |> as("Spatial")
+  env_vals <- extract(env, path_geom)[[1]]
+  if (is.null(env_vals)) return(NULL)
+  as.data.frame(env_vals)  # rows = pixels, cols = env layers
+})
+names(path_env_list) <- lcp_sf$id
+saveRDS(path_env_list, file.path(output_dir, "path_env_list.rds"))
+```
+
+### Thinking about scaling CSE 
+
+Scaling CSE by dividing by the max observed CSE (i.e., normalizing to [0, 1]) is a reasonable approach that could help with spatial validation, especially when:
+
+Path lengths differ substantially across site pairs, and
+
+You want to compare observed and predicted values on a common scale, without introducing bias from absolute CSE magnitude.
+
+Benefits of scaling:
+Makes residual errors comparable across pairs, regardless of path length.
+
+Helps evaluate model fit more robustly, especially when absolute values vary widely.
+
+Could stabilize R² estimates by reducing variance due to large CSE outliers.
+
+Caveats:
+It changes the interpretation of CSE from an absolute genetic distance to a relative value (e.g., “proportion of max divergence observed”).
+
+
+# 2. Spatial LOPOCV
+## For each LOPOCV fold: predict only on path data using the final full model
+**NOTE:** eval = FALSE so that it skips on knit
+```{r spatial-lopocv, eval = FALSE}
+# Set number of cores and register cluster
+n_cores <- 8
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+# Load pre-extracted path-level env data
+path_env_list <- readRDS(file.path(output_dir, "path_env_list.rds"))
+
+# Loop over LOPOCV folds (real models)
+metrics_real <- foreach(fold_idx = seq_along(sites), .combine = rbind,
+                        .packages = c("dplyr", "randomForest")) %dopar% {
+
+  # Load trained model for this LOPOCV fold
+  rf_model <- readRDS(sprintf("%s/lopocv/rf_model_%02d.rds", results_dir, fold_idx))
+
+  fold_df <- data.frame()
+
+  for (row in seq_len(nrow(V.table))) {
+    pair_id <- V.table$id[row]
+    env_path <- path_env_list[[pair_id]]
+    if (is.null(env_path)) next
+
+    pred_vals <- predict(rf_model, newdata = env_path)
+    pred_sum <- sum(pred_vals, na.rm = TRUE)
+
+    fold_df <- rbind(fold_df, data.frame(
+      Fold = fold_idx,
+      Var1 = V.table$Var1[row],
+      Var2 = V.table$Var2[row],
+      id = pair_id,
+      predicted_CSE = pred_sum,
+      true_CSE = V.table$CSEdistance[row]
+    ))
+  }
+
+  test_ids <- V.table$id[V.table$Var1 == sites[fold_idx] | V.table$Var2 == sites[fold_idx]]
+  fold_test <- fold_df[fold_df$id %in% test_ids, ]
+
+  # Compute evaluation metrics
+  ss_res <- sum((fold_test$true_CSE - fold_test$predicted_CSE)^2, na.rm = TRUE)
+  ss_tot <- sum((fold_test$true_CSE - mean(fold_test$true_CSE, na.rm = TRUE))^2)
+  rsq_test <- 1 - ss_res / ss_tot
+  rmse <- sqrt(mean((fold_test$true_CSE - fold_test$predicted_CSE)^2, na.rm = TRUE))
+  mae <- mean(abs(fold_test$true_CSE - fold_test$predicted_CSE), na.rm = TRUE)
+  cor_test <- cor(fold_test$true_CSE, fold_test$predicted_CSE, use = "complete.obs")
+
+  data.frame(
+    site = sites[fold_idx],
+    rsq_test = rsq_test,
+    rmse = rmse,
+    mae = mae,
+    cor_test = cor_test
+  )
+}
+
+# Stop cluster
+stopCluster(cl)
+
+# Save metrics for real (observed) models
+write.csv(metrics_real, file.path(results_dir, "spatial_LOPOCV_summary.csv"), row.names = FALSE)
+write.csv(metrics_real, file.path("../results", "spatial_LOPOCV_summary.csv"), row.names = FALSE)
+
+```
+
+# 3. Visualize Spatial LOPOCV results
+```{r visualize}
+# Load LOPOCV summary if not already in memory
+if (!exists("metrics_all")) {
+  metrics_all <- read.csv("../results/spatial_LOPOCV_summary.csv")
+}
+
+# Load raster for extent
+altitude <- raster::raster(file.path(
+  "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data/processed",
+  "altitude_1KMmedian_MERIT_UgandaClip.tif"
+))
+crs(altitude) <- 4326
+
+# Load site metadata including subcluster
+indinfo <- read.delim("../input/Gff_11loci_allsites_indinfo.txt")
+site_clusters <- indinfo %>%
+  dplyr::select(Site = SiteCode, Subcluster = SiteMajCluster) %>%
+  distinct()
+
+# Build site metadata from V.table and join with subclusters and metrics
+site_metadata <- V.table %>%
+  dplyr::select(Site = Var1, Latitude = lat1, Longitude = long1) %>%
+  distinct() %>%
+  left_join(site_clusters, by = "Site") %>%
+  left_join(metrics_all, by = c("Site" = "site")) %>%
+  mutate(Symbol = ifelse(rsq_test < 0.5, "low", "circle")) %>%
+  arrange(desc(rsq_test))
+
+# Extract map extent
+r_ext <- extent(altitude)
+xlim <- c(r_ext@xmin, r_ext@xmax)
+ylim <- c(r_ext@ymin, r_ext@ymax)
+
+# Natural Earth background
+uganda <- ne_countries(scale = "medium", continent = "Africa", returnclass = "sf") %>% st_transform(4326)
+lakes <- ne_download(scale = 10, type = "lakes", category = "physical", returnclass = "sf") %>% st_transform(4326)
+
+# Plot LOPOCV R² by site
+ggplot() +
+  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.5) +
+  geom_sf(data = lakes, fill = "gray80", color = NA) +
+
+  geom_point(data = filter(site_metadata, Symbol == "circle"),
+             aes(x = Longitude, y = Latitude, size = rsq_test, fill = Subcluster),
+             shape = 21, color = "black", stroke = 0.3) +
+
+  geom_point(data = filter(site_metadata, Symbol == "low"),
+             aes(x = Longitude, y = Latitude, color = Subcluster),
+             shape = 8, size = 3) +
+
+  scale_fill_manual(name = "Subcluster", values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
+  scale_color_manual(name = "Subcluster", values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
+  scale_size_continuous(name = "Test R²", range = c(2, 6)) +
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
+  theme_minimal() +
+  theme(panel.grid = element_blank()) +
+  labs(title = "Spatial LOPOCV Test R² by Site", x = "Longitude", y = "Latitude")
+
+# Overlapping density plot
+ggplot(site_metadata, aes(x = rsq_test, fill = Subcluster)) +
+  geom_density(alpha = 0.5, color = NA) +
+  scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
+  theme_minimal() +
+  labs(title = "Distribution of Test R² by Subcluster",
+       x = "Test R² (Spatial LOPOCV)", y = "Density")
+
+# Overlapping count plot
+ggplot(site_metadata, aes(x = rsq_test, fill = Subcluster)) +
+  geom_density(alpha = 0.5, color = NA, position = "identity", aes(y = ..count..)) +
+  scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
+  theme_minimal() +
+  labs(title = "Test R² by Subcluster (Scaled by Count)",
+       x = "Test R² (Spatial LOPOCV)",
+       y = "Count")
+
+# reassign Cluster
+site_metadata$Cluster <- site_metadata$Subcluster
+site_metadata$Cluster[site_metadata$Subcluster == "west"]  <- "south"
+
+# Overlapping density plot just S/N
+ggplot(site_metadata, aes(x = rsq_test, fill = Cluster)) +
+  geom_density(alpha = 0.5, color = NA) +
+  scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  theme_minimal() +
+  labs(title = "Distribution of Test R² by Subcluster",
+       x = "Test R² (Spatial LOPOCV)", y = "Density")
+
+# Overlapping count plot just S/N
+ggplot(site_metadata, aes(x = rsq_test, fill = Cluster)) +
+  geom_density(alpha = 0.5, color = NA, position = "identity", aes(y = ..count..)) +
+  scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  theme_minimal() +
+  labs(title = "Test R² by Subcluster (Scaled by Count)",
+       x = "Test R² (Spatial LOPOCV)",
+       y = "Count")
+```
+
+# 3. Permutation test for spatial LOPOCV R²
+
+GOAL: Create a 67 x 100 matrix where each cell is the rsq_test value for one LOPOCV fold (site) under a permuted response (CSEdistance)
+
+## For each permutation/fold: predict only on path data
+**NOTE:** eval = FALSE so that it skips on knit
+```{r perm-spatial-lopocv, eval = FALSE}
+# Set number of cores and register cluster
+n_cores <- 8
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+# Load pre-extracted path-level env data
+path_env_list <- readRDS(file.path(output_dir, "path_env_list.rds"))
+
+# Parallel over 100 permutations, each handling all 67 folds (LOPOCV models) internally
+metrics_perm_list <- foreach(p = 1:100, .packages = c("dplyr", "randomForest")) %dopar% {
+  
+  metrics_all <- data.frame()
+  
+  # Loop over LOPOCV folds (per 100 permuted models)
+  for (fold_idx in seq_along(sites)) {
+    rf_model <- readRDS(sprintf("/scratch/general/vast/u6036559/rf_model_perm_%02d_fold_%02d.rds", p, fold_idx))
+    
+    fold_df <- data.frame()
+    
+    for (row in seq_len(nrow(V.table))) {
+      pair_id <- V.table$id[row]
+      env_path <- path_env_list[[pair_id]]
+      if (is.null(env_path)) next
+      
+      pred_vals <- predict(rf_model, newdata = env_path)
+      pred_sum <- sum(pred_vals, na.rm = TRUE)
+      
+      fold_df <- rbind(fold_df, data.frame(
+        Fold = fold_idx,
+        Var1 = V.table$Var1[row],
+        Var2 = V.table$Var2[row],
+        id = pair_id,
+        predicted_CSE = pred_sum,
+        true_CSE = V.table$CSEdistance[row]
+      ))
+    }
+
+    test_ids <- V.table$id[V.table$Var1 == sites[fold_idx] | V.table$Var2 == sites[fold_idx]]
+    fold_test <- fold_df[fold_df$id %in% test_ids, ]
+
+    ss_res <- sum((fold_test$true_CSE - fold_test$predicted_CSE)^2, na.rm = TRUE)
+    ss_tot <- sum((fold_test$true_CSE - mean(fold_test$true_CSE, na.rm = TRUE))^2)
+    rsq_test <- 1 - ss_res / ss_tot
+    rmse <- sqrt(mean((fold_test$true_CSE - fold_test$predicted_CSE)^2, na.rm = TRUE))
+    mae <- mean(abs(fold_test$true_CSE - fold_test$predicted_CSE), na.rm = TRUE)
+    cor_test <- cor(fold_test$true_CSE, fold_test$predicted_CSE, use = "complete.obs")
+
+    metrics_all <- rbind(metrics_all, data.frame(
+      permutation = p,
+      site = sites[fold_idx],
+      rsq_test = rsq_test,
+      rmse = rmse,
+      mae = mae,
+      cor_test = cor_test
+    ))
+  }
+
+  # Save each permutation's results as CSV
+  write.csv(metrics_all,
+            file.path(output_dir, sprintf("spatial_perm_LOPOCV_%03d.csv", p)),
+            row.names = FALSE)
+
+  return(NULL)  # return nothing, written to file instead
+}
+
+# Stop cluster
+stopCluster(cl)
+
+# Done
+message("Permutation matrix for spatial eval created and saved.")
+
+# Combine spatial permutation results into rsq matrix "rsq_null_spatial"
+n_sites <- length(sites)
+n_perms <- 100
+rsq_null_spatial <- matrix(NA, nrow = n_sites, ncol = n_perms)
+rownames(rsq_null_spatial) <- sites
+colnames(rsq_null_spatial) <- paste0("perm_", 1:n_perms)
+
+# Loop through saved CSVs and fill matrix
+for (p in 1:n_perms) {
+  perm_file <- file.path(output_dir, sprintf("spatial_perm_LOPOCV_%03d.csv", p))
+  if (!file.exists(perm_file)) {
+    warning(sprintf("File missing: %s", perm_file))
+    next
+  }
+
+  df <- read.csv(perm_file)
+  
+  # Match site ordering to ensure alignment
+  df <- df[match(sites, df$site), ]
+  
+  rsq_null_spatial[, p] <- df$rsq_test
+}
+
+# Save final matrix to CSV
+write.csv(rsq_null_spatial, file.path(output_dir, "rsq_spatial_LOPOCV_null_matrix.csv"), row.names = TRUE)
+write.csv(rsq_null_spatial, "../results/rsq_spatial_LOPOCV_null_matrix.csv", row.names = TRUE)
+
+message("67 x 100 spatial R² matrix saved.")
+```
+
+# 4. Compute Empirical p-values
+GOAL: Run wilcox.test() for each column of rsq_null_spatial... This provides a distribution of test statistics (or p-values), from which you compute an empirical p-value.
+
+## Plot the distribution of observed/permuted R² values 
+```{r plot-r2-spatial}
+# Load permuted R² matrix and convert to long format
+rsq_null_spatial_mat <- as.matrix(read.csv("../results/rsq_spatial_LOPOCV_null_matrix.csv"))
+rsq_null_spatial_long <- as.vector(rsq_null_spatial_mat)
+rsq_obs <- metrics_all$rsq_test
+
+# Build data frame for plotting
+plot_df_rsq <- data.frame(
+  rsq = c(rsq_obs, rsq_null_spatial_long),
+  type = c(rep("Observed", length(rsq_obs)),
+           rep("Permuted", length(rsq_null_spatial_long)))
+)
+
+# Plot density comparison
+ggplot(plot_df_rsq, aes(x = rsq, fill = type)) +
+  geom_density(alpha = 0.5, color = NA) +
+  scale_fill_manual(values = c("Observed" = "#1f78b4", "Permuted" = "gray70")) +
+  xlim(-1, 1) +
+  theme_minimal() +
+  labs(title = "Observed vs. Permuted R² (LOPOCV)",
+       x = "Test R²",
+       y = "Density")
+```
+
+## Wilcoxon signed-rank statistic 
+Calculate a Wilcoxon signed-rank statistic for each column (permuted replicate) and a one-sided p-value as the proportion of permuted statistics ≥ observed.
+```{r Wilcoxon-spatial}
+# Vector of observed R² values (length = number of folds)
+rsq_obs <- metrics_all$rsq_test
+
+# Matrix of permuted R² values: rows = folds, columns = permutations
+rsq_null_spatial_mat <- as.matrix(read.csv("../results/rsq_spatial_LOPOCV_null_matrix.csv"))
+
+# Function to compute signed rank statistic for a single permuted replicate
+signed_rank_stat <- function(null_rsq) {
+  # Remove any rows with missing observed values
+  non_na_idx <- !is.na(rsq_obs) & !is.na(null_rsq)
+  obs <- rsq_obs[non_na_idx]
+  null <- null_rsq[non_na_idx]
+  
+  # Calculate signed ranks
+  diffs <- obs - null
+  signed_ranks <- rank(abs(diffs)) * sign(diffs)
+  sum(signed_ranks)
+}
+
+# Observed signed-rank statistic (using observed vs. permuted mean)
+obs_stat <- signed_rank_stat(rowMeans(rsq_null_spatial_mat, na.rm = TRUE))
+
+# Null distribution of signed-rank stats across permutations
+perm_stats <- apply(rsq_null_spatial_mat, 2, signed_rank_stat)
+
+# Empirical p-value (one-sided: observed > permuted)
+p_val <- mean(perm_stats <= obs_stat)
+
+# Output
+cat(sprintf("Empirical p-value for spatial eval (Wilcoxon signed-rank test across spatial folds): %.4f\n", p_val))
+```

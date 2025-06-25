@@ -58,7 +58,7 @@ clusterExport(cl, "get_mode")
 # Inputs  
   - `../input/Gff_cse_envCostPaths.csv`  - Combined CSE table with coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance in sum of pixels, and mean, median, mode of each Env parameter  
 # Outputs  
-  - `../results_dir/rf_mean18_tuned.rds`  - Full RF model outpu, readRDS() to load  
+  - `../results_dir/rf_mean18_tuned.rds`  - Full RF model output, readRDS() to load  
   - `../results_dir/predicted_CSEdistance.tif` - Projection of full RF model, with pix_dist and samp_20km nuetralized by using uniform layers in projection
   
 # 1. Prepare the data
@@ -265,7 +265,7 @@ Top 18 mean-based predictors retain nearly all the explanatory power of the orig
 
 # 4. Projection of model
 ```{r projection}
-# Load env stack
+# Load env stack with named layers
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
 # Replace samp_20km with neutral constant raster, 
@@ -278,7 +278,7 @@ env[["samp_20km"]] <- samp_uniform # Replace in raster stack
 prediction_raster <- predict(env, rf_final, type = "response")
 
 # Write Prediction Raster to file
-#writeRaster(prediction_raster, file.path(results_dir,"predicted_CSEdistance.tif"), format = "GTiff", overwrite = TRUE)
+#writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE_resistance.tif"), format = "GTiff", overwrite = TRUE)
 ```
 
 ```{r plot-projection, warning=FALSE}
