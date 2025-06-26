@@ -16,7 +16,6 @@ RStudio Configuration:
 - **Account:** saarman-np  
 - **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
 - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)    
-
 # Setup
 ```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
 # load only required packages

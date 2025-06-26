@@ -577,7 +577,7 @@ stopCluster(cl)
 write.csv(metrics_calibrated, file.path(results_dir, "spatial_LOPOCV_calibrated_summary.csv"), row.names = FALSE)
 ```
 
-# 3. Visualize Spatial LOPOCV results
+## Visualize Spatial LOPOCV results
 ```{r visualize}
 # Load LOPOCV summary if not already in memory
 metrics_all <- read.csv(file.path(results_dir, "spatial_LOPOCV_calibrated_summary.csv"))
@@ -694,11 +694,11 @@ ggplot(site_metadata, aes(x = rsq_test, fill = Cluster)) +
        y = "Count")
 ```
 
-# 3. Permutation test for spatial LOPOCV R²
+# 4. Permutation test for spatial LOPOCV R²
 
 GOAL: Create a 67 x 100 matrix where each cell is the rsq_test value for one LOPOCV fold (site) under a permuted response (CSEdistance)
 
-## For each permutation/fold: predict only on path data
+## Spatial LOPOCV on permuted models
 **NOTE:** eval = FALSE so that it skips on knit
 ```{r perm-spatial-lopocv-calibrated, eval = FALSE}
 n_cores <- 8
@@ -816,10 +816,10 @@ write.csv(rsq_null_spatial, "../results/rsq_spatial_LOPOCV_calibrated_null_matri
 message("Calibrated 67 x 100 spatial R² null matrix saved.")
 ```
 
-# 4. Compute Empirical p-values
+## Wilcoxon signed rank test for empirical p-values
 GOAL: Run wilcox.test() for each column of rsq_null_spatial... This provides a distribution of test statistics (or p-values), from which you compute an empirical p-value.
 
-## Plot the distribution of observed/permuted R² values 
+Plot the distribution of observed/permuted R² values 
 ```{r plot-r2-spatial}
 # Load permuted R² matrix and convert to long format
 rsq_null_spatial_mat <- as.matrix(read.csv("../results/rsq_spatial_LOPOCV_calibrated_null_matrix.csv"))
@@ -847,7 +847,6 @@ ggplot(plot_df_rsq, aes(x = rsq, fill = type)) +
        y = "Density")
 ```
 
-## Wilcoxon signed-rank statistic 
 Calculate a Wilcoxon signed-rank statistic for each column (permuted replicate) and a one-sided p-value as the proportion of permuted statistics ≥ observed.
 ```{r Wilcoxon-spatial}
 # Vector of observed R² values (length = number of folds)
