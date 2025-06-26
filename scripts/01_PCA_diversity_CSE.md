@@ -1,4 +1,4 @@
-Uganda tsetse PopGen: PCA, diversity, CSE
+Uganda tsetse PCA, diversity, CSE
 ================
 Norah Saarman
 2025-06-03
@@ -288,6 +288,9 @@ for (region in c("north","south")) {
 Filter out any Gff\$Cluster == nogroup to avoid admixed individuals,
 which will inflate the genetic distance within each geographic region.
 
+Filter out 50-KB because it is so geographically separate and Beadell’s
+mtDNA sequence data shows it is distinct.
+
 Filtering for only largest/most complete genetic sample from each 5 km
 radius for gps within each Gff\$SiteMajCluster independently so that we
 get best samples from both north and south of the river/Lake Kyoga
@@ -297,19 +300,18 @@ dividing north and south.
 # Create filtered copy of Gff excluding 'nogroup'
 Gff_filt <- Gff[Gff$Cluster != "nogroup", ]
 
+# Remove "50-KB"
+Gff_filt <- Gff[Gff$SiteCode != "50-KB", ]
+
 # Ensure Gff$SiteCode matches pop(Gff.genind)
 Gff_filt$SiteCode <- as.character(Gff_filt$SiteCode)
 pop_names <- as.character(pop(Gff.genind))
-if (!all(pop_names == Gff_filt$SiteCode)) {
+
+if (!all(Gff_filt$SiteCode %in% pop_names)) {
   Gff_filt <- Gff_filt[match(pop_names, Gff_filt$SiteCode), ]
   stopifnot(all(as.character(pop(Gff.genind)) == Gff_filt$SiteCode))
 }
-```
 
-    ## Warning in pop_names == Gff_filt$SiteCode: longer object length is not a
-    ## multiple of shorter object length
-
-``` r
 # Initialize storage
 selected_sites <- character()
 report_list <- list()
@@ -465,27 +467,27 @@ print(split(Gff_rf$SiteCode, Gff_rf$K2))
     ## [937] "48-BN"  "48-BN" 
     ## 
     ## $south
-    ##    [1] "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB" 
-    ##    [9] "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB" 
-    ##   [17] "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB" 
-    ##   [25] "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB" 
-    ##   [33] "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB"  "50-KB" 
-    ##   [41] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF" 
-    ##   [49] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF" 
-    ##   [57] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF" 
-    ##   [65] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF" 
-    ##   [73] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "52-KR"  "52-KR" 
+    ##    [1] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF" 
+    ##    [9] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF" 
+    ##   [17] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF" 
+    ##   [25] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF" 
+    ##   [33] "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "51-MF"  "52-KR"  "52-KR" 
+    ##   [41] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
+    ##   [49] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
+    ##   [57] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
+    ##   [65] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
+    ##   [73] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
     ##   [81] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
-    ##   [89] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
-    ##   [97] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
-    ##  [105] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
-    ##  [113] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
-    ##  [121] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR" 
-    ##  [129] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "54-MS"  "54-MS"  "54-MS" 
-    ##  [137] "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS" 
-    ##  [145] "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS" 
-    ##  [153] "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS" 
-    ##  [161] "54-MS"  "54-MS"  "54-MS"  "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
+    ##   [89] "52-KR"  "52-KR"  "52-KR"  "52-KR"  "52-KR"  "54-MS"  "54-MS"  "54-MS" 
+    ##   [97] "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS" 
+    ##  [105] "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS" 
+    ##  [113] "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS"  "54-MS" 
+    ##  [121] "54-MS"  "54-MS"  "54-MS"  "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
+    ##  [129] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
+    ##  [137] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
+    ##  [145] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
+    ##  [153] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
+    ##  [161] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
     ##  [169] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
     ##  [177] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
     ##  [185] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
@@ -509,106 +511,106 @@ print(split(Gff_rf$SiteCode, Gff_rf$K2))
     ##  [329] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
     ##  [337] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
     ##  [345] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
-    ##  [353] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
-    ##  [361] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
-    ##  [369] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
-    ##  [377] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
-    ##  [385] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF"
-    ##  [393] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "56-MA" 
-    ##  [401] "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA" 
-    ##  [409] "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA" 
-    ##  [417] "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA" 
-    ##  [425] "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA" 
-    ##  [433] "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG" 
-    ##  [441] "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG" 
-    ##  [449] "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG" 
-    ##  [457] "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG" 
-    ##  [465] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
-    ##  [473] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
-    ##  [481] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
-    ##  [489] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
-    ##  [497] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
-    ##  [505] "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB" 
-    ##  [513] "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB" 
-    ##  [521] "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB" 
-    ##  [529] "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB" 
-    ##  [537] "59-EB"  "59-EB"  "59-EB"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA" 
-    ##  [545] "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA" 
-    ##  [553] "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA" 
-    ##  [561] "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA" 
-    ##  [569] "60-NA"  "60-NA"  "60-NA"  "60-NA"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
-    ##  [577] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
-    ##  [585] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
-    ##  [593] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
-    ##  [601] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
-    ##  [609] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "62-NS"  "62-NS"  "62-NS"  "62-NS" 
-    ##  [617] "62-NS"  "62-NS"  "62-NS"  "62-NS"  "62-NS"  "62-NS"  "62-NS"  "62-NS" 
-    ##  [625] "62-NS"  "62-NS"  "62-NS"  "62-NS"  "63-DB"  "63-DB"  "63-DB"  "63-DB" 
-    ##  [633] "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB" 
-    ##  [641] "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB" 
-    ##  [649] "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB" 
-    ##  [657] "63-DB"  "63-DB"  "63-DB"  "63-DB"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
-    ##  [665] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
-    ##  [673] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
-    ##  [681] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
-    ##  [689] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
-    ##  [697] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ" 
-    ##  [705] "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ" 
-    ##  [713] "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "66-BY"  "66-BY" 
+    ##  [353] "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "55-KAF" "56-MA" 
+    ##  [361] "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA" 
+    ##  [369] "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA" 
+    ##  [377] "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA" 
+    ##  [385] "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA"  "56-MA" 
+    ##  [393] "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG" 
+    ##  [401] "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG" 
+    ##  [409] "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG" 
+    ##  [417] "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG"  "57-KG" 
+    ##  [425] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
+    ##  [433] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
+    ##  [441] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
+    ##  [449] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
+    ##  [457] "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS"  "58-SS" 
+    ##  [465] "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB" 
+    ##  [473] "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB" 
+    ##  [481] "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB" 
+    ##  [489] "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB"  "59-EB" 
+    ##  [497] "59-EB"  "59-EB"  "59-EB"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA" 
+    ##  [505] "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA" 
+    ##  [513] "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA" 
+    ##  [521] "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA"  "60-NA" 
+    ##  [529] "60-NA"  "60-NA"  "60-NA"  "60-NA"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
+    ##  [537] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
+    ##  [545] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
+    ##  [553] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
+    ##  [561] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO"  "61-KO" 
+    ##  [569] "61-KO"  "61-KO"  "61-KO"  "61-KO"  "62-NS"  "62-NS"  "62-NS"  "62-NS" 
+    ##  [577] "62-NS"  "62-NS"  "62-NS"  "62-NS"  "62-NS"  "62-NS"  "62-NS"  "62-NS" 
+    ##  [585] "62-NS"  "62-NS"  "62-NS"  "62-NS"  "63-DB"  "63-DB"  "63-DB"  "63-DB" 
+    ##  [593] "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB" 
+    ##  [601] "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB" 
+    ##  [609] "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB"  "63-DB" 
+    ##  [617] "63-DB"  "63-DB"  "63-DB"  "63-DB"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
+    ##  [625] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
+    ##  [633] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
+    ##  [641] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
+    ##  [649] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL"  "64-KL" 
+    ##  [657] "64-KL"  "64-KL"  "64-KL"  "64-KL"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ" 
+    ##  [665] "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ" 
+    ##  [673] "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "65-BZ"  "66-BY"  "66-BY" 
+    ##  [681] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
+    ##  [689] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
+    ##  [697] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
+    ##  [705] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
+    ##  [713] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
     ##  [721] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
     ##  [729] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
-    ##  [737] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
-    ##  [745] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
-    ##  [753] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
-    ##  [761] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
-    ##  [769] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY"  "66-BY" 
-    ##  [777] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "67-WAM" "67-WAM" "67-WAM" "67-WAM"
-    ##  [785] "67-WAM" "67-WAM" "67-WAM" "67-WAM" "67-WAM" "67-WAM" "67-WAM" "67-WAM"
-    ##  [793] "67-WAM" "67-WAM" "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
-    ##  [801] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
-    ##  [809] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
-    ##  [817] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
-    ##  [825] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
-    ##  [833] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
+    ##  [737] "66-BY"  "66-BY"  "66-BY"  "66-BY"  "67-WAM" "67-WAM" "67-WAM" "67-WAM"
+    ##  [745] "67-WAM" "67-WAM" "67-WAM" "67-WAM" "67-WAM" "67-WAM" "67-WAM" "67-WAM"
+    ##  [753] "67-WAM" "67-WAM" "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
+    ##  [761] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
+    ##  [769] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
+    ##  [777] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
+    ##  [785] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
+    ##  [793] "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI"  "68-LI" 
+    ##  [801] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
+    ##  [809] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
+    ##  [817] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
+    ##  [825] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
+    ##  [833] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
     ##  [841] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
     ##  [849] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
-    ##  [857] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
-    ##  [865] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
-    ##  [873] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
-    ##  [881] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
-    ##  [889] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV"  "69-BV" 
-    ##  [897] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "70-MGG" "70-MGG" "70-MGG" "70-MGG"
+    ##  [857] "69-BV"  "69-BV"  "69-BV"  "69-BV"  "70-MGG" "70-MGG" "70-MGG" "70-MGG"
+    ##  [865] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
+    ##  [873] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
+    ##  [881] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
+    ##  [889] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
+    ##  [897] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
     ##  [905] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
-    ##  [913] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
-    ##  [921] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
-    ##  [929] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
-    ##  [937] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
-    ##  [945] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG"
-    ##  [953] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "71-BD" 
-    ##  [961] "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD" 
-    ##  [969] "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD" 
-    ##  [977] "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD" 
-    ##  [985] "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD" 
-    ##  [993] "71-BD"  "71-BD"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
-    ## [1001] "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
-    ## [1009] "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
-    ## [1017] "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
-    ## [1025] "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
-    ## [1033] "72-JN"  "72-JN"  "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
+    ##  [913] "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "70-MGG" "71-BD" 
+    ##  [921] "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD" 
+    ##  [929] "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD" 
+    ##  [937] "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD" 
+    ##  [945] "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD"  "71-BD" 
+    ##  [953] "71-BD"  "71-BD"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
+    ##  [961] "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
+    ##  [969] "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
+    ##  [977] "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
+    ##  [985] "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN"  "72-JN" 
+    ##  [993] "72-JN"  "72-JN"  "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
+    ## [1001] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
+    ## [1009] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
+    ## [1017] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
+    ## [1025] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
+    ## [1033] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
     ## [1041] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
     ## [1049] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
-    ## [1057] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
-    ## [1065] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
-    ## [1073] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
-    ## [1081] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
-    ## [1089] "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG" "73-IGG"
-    ## [1097] "73-IGG" "73-IGG" "73-IGG" "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM"
-    ## [1105] "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM"
-    ## [1113] "74-NAM" "74-NAM" "75-KIS" "75-KIS" "75-KIS" "75-KIS" "75-KIS" "75-KIS"
-    ## [1121] "75-KIS" "75-KIS" "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB" 
-    ## [1129] "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB" 
-    ## [1137] "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB" 
-    ## [1145] "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "78-OK"  "78-OK" 
+    ## [1057] "73-IGG" "73-IGG" "73-IGG" "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM"
+    ## [1065] "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM" "74-NAM"
+    ## [1073] "74-NAM" "74-NAM" "75-KIS" "75-KIS" "75-KIS" "75-KIS" "75-KIS" "75-KIS"
+    ## [1081] "75-KIS" "75-KIS" "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB" 
+    ## [1089] "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB" 
+    ## [1097] "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB" 
+    ## [1105] "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "76-TB"  "78-OK"  "78-OK" 
+    ## [1113] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
+    ## [1121] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
+    ## [1129] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
+    ## [1137] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
+    ## [1145] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
     ## [1153] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
     ## [1161] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
     ## [1169] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
@@ -618,12 +620,12 @@ print(split(Gff_rf$SiteCode, Gff_rf$K2))
     ## [1201] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
     ## [1209] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
     ## [1217] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
-    ## [1225] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
-    ## [1233] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
-    ## [1241] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
-    ## [1249] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
-    ## [1257] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK" 
-    ## [1265] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "79-BU"  "79-BU"  "79-BU" 
+    ## [1225] "78-OK"  "78-OK"  "78-OK"  "78-OK"  "78-OK"  "79-BU"  "79-BU"  "79-BU" 
+    ## [1233] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
+    ## [1241] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
+    ## [1249] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
+    ## [1257] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
+    ## [1265] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
     ## [1273] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
     ## [1281] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
     ## [1289] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
@@ -633,38 +635,33 @@ print(split(Gff_rf$SiteCode, Gff_rf$K2))
     ## [1321] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
     ## [1329] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
     ## [1337] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
-    ## [1345] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
-    ## [1353] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
-    ## [1361] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
-    ## [1369] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
-    ## [1377] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU"  "79-BU" 
-    ## [1385] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "81-BUD" "81-BUD" "81-BUD" "81-BUD"
-    ## [1393] "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD"
-    ## [1401] "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD"
-    ## [1409] "81-BUD" "81-BUD" "81-BUD" "81-BUD" "82-BON" "82-BON" "82-BON" "82-BON"
-    ## [1417] "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON"
-    ## [1425] "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON"
-    ## [1433] "82-BON" "82-BON" "82-BON" "82-BON" "83-ND"  "83-ND"  "83-ND"  "83-ND" 
-    ## [1441] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND" 
-    ## [1449] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND" 
-    ## [1457] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND" 
-    ## [1465] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND" 
-    ## [1473] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "84-MAN" "84-MAN" "84-MAN" "84-MAN"
-    ## [1481] "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN"
-    ## [1489] "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN"
-    ## [1497] "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN"
-    ## [1505] "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "85-KSS"
-    ## [1513] "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS"
-    ## [1521] "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS"
-    ## [1529] "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS"
-    ## [1537] "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS"
-    ## [1545] "85-KSS" "85-KSS" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB"
-    ## [1553] "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB"
-    ## [1561] "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB"
-    ## [1569] "86-SUB" "86-SUB" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR"
-    ## [1577] "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR"
-    ## [1585] "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR"
-    ## [1593] "87-KAR" "87-KAR"
+    ## [1345] "79-BU"  "79-BU"  "79-BU"  "79-BU"  "81-BUD" "81-BUD" "81-BUD" "81-BUD"
+    ## [1353] "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD"
+    ## [1361] "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD" "81-BUD"
+    ## [1369] "81-BUD" "81-BUD" "81-BUD" "81-BUD" "82-BON" "82-BON" "82-BON" "82-BON"
+    ## [1377] "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON"
+    ## [1385] "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON" "82-BON"
+    ## [1393] "82-BON" "82-BON" "82-BON" "82-BON" "83-ND"  "83-ND"  "83-ND"  "83-ND" 
+    ## [1401] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND" 
+    ## [1409] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND" 
+    ## [1417] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND" 
+    ## [1425] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND"  "83-ND" 
+    ## [1433] "83-ND"  "83-ND"  "83-ND"  "83-ND"  "84-MAN" "84-MAN" "84-MAN" "84-MAN"
+    ## [1441] "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN"
+    ## [1449] "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN"
+    ## [1457] "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN"
+    ## [1465] "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "84-MAN" "85-KSS"
+    ## [1473] "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS"
+    ## [1481] "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS"
+    ## [1489] "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS"
+    ## [1497] "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS" "85-KSS"
+    ## [1505] "85-KSS" "85-KSS" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB"
+    ## [1513] "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB"
+    ## [1521] "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB" "86-SUB"
+    ## [1529] "86-SUB" "86-SUB" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR"
+    ## [1537] "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR"
+    ## [1545] "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR" "87-KAR"
+    ## [1553] "87-KAR" "87-KAR"
 
 ``` r
 # Report groupings and selected representative from each 5km cluster
@@ -717,41 +714,40 @@ print(report_df)
     ## 38    46-PT                 46-PT
     ## 39    47-BK                 47-BK
     ## 40    48-BN                 48-BN
-    ## 41    50-KB                 50-KB
-    ## 42    51-MF                 51-MF
-    ## 43    52-KR         52-KR, 53-UWA
-    ## 44    54-MS                 54-MS
-    ## 45   55-KAF                55-KAF
-    ## 46    56-MA                 56-MA
-    ## 47    57-KG                 57-KG
-    ## 48    58-SS                 58-SS
-    ## 49    59-EB                 59-EB
-    ## 50    60-NA                 60-NA
-    ## 51    61-KO                 61-KO
-    ## 52    62-NS                 62-NS
-    ## 53    63-DB                 63-DB
-    ## 54    64-KL                 64-KL
-    ## 55    65-BZ                 65-BZ
-    ## 56    66-BY                 66-BY
-    ## 57   67-WAM                67-WAM
-    ## 58    68-LI                 68-LI
-    ## 59    69-BV                 69-BV
-    ## 60   70-MGG                70-MGG
-    ## 61    71-BD                 71-BD
-    ## 62    72-JN                 72-JN
-    ## 63   73-IGG                73-IGG
-    ## 64   74-NAM                74-NAM
-    ## 65   75-KIS                75-KIS
-    ## 66    76-TB          76-TB, 77-NB
-    ## 67    78-OK                 78-OK
-    ## 68    79-BU          79-BU, 80-SA
-    ## 69   81-BUD                81-BUD
-    ## 70   82-BON                82-BON
-    ## 71    83-ND                 83-ND
-    ## 72   84-MAN                84-MAN
-    ## 73   85-KSS                85-KSS
-    ## 74   86-SUB                86-SUB
-    ## 75   87-KAR                87-KAR
+    ## 41    51-MF                 51-MF
+    ## 42    52-KR         52-KR, 53-UWA
+    ## 43    54-MS                 54-MS
+    ## 44   55-KAF                55-KAF
+    ## 45    56-MA                 56-MA
+    ## 46    57-KG                 57-KG
+    ## 47    58-SS                 58-SS
+    ## 48    59-EB                 59-EB
+    ## 49    60-NA                 60-NA
+    ## 50    61-KO                 61-KO
+    ## 51    62-NS                 62-NS
+    ## 52    63-DB                 63-DB
+    ## 53    64-KL                 64-KL
+    ## 54    65-BZ                 65-BZ
+    ## 55    66-BY                 66-BY
+    ## 56   67-WAM                67-WAM
+    ## 57    68-LI                 68-LI
+    ## 58    69-BV                 69-BV
+    ## 59   70-MGG                70-MGG
+    ## 60    71-BD                 71-BD
+    ## 61    72-JN                 72-JN
+    ## 62   73-IGG                73-IGG
+    ## 63   74-NAM                74-NAM
+    ## 64   75-KIS                75-KIS
+    ## 65    76-TB          76-TB, 77-NB
+    ## 66    78-OK                 78-OK
+    ## 67    79-BU          79-BU, 80-SA
+    ## 68   81-BUD                81-BUD
+    ## 69   82-BON                82-BON
+    ## 70    83-ND                 83-ND
+    ## 71   84-MAN                84-MAN
+    ## 72   85-KSS                85-KSS
+    ## 73   86-SUB                86-SUB
+    ## 74   87-KAR                87-KAR
 
 Remove smaller sample size(s) of any 2-3 sites within 2 km of each
 other: 04-OM, 29-KO, 13-GOR, 34-AMI, 35-DK, 39-OC, 53-UWA, 77-NB, 80-SA
@@ -764,10 +760,10 @@ Gff.genind_rf # group size 8-236
 
     ## /// GENIND OBJECT /////////
     ## 
-    ##  // 2,532 individuals; 11 loci; 162 alleles; size: 1.8 Mb
+    ##  // 2,492 individuals; 11 loci; 162 alleles; size: 1.8 Mb
     ## 
     ##  // Basic content
-    ##    @tab:  2532 x 162 matrix of allele counts
+    ##    @tab:  2492 x 162 matrix of allele counts
     ##    @loc.n.all: number of alleles per locus (range: 7-28)
     ##    @loc.fac: locus factor for the 162 columns of @tab
     ##    @all.names: list of allele names for each locus
@@ -789,14 +785,14 @@ table(pop(Gff.genind_rf))
     ##     26     25     13     17     25     20     20     17     15     13     21 
     ## 25-CHU  26-OG 27-OCA 28-AKA 30-OLE 31-ACA 32-APU  33-AP 36-UGT  37-OT 38-OCU 
     ##     25     37     20     26     24     25     29     15     64     40     25 
-    ## 40-KAG  43-OS  44-MK 45-BKD  46-PT  47-BK  48-BN  50-KB  51-MF  52-KR  54-MS 
-    ##     20     32     24     24     26     40     40     40     38     55     30 
-    ## 55-KAF  56-MA  57-KG  58-SS  59-EB  60-NA  61-KO  62-NS  63-DB  64-KL  65-BZ 
-    ##    236     33     32     40     35     33     40     16     32     40     18 
-    ##  66-BY 67-WAM  68-LI  69-BV 70-MGG  71-BD  72-JN 73-IGG 74-NAM 75-KIS  76-TB 
-    ##     62     14     46     60     59     35     40     65     15      8     28 
-    ##  78-OK  79-BU 81-BUD 82-BON  83-ND 84-MAN 85-KSS 86-SUB 87-KAR 
-    ##    119    119     24     24     40     35     35     24     24
+    ## 40-KAG  43-OS  44-MK 45-BKD  46-PT  47-BK  48-BN  51-MF  52-KR  54-MS 55-KAF 
+    ##     20     32     24     24     26     40     40     38     55     30    236 
+    ##  56-MA  57-KG  58-SS  59-EB  60-NA  61-KO  62-NS  63-DB  64-KL  65-BZ  66-BY 
+    ##     33     32     40     35     33     40     16     32     40     18     62 
+    ## 67-WAM  68-LI  69-BV 70-MGG  71-BD  72-JN 73-IGG 74-NAM 75-KIS  76-TB  78-OK 
+    ##     14     46     60     59     35     40     65     15      8     28    119 
+    ##  79-BU 81-BUD 82-BON  83-ND 84-MAN 85-KSS 86-SUB 87-KAR 
+    ##    119     24     24     40     35     35     24     24
 
 Too imbalanced… - Downsample 55-KAF, 78-OK, 79-BU to N individuals
 (e.g., 50) - Remove sites with fewer than n=15
@@ -832,10 +828,10 @@ Gff.genind_rf
 
     ## /// GENIND OBJECT /////////
     ## 
-    ##  // 2,068 individuals; 11 loci; 162 alleles; size: 1.5 Mb
+    ##  // 2,028 individuals; 11 loci; 162 alleles; size: 1.4 Mb
     ## 
     ##  // Basic content
-    ##    @tab:  2068 x 162 matrix of allele counts
+    ##    @tab:  2028 x 162 matrix of allele counts
     ##    @loc.n.all: number of alleles per locus (range: 7-28)
     ##    @loc.fac: locus factor for the 162 columns of @tab
     ##    @all.names: list of allele names for each locus
@@ -851,12 +847,12 @@ summary(Gff.genind_rf)
 ```
 
     ## 
-    ## // Number of individuals: 2068
-    ## // Group sizes: 19 20 25 20 15 20 20 24 26 25 17 25 20 20 17 15 21 25 37 20 26 24 25 29 15 50 40 25 20 32 24 24 26 40 40 40 38 50 30 50 33 32 40 35 33 40 16 32 40 18 50 46 50 50 35 40 50 15 28 50 50 24 24 40 35 35 24 24
-    ## // Number of alleles per locus: 26 7 16 8 10 12 9 13 28 9 18
-    ## // Number of alleles per group: 65 65 65 60 60 59 57 54 66 57 50 59 56 56 55 60 61 62 70 59 61 58 66 55 51 55 49 49 47 48 38 43 41 46 54 62 77 81 52 50 34 35 42 42 33 35 35 33 44 41 54 61 56 55 53 40 57 48 46 46 54 40 36 31 37 32 28 28
-    ## // Percentage of missing data: 2.51 %
-    ## // Observed heterozygosity: 0.71 0.47 0.5 0.19 0.59 0.52 0.32 0.39 0.71 0.51 0.63
+    ## // Number of individuals: 2028
+    ## // Group sizes: 19 20 25 20 15 20 20 24 26 25 17 25 20 20 17 15 21 25 37 20 26 24 25 29 15 50 40 25 20 32 24 24 26 40 40 38 50 30 50 33 32 40 35 33 40 16 32 40 18 50 46 50 50 35 40 50 15 28 50 50 24 24 40 35 35 24 24
+    ## // Number of alleles per locus: 26 7 16 8 10 12 9 12 28 9 17
+    ## // Number of alleles per group: 65 65 65 60 60 59 57 54 66 57 50 59 56 56 55 60 61 62 70 59 61 58 66 55 51 55 49 49 47 48 38 43 41 46 54 77 81 52 50 34 35 42 42 33 35 35 33 44 41 54 61 56 55 53 40 57 48 46 46 54 40 36 31 37 32 28 28
+    ## // Percentage of missing data: 2.56 %
+    ## // Observed heterozygosity: 0.71 0.47 0.49 0.19 0.59 0.52 0.32 0.39 0.71 0.51 0.63
     ## // Expected heterozygosity: 0.85 0.63 0.69 0.23 0.71 0.73 0.51 0.55 0.87 0.7 0.84
 
 ``` r
@@ -870,20 +866,20 @@ table(pop(Gff.genind_rf))
     ##     25     20     20     17     15     21     25     37     20     26     24 
     ## 31-ACA 32-APU  33-AP 36-UGT  37-OT 38-OCU 40-KAG  43-OS  44-MK 45-BKD  46-PT 
     ##     25     29     15     50     40     25     20     32     24     24     26 
-    ##  47-BK  48-BN  50-KB  51-MF  52-KR  54-MS 55-KAF  56-MA  57-KG  58-SS  59-EB 
-    ##     40     40     40     38     50     30     50     33     32     40     35 
-    ##  60-NA  61-KO  62-NS  63-DB  64-KL  65-BZ  66-BY  68-LI  69-BV 70-MGG  71-BD 
-    ##     33     40     16     32     40     18     50     46     50     50     35 
-    ##  72-JN 73-IGG 74-NAM  76-TB  78-OK  79-BU 81-BUD 82-BON  83-ND 84-MAN 85-KSS 
-    ##     40     50     15     28     50     50     24     24     40     35     35 
-    ## 86-SUB 87-KAR 
-    ##     24     24
+    ##  47-BK  48-BN  51-MF  52-KR  54-MS 55-KAF  56-MA  57-KG  58-SS  59-EB  60-NA 
+    ##     40     40     38     50     30     50     33     32     40     35     33 
+    ##  61-KO  62-NS  63-DB  64-KL  65-BZ  66-BY  68-LI  69-BV 70-MGG  71-BD  72-JN 
+    ##     40     16     32     40     18     50     46     50     50     35     40 
+    ## 73-IGG 74-NAM  76-TB  78-OK  79-BU 81-BUD 82-BON  83-ND 84-MAN 85-KSS 86-SUB 
+    ##     50     15     28     50     50     24     24     40     35     35     24 
+    ## 87-KAR 
+    ##     24
 
 ``` r
 length(unique(Gff_rf$SiteCode))
 ```
 
-    ## [1] 68
+    ## [1] 67
 
 Now 68 pops with group size ranges from 15-50.
 
@@ -910,16 +906,16 @@ mean_ar
     ## 4.053850 3.882766 4.005494 4.195913 3.955369 3.790632 4.011672 3.736532 
     ##    33-AP   36-UGT    37-OT   38-OCU   40-KAG    43-OS    44-MK   45-BKD 
     ## 3.819058 3.615759 3.491427 3.415275 3.498529 3.352508 2.731920 2.899221 
-    ##    46-PT    47-BK    48-BN    50-KB    51-MF    52-KR    54-MS   55-KAF 
-    ## 2.999925 3.098557 3.452087 3.821452 4.047632 4.130584 3.607622 3.158181 
-    ##    56-MA    57-KG    58-SS    59-EB    60-NA    61-KO    62-NS    63-DB 
-    ## 2.297347 2.260882 2.463630 2.910498 2.463815 2.444742 2.715141 2.465209 
-    ##    64-KL    65-BZ    66-BY    68-LI    69-BV   70-MGG    71-BD    72-JN 
-    ## 2.742293 2.972306 3.202754 3.409572 3.228719 3.301905 3.203263 2.776018 
-    ##   73-IGG   74-NAM    76-TB    78-OK    79-BU   81-BUD   82-BON    83-ND 
-    ## 3.238009 3.443531 3.045357 3.088576 3.127337 3.124326 3.088781 2.251466 
-    ##   84-MAN   85-KSS   86-SUB   87-KAR 
-    ## 2.628454 2.433326 2.108145 2.310008
+    ##    46-PT    47-BK    48-BN    51-MF    52-KR    54-MS   55-KAF    56-MA 
+    ## 2.999925 3.098557 3.452087 4.047632 4.130584 3.607622 3.158181 2.297347 
+    ##    57-KG    58-SS    59-EB    60-NA    61-KO    62-NS    63-DB    64-KL 
+    ## 2.260882 2.463630 2.910498 2.463815 2.444742 2.715141 2.465209 2.742293 
+    ##    65-BZ    66-BY    68-LI    69-BV   70-MGG    71-BD    72-JN   73-IGG 
+    ## 2.972306 3.202754 3.409572 3.228719 3.301905 3.203263 2.776018 3.238009 
+    ##   74-NAM    76-TB    78-OK    79-BU   81-BUD   82-BON    83-ND   84-MAN 
+    ## 3.443531 3.045357 3.088576 3.127337 3.124326 3.088781 2.251466 2.628454 
+    ##   85-KSS   86-SUB   87-KAR 
+    ## 2.433326 2.108145 2.310008
 
 Most diversity stats use poppr
 
@@ -967,40 +963,39 @@ div_stats
     ## 33  46-PT   26   26 15.0 2.46e-07 3.26   26.0  0.962 1.000 0.511 -0.01831
     ## 34  47-BK   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.504  0.11078
     ## 35  48-BN   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.578  0.28780
-    ## 36  50-KB   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.583 -0.10537
-    ## 37  51-MF   38   38 15.0 0.00e+00 3.64   38.0  0.974 1.000 0.636 -0.01558
-    ## 38  52-KR   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.655 -0.00793
-    ## 39  54-MS   30   30 15.0 6.09e-07 3.40   30.0  0.967 1.000 0.581  0.14182
-    ## 40 55-KAF   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.497  0.03315
-    ## 41  56-MA   33   33 15.0 0.00e+00 3.50   33.0  0.970 1.000 0.304  0.24065
-    ## 42  57-KG   32   32 15.0 0.00e+00 3.47   32.0  0.969 1.000 0.315 -0.00445
-    ## 43  58-SS   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.341  0.04044
-    ## 44  59-EB   35   35 15.0 9.66e-07 3.56   35.0  0.971 1.000 0.487  0.42852
-    ## 45  60-NA   33   33 15.0 0.00e+00 3.50   33.0  0.970 1.000 0.467  0.13936
-    ## 46  61-KO   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.383 -0.07328
-    ## 47  62-NS   16   16 15.0 0.00e+00 2.77   16.0  0.938 1.000 0.407  0.16855
-    ## 48  63-DB   32   32 15.0 0.00e+00 3.47   32.0  0.969 1.000 0.424 -0.04743
-    ## 49  64-KL   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.479  0.05266
-    ## 50  65-BZ   18   18 15.0 1.05e-07 2.89   18.0  0.944 1.000 0.486  0.06400
-    ## 51  66-BY   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.509  0.09059
-    ## 52  68-LI   46   46 15.0 0.00e+00 3.83   46.0  0.978 1.000 0.524 -0.00226
-    ## 53  69-BV   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.534 -0.02767
-    ## 54 70-MGG   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.519 -0.05398
-    ## 55  71-BD   35   35 15.0 9.66e-07 3.56   35.0  0.971 1.000 0.511 -0.11040
-    ## 56  72-JN   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.444  0.06943
-    ## 57 73-IGG   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.528  0.04277
-    ## 58 74-NAM   15   15 15.0 0.00e+00 2.71   15.0  0.933 1.000 0.545 -0.17373
-    ## 59  76-TB   28   28 15.0 0.00e+00 3.33   28.0  0.964 1.000 0.512 -0.00191
-    ## 60  78-OK   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.514 -0.09053
-    ## 61  79-BU   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.502  0.11748
-    ## 62 81-BUD   24   24 15.0 4.63e-07 3.18   24.0  0.958 1.000 0.511  0.06376
-    ## 63 82-BON   24   24 15.0 4.63e-07 3.18   24.0  0.958 1.000 0.537  0.34967
-    ## 64  83-ND   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.354  0.20419
-    ## 65 84-MAN   35   35 15.0 9.66e-07 3.56   35.0  0.971 1.000 0.396  0.07113
-    ## 66 85-KSS   35   35 15.0 9.66e-07 3.56   35.0  0.971 1.000 0.362 -0.05269
-    ## 67 86-SUB   24   24 15.0 4.63e-07 3.18   24.0  0.958 1.000 0.289  0.04648
-    ## 68 87-KAR   24   23 14.6 4.85e-01 3.12   22.2  0.955 0.977 0.375  0.03373
-    ## 69  Total 2068 2067 15.0 7.01e-03 7.63 2066.0  1.000 1.000 0.664  0.75189
+    ## 36  51-MF   38   38 15.0 0.00e+00 3.64   38.0  0.974 1.000 0.636 -0.01558
+    ## 37  52-KR   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.655 -0.00793
+    ## 38  54-MS   30   30 15.0 6.09e-07 3.40   30.0  0.967 1.000 0.581  0.14182
+    ## 39 55-KAF   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.497  0.03315
+    ## 40  56-MA   33   33 15.0 0.00e+00 3.50   33.0  0.970 1.000 0.304  0.24065
+    ## 41  57-KG   32   32 15.0 0.00e+00 3.47   32.0  0.969 1.000 0.315 -0.00445
+    ## 42  58-SS   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.341  0.04044
+    ## 43  59-EB   35   35 15.0 9.66e-07 3.56   35.0  0.971 1.000 0.487  0.42852
+    ## 44  60-NA   33   33 15.0 0.00e+00 3.50   33.0  0.970 1.000 0.467  0.13936
+    ## 45  61-KO   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.383 -0.07328
+    ## 46  62-NS   16   16 15.0 0.00e+00 2.77   16.0  0.938 1.000 0.407  0.16855
+    ## 47  63-DB   32   32 15.0 0.00e+00 3.47   32.0  0.969 1.000 0.424 -0.04743
+    ## 48  64-KL   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.479  0.05266
+    ## 49  65-BZ   18   18 15.0 1.05e-07 2.89   18.0  0.944 1.000 0.486  0.06400
+    ## 50  66-BY   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.509  0.09059
+    ## 51  68-LI   46   46 15.0 0.00e+00 3.83   46.0  0.978 1.000 0.524 -0.00226
+    ## 52  69-BV   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.534 -0.02767
+    ## 53 70-MGG   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.519 -0.05398
+    ## 54  71-BD   35   35 15.0 9.66e-07 3.56   35.0  0.971 1.000 0.511 -0.11040
+    ## 55  72-JN   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.444  0.06943
+    ## 56 73-IGG   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.528  0.04277
+    ## 57 74-NAM   15   15 15.0 0.00e+00 2.71   15.0  0.933 1.000 0.545 -0.17373
+    ## 58  76-TB   28   28 15.0 0.00e+00 3.33   28.0  0.964 1.000 0.512 -0.00191
+    ## 59  78-OK   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.514 -0.09053
+    ## 60  79-BU   50   50 15.0 0.00e+00 3.91   50.0  0.980 1.000 0.502  0.11748
+    ## 61 81-BUD   24   24 15.0 4.63e-07 3.18   24.0  0.958 1.000 0.511  0.06376
+    ## 62 82-BON   24   24 15.0 4.63e-07 3.18   24.0  0.958 1.000 0.537  0.34967
+    ## 63  83-ND   40   40 15.0 1.80e-06 3.69   40.0  0.975 1.000 0.354  0.20419
+    ## 64 84-MAN   35   35 15.0 9.66e-07 3.56   35.0  0.971 1.000 0.396  0.07113
+    ## 65 85-KSS   35   35 15.0 9.66e-07 3.56   35.0  0.971 1.000 0.362 -0.05269
+    ## 66 86-SUB   24   24 15.0 4.63e-07 3.18   24.0  0.958 1.000 0.289  0.04648
+    ## 67 87-KAR   24   23 14.6 4.85e-01 3.12   22.2  0.955 0.977 0.375  0.03373
+    ## 68  Total 2028 2027 15.0 7.15e-03 7.61 2026.0  1.000 1.000 0.663  0.76854
     ##        rbarD          File
     ## 1   0.004200 Gff.genind_rf
     ## 2  -0.002956 Gff.genind_rf
@@ -1037,40 +1032,39 @@ div_stats
     ## 33 -0.001955 Gff.genind_rf
     ## 34  0.011300 Gff.genind_rf
     ## 35  0.032032 Gff.genind_rf
-    ## 36 -0.010561 Gff.genind_rf
-    ## 37 -0.001562 Gff.genind_rf
-    ## 38 -0.000800 Gff.genind_rf
-    ## 39  0.014381 Gff.genind_rf
-    ## 40  0.003590 Gff.genind_rf
-    ## 41  0.028274 Gff.genind_rf
-    ## 42 -0.000513 Gff.genind_rf
-    ## 43  0.004714 Gff.genind_rf
-    ## 44  0.048785 Gff.genind_rf
-    ## 45  0.015967 Gff.genind_rf
-    ## 46 -0.008711 Gff.genind_rf
-    ## 47  0.024362 Gff.genind_rf
-    ## 48 -0.005514 Gff.genind_rf
-    ## 49  0.005902 Gff.genind_rf
-    ## 50  0.007225 Gff.genind_rf
-    ## 51  0.009545 Gff.genind_rf
-    ## 52 -0.000231 Gff.genind_rf
-    ## 53 -0.002889 Gff.genind_rf
-    ## 54 -0.006035 Gff.genind_rf
-    ## 55 -0.012401 Gff.genind_rf
-    ## 56  0.007418 Gff.genind_rf
-    ## 57  0.004767 Gff.genind_rf
-    ## 58 -0.019502 Gff.genind_rf
-    ## 59 -0.000215 Gff.genind_rf
-    ## 60 -0.010430 Gff.genind_rf
-    ## 61  0.012353 Gff.genind_rf
-    ## 62  0.008090 Gff.genind_rf
-    ## 63  0.043995 Gff.genind_rf
-    ## 64  0.025826 Gff.genind_rf
-    ## 65  0.009257 Gff.genind_rf
-    ## 66 -0.006982 Gff.genind_rf
-    ## 67  0.007154 Gff.genind_rf
-    ## 68  0.004515 Gff.genind_rf
-    ## 69  0.075992 Gff.genind_rf
+    ## 36 -0.001562 Gff.genind_rf
+    ## 37 -0.000800 Gff.genind_rf
+    ## 38  0.014381 Gff.genind_rf
+    ## 39  0.003590 Gff.genind_rf
+    ## 40  0.028274 Gff.genind_rf
+    ## 41 -0.000513 Gff.genind_rf
+    ## 42  0.004714 Gff.genind_rf
+    ## 43  0.048785 Gff.genind_rf
+    ## 44  0.015967 Gff.genind_rf
+    ## 45 -0.008711 Gff.genind_rf
+    ## 46  0.024362 Gff.genind_rf
+    ## 47 -0.005514 Gff.genind_rf
+    ## 48  0.005902 Gff.genind_rf
+    ## 49  0.007225 Gff.genind_rf
+    ## 50  0.009545 Gff.genind_rf
+    ## 51 -0.000231 Gff.genind_rf
+    ## 52 -0.002889 Gff.genind_rf
+    ## 53 -0.006035 Gff.genind_rf
+    ## 54 -0.012401 Gff.genind_rf
+    ## 55  0.007418 Gff.genind_rf
+    ## 56  0.004767 Gff.genind_rf
+    ## 57 -0.019502 Gff.genind_rf
+    ## 58 -0.000215 Gff.genind_rf
+    ## 59 -0.010430 Gff.genind_rf
+    ## 60  0.012353 Gff.genind_rf
+    ## 61  0.008090 Gff.genind_rf
+    ## 62  0.043995 Gff.genind_rf
+    ## 63  0.025826 Gff.genind_rf
+    ## 64  0.009257 Gff.genind_rf
+    ## 65 -0.006982 Gff.genind_rf
+    ## 66  0.007154 Gff.genind_rf
+    ## 67  0.004515 Gff.genind_rf
+    ## 68  0.077676 Gff.genind_rf
 
 Hierfstat, separating by pop and rarefying to min samples size with 100
 replications with own code:
@@ -1200,40 +1194,39 @@ print(summary_df)
     ## 33      46-PT         2.999925   26   26 15.00000 2.457562e-07 3.258097
     ## 34      47-BK         3.098557   40   40 15.00000 1.803964e-06 3.688879
     ## 35      48-BN         3.452087   40   40 15.00000 1.803964e-06 3.688879
-    ## 36      50-KB         3.821452   40   40 15.00000 1.803964e-06 3.688879
-    ## 37      51-MF         4.047632   38   38 15.00000 0.000000e+00 3.637586
-    ## 38      52-KR         4.130584   50   50 15.00000 0.000000e+00 3.912023
-    ## 39      54-MS         3.607622   30   30 15.00000 6.085806e-07 3.401197
-    ## 40     55-KAF         3.158181   50   50 15.00000 0.000000e+00 3.912023
-    ## 41      56-MA         2.297347   33   33 15.00000 0.000000e+00 3.496508
-    ## 42      57-KG         2.260882   32   32 15.00000 0.000000e+00 3.465736
-    ## 43      58-SS         2.463630   40   40 15.00000 1.803964e-06 3.688879
-    ## 44      59-EB         2.910498   35   35 15.00000 9.657056e-07 3.555348
-    ## 45      60-NA         2.463815   33   33 15.00000 0.000000e+00 3.496508
-    ## 46      61-KO         2.444742   40   40 15.00000 1.803964e-06 3.688879
-    ## 47      62-NS         2.715141   16   16 15.00000 0.000000e+00 2.772589
-    ## 48      63-DB         2.465209   32   32 15.00000 0.000000e+00 3.465736
-    ## 49      64-KL         2.742293   40   40 15.00000 1.803964e-06 3.688879
-    ## 50      65-BZ         2.972306   18   18 15.00000 1.053671e-07 2.890372
-    ## 51      66-BY         3.202754   50   50 15.00000 0.000000e+00 3.912023
-    ## 52      68-LI         3.409572   46   46 15.00000 0.000000e+00 3.828641
-    ## 53      69-BV         3.228719   50   50 15.00000 0.000000e+00 3.912023
-    ## 54     70-MGG         3.301905   50   50 15.00000 0.000000e+00 3.912023
-    ## 55      71-BD         3.203263   35   35 15.00000 9.657056e-07 3.555348
-    ## 56      72-JN         2.776018   40   40 15.00000 1.803964e-06 3.688879
-    ## 57     73-IGG         3.238009   50   50 15.00000 0.000000e+00 3.912023
-    ## 58     74-NAM         3.443531   15   15 15.00000 0.000000e+00 2.708050
-    ## 59      76-TB         3.045357   28   28 15.00000 0.000000e+00 3.332205
-    ## 60      78-OK         3.088576   50   50 15.00000 0.000000e+00 3.912023
-    ## 61      79-BU         3.127337   50   50 15.00000 0.000000e+00 3.912023
-    ## 62     81-BUD         3.124326   24   24 15.00000 4.626565e-07 3.178054
-    ## 63     82-BON         3.088781   24   24 15.00000 4.626565e-07 3.178054
-    ## 64      83-ND         2.251466   40   40 15.00000 1.803964e-06 3.688879
-    ## 65     84-MAN         2.628454   35   35 15.00000 9.657056e-07 3.555348
-    ## 66     85-KSS         2.433326   35   35 15.00000 9.657056e-07 3.555348
-    ## 67     86-SUB         2.108145   24   24 15.00000 4.626565e-07 3.178054
-    ## 68     87-KAR         2.310008   24   23 14.61957 4.854937e-01 3.120292
-    ## 69      Total               NA 2068 2067 14.99995 7.011983e-03 7.633667
+    ## 36      51-MF         4.047632   38   38 15.00000 0.000000e+00 3.637586
+    ## 37      52-KR         4.130584   50   50 15.00000 0.000000e+00 3.912023
+    ## 38      54-MS         3.607622   30   30 15.00000 6.085806e-07 3.401197
+    ## 39     55-KAF         3.158181   50   50 15.00000 0.000000e+00 3.912023
+    ## 40      56-MA         2.297347   33   33 15.00000 0.000000e+00 3.496508
+    ## 41      57-KG         2.260882   32   32 15.00000 0.000000e+00 3.465736
+    ## 42      58-SS         2.463630   40   40 15.00000 1.803964e-06 3.688879
+    ## 43      59-EB         2.910498   35   35 15.00000 9.657056e-07 3.555348
+    ## 44      60-NA         2.463815   33   33 15.00000 0.000000e+00 3.496508
+    ## 45      61-KO         2.444742   40   40 15.00000 1.803964e-06 3.688879
+    ## 46      62-NS         2.715141   16   16 15.00000 0.000000e+00 2.772589
+    ## 47      63-DB         2.465209   32   32 15.00000 0.000000e+00 3.465736
+    ## 48      64-KL         2.742293   40   40 15.00000 1.803964e-06 3.688879
+    ## 49      65-BZ         2.972306   18   18 15.00000 1.053671e-07 2.890372
+    ## 50      66-BY         3.202754   50   50 15.00000 0.000000e+00 3.912023
+    ## 51      68-LI         3.409572   46   46 15.00000 0.000000e+00 3.828641
+    ## 52      69-BV         3.228719   50   50 15.00000 0.000000e+00 3.912023
+    ## 53     70-MGG         3.301905   50   50 15.00000 0.000000e+00 3.912023
+    ## 54      71-BD         3.203263   35   35 15.00000 9.657056e-07 3.555348
+    ## 55      72-JN         2.776018   40   40 15.00000 1.803964e-06 3.688879
+    ## 56     73-IGG         3.238009   50   50 15.00000 0.000000e+00 3.912023
+    ## 57     74-NAM         3.443531   15   15 15.00000 0.000000e+00 2.708050
+    ## 58      76-TB         3.045357   28   28 15.00000 0.000000e+00 3.332205
+    ## 59      78-OK         3.088576   50   50 15.00000 0.000000e+00 3.912023
+    ## 60      79-BU         3.127337   50   50 15.00000 0.000000e+00 3.912023
+    ## 61     81-BUD         3.124326   24   24 15.00000 4.626565e-07 3.178054
+    ## 62     82-BON         3.088781   24   24 15.00000 4.626565e-07 3.178054
+    ## 63      83-ND         2.251466   40   40 15.00000 1.803964e-06 3.688879
+    ## 64     84-MAN         2.628454   35   35 15.00000 9.657056e-07 3.555348
+    ## 65     85-KSS         2.433326   35   35 15.00000 9.657056e-07 3.555348
+    ## 66     86-SUB         2.108145   24   24 15.00000 4.626565e-07 3.178054
+    ## 67     87-KAR         2.310008   24   23 14.61957 4.854937e-01 3.120292
+    ## 68      Total               NA 2028 2027 14.99995 7.147800e-03 7.614122
     ##             G    lambda       E.5      Hexp           Ia         rbarD
     ## 1    19.00000 0.9473684 1.0000000 0.7208808  0.041616591  0.0042002802
     ## 2    20.00000 0.9500000 1.0000000 0.6948870 -0.029117292 -0.0029556143
@@ -1270,40 +1263,39 @@ print(summary_df)
     ## 33   26.00000 0.9615385 1.0000000 0.5114544 -0.018314825 -0.0019553909
     ## 34   40.00000 0.9750000 1.0000000 0.5043689  0.110779966  0.0113004959
     ## 35   40.00000 0.9750000 1.0000000 0.5778481  0.287803253  0.0320317006
-    ## 36   40.00000 0.9750000 1.0000000 0.5830840 -0.105366399 -0.0105605272
-    ## 37   38.00000 0.9736842 1.0000000 0.6357320 -0.015579471 -0.0015622365
-    ## 38   50.00000 0.9800000 1.0000000 0.6545189 -0.007927994 -0.0008004312
-    ## 39   30.00000 0.9666667 1.0000000 0.5809571  0.141824546  0.0143805742
-    ## 40   50.00000 0.9800000 1.0000000 0.4967772  0.033145778  0.0035901824
-    ## 41   33.00000 0.9696970 1.0000000 0.3043507  0.240653955  0.0282741339
-    ## 42   32.00000 0.9687500 1.0000000 0.3154762 -0.004454101 -0.0005129762
-    ## 43   40.00000 0.9750000 1.0000000 0.3409243  0.040438533  0.0047139646
-    ## 44   35.00000 0.9714286 1.0000000 0.4873703  0.428520444  0.0487853405
-    ## 45   33.00000 0.9696970 1.0000000 0.4669210  0.139357083  0.0159667239
-    ## 46   40.00000 0.9750000 1.0000000 0.3827947 -0.073278338 -0.0087109335
-    ## 47   16.00000 0.9375000 1.0000000 0.4065526  0.168554828  0.0243624995
-    ## 48   32.00000 0.9687500 1.0000000 0.4241162 -0.047432175 -0.0055144322
-    ## 49   40.00000 0.9750000 1.0000000 0.4789701  0.052661988  0.0059018944
-    ## 50   18.00000 0.9444444 1.0000000 0.4859334  0.063996759  0.0072245000
-    ## 51   50.00000 0.9800000 1.0000000 0.5089285  0.090590732  0.0095454847
-    ## 52   46.00000 0.9782609 1.0000000 0.5244826 -0.002258499 -0.0002305685
-    ## 53   50.00000 0.9800000 1.0000000 0.5339183 -0.027672346 -0.0028892877
-    ## 54   50.00000 0.9800000 1.0000000 0.5193046 -0.053979384 -0.0060350933
-    ## 55   35.00000 0.9714286 1.0000000 0.5112005 -0.110396274 -0.0124005298
-    ## 56   40.00000 0.9750000 1.0000000 0.4444438  0.069428837  0.0074180714
-    ## 57   50.00000 0.9800000 1.0000000 0.5277465  0.042767647  0.0047670215
-    ## 58   15.00000 0.9333333 1.0000000 0.5446010 -0.173733618 -0.0195023913
-    ## 59   28.00000 0.9642857 1.0000000 0.5119924 -0.001908985 -0.0002147069
-    ## 60   50.00000 0.9800000 1.0000000 0.5141629 -0.090534755 -0.0104298411
-    ## 61   50.00000 0.9800000 1.0000000 0.5019481  0.117483054  0.0123526285
-    ## 62   24.00000 0.9583333 1.0000000 0.5110280  0.063755017  0.0080899078
-    ## 63   24.00000 0.9583333 1.0000000 0.5366809  0.349669262  0.0439954174
-    ## 64   40.00000 0.9750000 1.0000000 0.3537687  0.204194236  0.0258259005
-    ## 65   35.00000 0.9714286 1.0000000 0.3963515  0.071133644  0.0092574112
-    ## 66   35.00000 0.9714286 1.0000000 0.3622693 -0.052692176 -0.0069824976
-    ## 67   24.00000 0.9583333 1.0000000 0.2894485  0.046481546  0.0071543028
-    ## 68   22.15385 0.9548611 0.9769483 0.3752051  0.033730644  0.0045145283
-    ## 69 2066.00193 0.9995160 0.9997036 0.6643510  0.751892157  0.0759915177
+    ## 36   38.00000 0.9736842 1.0000000 0.6357320 -0.015579471 -0.0015622365
+    ## 37   50.00000 0.9800000 1.0000000 0.6545189 -0.007927994 -0.0008004312
+    ## 38   30.00000 0.9666667 1.0000000 0.5809571  0.141824546  0.0143805742
+    ## 39   50.00000 0.9800000 1.0000000 0.4967772  0.033145778  0.0035901824
+    ## 40   33.00000 0.9696970 1.0000000 0.3043507  0.240653955  0.0282741339
+    ## 41   32.00000 0.9687500 1.0000000 0.3154762 -0.004454101 -0.0005129762
+    ## 42   40.00000 0.9750000 1.0000000 0.3409243  0.040438533  0.0047139646
+    ## 43   35.00000 0.9714286 1.0000000 0.4873703  0.428520444  0.0487853405
+    ## 44   33.00000 0.9696970 1.0000000 0.4669210  0.139357083  0.0159667239
+    ## 45   40.00000 0.9750000 1.0000000 0.3827947 -0.073278338 -0.0087109335
+    ## 46   16.00000 0.9375000 1.0000000 0.4065526  0.168554828  0.0243624995
+    ## 47   32.00000 0.9687500 1.0000000 0.4241162 -0.047432175 -0.0055144322
+    ## 48   40.00000 0.9750000 1.0000000 0.4789701  0.052661988  0.0059018944
+    ## 49   18.00000 0.9444444 1.0000000 0.4859334  0.063996759  0.0072245000
+    ## 50   50.00000 0.9800000 1.0000000 0.5089285  0.090590732  0.0095454847
+    ## 51   46.00000 0.9782609 1.0000000 0.5244826 -0.002258499 -0.0002305685
+    ## 52   50.00000 0.9800000 1.0000000 0.5339183 -0.027672346 -0.0028892877
+    ## 53   50.00000 0.9800000 1.0000000 0.5193046 -0.053979384 -0.0060350933
+    ## 54   35.00000 0.9714286 1.0000000 0.5112005 -0.110396274 -0.0124005298
+    ## 55   40.00000 0.9750000 1.0000000 0.4444438  0.069428837  0.0074180714
+    ## 56   50.00000 0.9800000 1.0000000 0.5277465  0.042767647  0.0047670215
+    ## 57   15.00000 0.9333333 1.0000000 0.5446010 -0.173733618 -0.0195023913
+    ## 58   28.00000 0.9642857 1.0000000 0.5119924 -0.001908985 -0.0002147069
+    ## 59   50.00000 0.9800000 1.0000000 0.5141629 -0.090534755 -0.0104298411
+    ## 60   50.00000 0.9800000 1.0000000 0.5019481  0.117483054  0.0123526285
+    ## 61   24.00000 0.9583333 1.0000000 0.5110280  0.063755017  0.0080899078
+    ## 62   24.00000 0.9583333 1.0000000 0.5366809  0.349669262  0.0439954174
+    ## 63   40.00000 0.9750000 1.0000000 0.3537687  0.204194236  0.0258259005
+    ## 64   35.00000 0.9714286 1.0000000 0.3963515  0.071133644  0.0092574112
+    ## 65   35.00000 0.9714286 1.0000000 0.3622693 -0.052692176 -0.0069824976
+    ## 66   24.00000 0.9583333 1.0000000 0.2894485  0.046481546  0.0071543028
+    ## 67   22.15385 0.9548611 0.9769483 0.3752051  0.033730644  0.0045145283
+    ## 68 2026.00197 0.9995064 0.9996978 0.6633507  0.768544829  0.0776756865
     ##             File    FIS    Ho    He
     ## 1  Gff.genind_rf  0.041 0.691 0.721
     ## 2  Gff.genind_rf  0.189 0.570 0.698
@@ -1340,40 +1332,39 @@ print(summary_df)
     ## 33 Gff.genind_rf  0.068 0.484 0.514
     ## 34 Gff.genind_rf  0.087 0.458 0.503
     ## 35 Gff.genind_rf  0.084 0.524 0.578
-    ## 36 Gff.genind_rf -0.011 0.591 0.581
-    ## 37 Gff.genind_rf  0.009 0.629 0.635
-    ## 38 Gff.genind_rf  0.096 0.593 0.657
-    ## 39 Gff.genind_rf  0.056 0.553 0.578
-    ## 40 Gff.genind_rf  0.081 0.464 0.495
-    ## 41 Gff.genind_rf -0.100 0.340 0.304
-    ## 42 Gff.genind_rf  0.009 0.309 0.314
-    ## 43 Gff.genind_rf  0.031 0.322 0.341
-    ## 44 Gff.genind_rf  0.024 0.469 0.488
-    ## 45 Gff.genind_rf -0.105 0.508 0.466
-    ## 46 Gff.genind_rf  0.023 0.375 0.385
-    ## 47 Gff.genind_rf  0.102 0.386 0.407
-    ## 48 Gff.genind_rf -0.027 0.440 0.424
-    ## 49 Gff.genind_rf  0.023 0.482 0.478
-    ## 50 Gff.genind_rf  0.074 0.457 0.487
-    ## 51 Gff.genind_rf  0.032 0.489 0.510
-    ## 52 Gff.genind_rf  0.002 0.529 0.525
-    ## 53 Gff.genind_rf  0.072 0.498 0.534
-    ## 54 Gff.genind_rf  0.014 0.511 0.520
-    ## 55 Gff.genind_rf  0.014 0.506 0.510
-    ## 56 Gff.genind_rf  0.024 0.433 0.443
-    ## 57 Gff.genind_rf  0.081 0.490 0.530
-    ## 58 Gff.genind_rf -0.026 0.559 0.544
-    ## 59 Gff.genind_rf  0.026 0.495 0.512
-    ## 60 Gff.genind_rf  0.012 0.507 0.512
-    ## 61 Gff.genind_rf  0.073 0.463 0.498
-    ## 62 Gff.genind_rf  0.066 0.485 0.511
-    ## 63 Gff.genind_rf -0.072 0.574 0.537
-    ## 64 Gff.genind_rf -0.012 0.361 0.354
-    ## 65 Gff.genind_rf -0.008 0.402 0.394
-    ## 66 Gff.genind_rf  0.053 0.339 0.360
-    ## 67 Gff.genind_rf  0.030 0.287 0.294
-    ## 68 Gff.genind_rf  0.296 0.260 0.377
-    ## 69 Gff.genind_rf     NA    NA    NA
+    ## 36 Gff.genind_rf  0.017 0.626 0.635
+    ## 37 Gff.genind_rf  0.100 0.591 0.657
+    ## 38 Gff.genind_rf  0.053 0.559 0.583
+    ## 39 Gff.genind_rf  0.076 0.465 0.497
+    ## 40 Gff.genind_rf -0.095 0.338 0.304
+    ## 41 Gff.genind_rf  0.012 0.310 0.316
+    ## 42 Gff.genind_rf  0.035 0.324 0.343
+    ## 43 Gff.genind_rf  0.032 0.466 0.488
+    ## 44 Gff.genind_rf -0.104 0.509 0.467
+    ## 45 Gff.genind_rf  0.012 0.377 0.383
+    ## 46 Gff.genind_rf  0.103 0.387 0.408
+    ## 47 Gff.genind_rf -0.029 0.439 0.423
+    ## 48 Gff.genind_rf  0.008 0.487 0.478
+    ## 49 Gff.genind_rf  0.070 0.457 0.486
+    ## 50 Gff.genind_rf  0.019 0.493 0.508
+    ## 51 Gff.genind_rf -0.012 0.534 0.524
+    ## 52 Gff.genind_rf  0.063 0.502 0.533
+    ## 53 Gff.genind_rf -0.006 0.519 0.519
+    ## 54 Gff.genind_rf  0.015 0.507 0.510
+    ## 55 Gff.genind_rf  0.022 0.435 0.445
+    ## 56 Gff.genind_rf  0.077 0.490 0.529
+    ## 57 Gff.genind_rf -0.026 0.559 0.544
+    ## 58 Gff.genind_rf  0.025 0.496 0.512
+    ## 59 Gff.genind_rf  0.014 0.505 0.512
+    ## 60 Gff.genind_rf  0.094 0.460 0.504
+    ## 61 Gff.genind_rf  0.070 0.485 0.513
+    ## 62 Gff.genind_rf -0.080 0.577 0.535
+    ## 63 Gff.genind_rf  0.007 0.355 0.355
+    ## 64 Gff.genind_rf -0.007 0.403 0.395
+    ## 65 Gff.genind_rf  0.047 0.345 0.364
+    ## 66 Gff.genind_rf  0.027 0.285 0.292
+    ## 67 Gff.genind_rf  0.297 0.262 0.381
+    ## 68 Gff.genind_rf     NA    NA    NA
 
 # Cavalli-Sforza and Edwards’ Distance (CSE)
 

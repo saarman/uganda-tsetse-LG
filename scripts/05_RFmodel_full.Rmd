@@ -138,8 +138,6 @@ c(mean = rf_mean$rsq[500] * 100,
 
 Including mean of env variable along least cost paths performs the best, adding median and mode does not greatly improve the model and increases risks of over fitting...
 
-Could add in minimum, maximum, standard deviation, range, turnover (analogous to slope) etc... later!
-
 ## Prune more variables after narrowing to mean only?
 
 ```{r mean}
@@ -195,8 +193,8 @@ rf_top18_data <- rf_data[, c("CSEdistance", top18_vars)]
 ```{r tune}
 
 # Subset data for the mean-only model
-#rf_mean_data <- rf_data[, c("CSEdistance", common_var, mean_vars)]
-rf_mean_data <- rf_data[, c("CSEdistance", top18_vars)]
+#rf_data <- rf_data[, c("CSEdistance", common_var, mean_vars)]
+rf_data <- rf_data[, c("CSEdistance", top18_vars)]
 
 # Rename predictors by removing "_mean" for later projections
 names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
@@ -304,3 +302,171 @@ uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", re
 uganda <- st_intersection(uganda, r_ext) # clip to extent
 plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```
+
+
+# Repeat with scaled CSE
+
+## Top 18 predictors
+```{r top18}
+# Load data
+V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
+
+# estimate mean sampling density
+uniform_samp <- mean(V.table_full$samp_20km_mean, na.rm = TRUE)
+message("The mean sampling density is: ", uniform_samp)
+  
+# Filter out western outlier "50-KB" 
+V.table <- V.table_full %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB")
+
+# Create unique ID after filtering
+V.table$id <- paste(V.table$Var1, V.table$Var2, sep = "_")
+
+# Define top 18 mean predictors (adjust names if necessary)
+predictor_vars <- c("pix_dist", "samp_20km_mean", "BIO3_mean", "BIO6_mean", "BIO15_mean","BIO13_mean", "BIO11S_mean", "BIO7_mean", "BIO1_mean", "BIO9S_mean","BIO12_mean", "alt_mean", "BIO18S_mean", "BIO4_mean", "BIO2_mean","slope_mean", "BIO10S_mean", "riv_3km_mean")
+
+max_CSE <- max(V.table$CSEdistance, na.rm = TRUE)
+V.table$CSE_scaled <- V.table$CSEdistance / max_CSE
+
+# Filter to modeling-relevant columns only
+rf_data <- V.table[, c("CSE_scaled", predictor_vars)]
+```
+
+# Tune random forest with chosen variables
+```{r tune}
+
+# Rename predictors by removing "_mean" for later projections
+names(rf_data) <- gsub("_mean$", "", names(rf_data))
+
+# Build full RF model
+set.seed(10981234)  # ensures reproducibility
+rf_scaled <- randomForest(
+  CSE_scaled ~ .,
+  data = rf_data,
+  importance = TRUE,
+  ntree = 500
+)
+
+print(rf_scaled)
+importance(rf_scaled)
+
+# Tune mtry (number of variables tried at each split)
+set.seed(92834567)
+rf_scaled_tuned <- tuneRF(
+  x = rf_data[, -1],   # exclude response variable
+  y = rf_data$CSE_scaled,
+  ntreeTry = 500,
+  stepFactor = 1.5,         # factor by which mtry is increased/decreased
+  improve = 0.01,           # minimum improvement to continue search
+  trace = TRUE,             # print progress
+  plot = TRUE,              # plot OOB error vs mtry
+  doBest = TRUE,             # return the model with lowest OOB error
+  importance = TRUE
+)
+
+
+# Save the tuned random forest model to disk
+saveRDS(rf_scaled_tuned, file = file.path(results_dir, "rf_scaled_tuned.rds"))
+
+# Preserve as-is for projection
+rf_final <- rf_scaled_tuned
+```
+FYI: Later, to load the model back into R:
+`rf_scaled_tuned <- readRDS(file.path(results_dir, "rf_scaled_tuned.rds"))`
+
+
+## Compare full and full tuned models (top 18 mean-only predictors)
+```{r compare}
+print(rf_scaled)
+print(rf_scaled_tuned)
+
+data.frame(
+  Model = c("Full (default mtry)", paste("Tuned (mtry = ",rf_scaled_tuned$mtry,")")),
+  MSE = c(rf_scaled$mse[rf_scaled$ntree], rf_scaled_tuned$mse[rf_scaled_tuned$ntree]),
+  Rsq = c(rf_scaled$rsq[rf_scaled$ntree], rf_scaled_tuned$rsq[rf_scaled_tuned$ntree])
+)
+
+# pad names to trick varImpPlot
+rownames(rf_scaled$importance) <- paste0("  ", rownames(rf_scaled$importance), "  ")
+rownames(rf_scaled_tuned$importance) <- paste0("  ", rownames(rf_scaled_tuned$importance), "  ")
+
+# plot with varImpPlot
+par(mar = c(5, 30, 2,2))  # bottom, left, top, right
+varImpPlot(rf_scaled, main = "Full Model Importance",cex = 0.6, pch = 19)
+varImpPlot(rf_scaled_tuned, main = "Tuned Full Model Importance",cex = 0.6, pch = 19)
+```
+
+# 4. Projection of model
+```{r projection-scaled}
+# Load env stack with named layers
+env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+
+# Replace samp_20km with neutral constant raster, 
+# retains sampling bias in the model but neutralize 
+# sampling bias during projection
+samp_uniform <- env[["samp_20km"]]
+values(samp_uniform) <- mean(rf_data$samp_20km, na.rm = TRUE)
+env[["samp_20km"]] <- samp_uniform # Replace in raster stack
+
+prediction_raster <- predict(env, rf_final, type = "response")
+
+# Write Prediction Raster to file
+#writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE_scaled_resistance.tif"), format = "GTiff", overwrite = TRUE)
+```
+
+```{r plot-projection-scaled, warning=FALSE}
+# Create base plot with viridis
+plot(prediction_raster,
+     col = viridis::magma(100),
+     main = "Predicted Scaled CSE",
+     axes = FALSE,
+     box = FALSE,
+     legend.args = list(text = "Scaled CSE", side = 2, line = 2.5, cex = 0.8))
+
+# Overlay lakes in dark gray
+lakes <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
+lakes <- st_transform(lakes, crs = st_crs(prediction_raster))  # match CRS 
+lakes <- st_make_valid(lakes) # fix geometries
+r_ext <- st_as_sfc(st_bbox(prediction_raster)) # extent
+st_crs(r_ext) <- st_crs(prediction_raster) # match CRS
+lakes <- st_intersection(lakes, r_ext) # clip to extent
+plot(st_geometry(lakes), col = "gray20", border = NA, add = TRUE)
+
+# Overlay country outline
+uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", returnclass = "sf")
+uganda <- st_intersection(uganda, r_ext) # clip to extent
+plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
+```
+ 
+# Unscaled projection (reversed scaling)
+
+```{r plot-projection-unscaled, warning=FALSE}
+prediction_raster <- (predict(env, rf_final, type = "response")) * max_CSE
+
+# Write Prediction Raster to file
+#writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE_unscaled_resistance.tif"), format = "GTiff", overwrite = TRUE)
+
+# Create base plot with viridis
+plot(prediction_raster,
+     col = viridis::magma(100),
+     main = "Predicted CSE",
+     axes = FALSE,
+     box = FALSE,
+     legend.args = list(text = "CSE", side = 2, line = 2.5, cex = 0.8))
+
+# Overlay lakes in dark gray
+lakes <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
+lakes <- st_transform(lakes, crs = st_crs(prediction_raster))  # match CRS 
+lakes <- st_make_valid(lakes) # fix geometries
+r_ext <- st_as_sfc(st_bbox(prediction_raster)) # extent
+st_crs(r_ext) <- st_crs(prediction_raster) # match CRS
+lakes <- st_intersection(lakes, r_ext) # clip to extent
+plot(st_geometry(lakes), col = "gray20", border = NA, add = TRUE)
+
+# Overlay country outline
+uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", returnclass = "sf")
+uganda <- st_intersection(uganda, r_ext) # clip to extent
+plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
+```
+
+

@@ -55,6 +55,9 @@ scratch_dir <- "/scratch/general/vast/u6036559"
 # Load data
 V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
 
+# estimate mean sampling density
+mean(V.table_full$samp_20km_mean, na.rm = TRUE)
+
 # Filter out western outlier "50-KB" 
 V.table <- V.table_full %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")

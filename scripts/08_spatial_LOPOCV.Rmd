@@ -37,6 +37,10 @@ scratch_dir <- "/scratch/general/vast/u6036559"
 
 # define coordinate reference system
 crs_geo <- 4326     # EPSG code for WGS84
+
+# define ggplot2 extent
+xlim <- c(28.6, 35.4)
+ylim <- c(-1.500000 , 4.733333)
 ```
 
 # Inputs
@@ -55,14 +59,6 @@ env <- stack(file.path(
 **NOTE:** eval = FALSE so that it skips on knit
 ```{r env-paths, eval = FALSE}
 
-# Input: table of paired sites (endpoints of paths)
-V.table_full <- read.csv("../input/Gff_cse_envCostPaths.csv")
-V.table <- V.table_full %>%
-  filter(Var1 != "50-KB", Var2 != "50-KB") %>%
-  filter(Pop1_cluster == Pop2_cluster) %>%
-  mutate(id = paste(Var1, Var2, sep = "_"))
-sites <- sort(unique(c(V.table$Var1, V.table$Var2)))
-
 # Input: raster of env parameters for prediction
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 names(env) <-  c("BIO1_mean", "BIO2_mean", "BIO3_mean", "BIO4_mean", "BIO5_mean", "BIO6_mean", "BIO7_mean", "BIO8S_mean","BIO9S_mean", "BIO10S_mean", "BIO11S_mean", "BIO12_mean", "BIO13_mean", "BIO14_mean", "BIO15_mean", "BIO16S_mean","BIO17S_mean", "BIO18S_mean", "BIO19S_mean", "alt_mean","slope_mean", "riv_3km_mean","samp_20km_mean","lakes_mean","pix_dist")
@@ -70,115 +66,521 @@ crs(env) <- crs_geo
 pix_dist <- env$pix_dist
 crs(pix_dist) <- crs_geo
 
-# Input: shape file of least-cost paths
+# Input: shape file of least-cost paths (already filtered to 67 sites and has CSEdistance)
 lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp"))
-lcp_sf$id <- paste(lcp_sf$Var1, lcp_sf$Var2, sep = "_")
 st_crs(lcp_sf) <- crs_geo
 
-# Output: a list of data.frames, one per path
-path_env_list <- lapply(1:nrow(lcp_sf), function(i) {
-  path_geom <- st_geometry(lcp_sf[i, ]) |> as("Spatial")
-  env_vals <- extract(env, path_geom)[[1]]
-  if (is.null(env_vals)) return(NULL)
-  as.data.frame(env_vals)  # rows = pixels, cols = env layers
-})
-names(path_env_list) <- lcp_sf$id
-saveRDS(path_env_list, file.path(output_dir, "path_env_list.rds"))
-```
+# Build list of unique sites from Var1 and Var2
+sites <- sort(unique(c(lcp_sf$Var1, lcp_sf$Var2)))
 
-### Thinking about scaling CSE 
-
-Scaling CSE by dividing by the max observed CSE (i.e., normalizing to [0, 1]) is a reasonable approach that could help with spatial validation, especially when:
-
-Path lengths differ substantially across site pairs, and
-
-You want to compare observed and predicted values on a common scale, without introducing bias from absolute CSE magnitude.
-
-Benefits of scaling:
-Makes residual errors comparable across pairs, regardless of path length.
-
-Helps evaluate model fit more robustly, especially when absolute values vary widely.
-
-Could stabilize R² estimates by reducing variance due to large CSE outliers.
-
-Caveats:
-It changes the interpretation of CSE from an absolute genetic distance to a relative value (e.g., “proportion of max divergence observed”).
-
-
-# 2. Spatial LOPOCV
-## For each LOPOCV fold: predict only on path data using the final full model
-**NOTE:** eval = FALSE so that it skips on knit
-```{r spatial-lopocv, eval = FALSE}
-# Set number of cores and register cluster
+# Set up parallel backend
 n_cores <- 8
 cl <- makeCluster(n_cores)
 registerDoParallel(cl)
 
+# Parallel extraction of environmental values for each path
+path_env_list <- foreach(i = 1:nrow(lcp_sf), .packages = c("raster", "sf")) %dopar% {
+  path_geom <- st_geometry(lcp_sf[i, ]) |> as("Spatial")
+  env_vals <- extract(env, path_geom)[[1]]
+  if (is.null(env_vals)) return(NULL)
+  as.data.frame(env_vals)
+}
+names(path_env_list) <- lcp_sf$id
+
+# Stop parallel backend
+stopCluster(cl)
+
+# Save result
+saveRDS(path_env_list, file.path(output_dir, "path_env_list.rds"))
+```
+# 2. Spatial R² on full model
+
+## 2a. Spatial R² on full model based on raw CSE
+```{r full-spatial-R2}
+# Load full model
+rf_model_full <- readRDS(file.path(results_dir, "rf_mean18_tuned.rds"))
+
 # Load pre-extracted path-level env data
 path_env_list <- readRDS(file.path(output_dir, "path_env_list.rds"))
+env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
-# Loop over LOPOCV folds (real models)
-metrics_real <- foreach(fold_idx = seq_along(sites), .combine = rbind,
-                        .packages = c("dplyr", "randomForest")) %dopar% {
+# Load prepared file of least-cost paths (already filtered to 67 sites and has CSEdistance)
+lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp"))
+st_crs(lcp_sf) <- crs_geo# Initialize output
+fullmodel_preds <- data.frame()
 
-  # Load trained model for this LOPOCV fold
+# Define region based on Var1 
+Gff <- read.csv("../input/Gff_11loci_allsites_indinfo.txt", header=TRUE, sep = "\t")
+north_sites <- Gff$SiteCode[Gff$SiteMajCluster == "north"]
+
+# Initialize output again
+fullmodel_preds <- data.frame()
+
+# Loop over all path pairs
+for (row in seq_len(nrow(lcp_sf))) {
+  pair_id <- lcp_sf$id[row]
+  env_path <- path_env_list[[pair_id]]
+  names(env_path) <-  c("BIO1", "BIO2", "BIO3", "BIO4", "BIO5", "BIO6", "BIO7", "BIO8S","BIO9S", "BIO10S", "BIO11S", "BIO12", "BIO13", "BIO14", "BIO15", "BIO16S","BIO17S", "BIO18S", "BIO19S", "alt","slope", "riv_3km","samp_20km","lakes","pix_dist")
+  #env_path$samp_20km <- 1.027064e-11 # neutralize sampling bias = commented out
+  if (is.null(env_path) || nrow(env_path) == 0 || all(!complete.cases(env_path))) next
+
+  pred_vals <- predict(rf_model_full, newdata = env_path)
+  geo_dist <- sum(env_path$pix_dist, na.rm = TRUE)
+  pred_mean <- sum(pred_vals, na.rm = TRUE) / geo_dist
+
+  # Assign region (example: based on Var1)
+  site1 <- lcp_sf$Var1[row]
+  region <- if (site1 %in% north_sites) "North" else "South"
+
+  # Use region-specific intercept and slope
+  if (region == "North") {
+    intercept <- 0.2747140
+    slope <- 0.0006429
+  } else {
+    intercept <- 0.2931063
+    slope <- 0.0008329
+  }
+
+  pred_CSE_IBD <- intercept + slope * geo_dist + pred_mean
+
+  fullmodel_preds <- rbind(fullmodel_preds, data.frame(
+    id = pair_id,
+    Var1 = site1,
+    Var2 = lcp_sf$Var2[row],
+    Region = region,
+    true_CSE = lcp_sf$CSE[row],
+    pred_CSE = pred_mean,
+    pred_IBD = pred_CSE_IBD
+  ))
+}
+
+eval_metrics <- function(true, predicted) {
+  resids <- true - predicted
+  ss_res <- sum(resids^2, na.rm = TRUE)
+  ss_tot <- sum((true - mean(true, na.rm = TRUE))^2, na.rm = TRUE)
+  rsq <- 1 - ss_res / ss_tot
+  rmse <- sqrt(mean(resids^2, na.rm = TRUE))
+  mae <- mean(abs(resids), na.rm = TRUE)
+  cor_val <- cor(true, predicted, use = "complete.obs")
+  data.frame(R2 = rsq, RMSE = rmse, MAE = mae, Correlation = cor_val)
+}
+
+metrics_pred_only <- eval_metrics(fullmodel_preds$true_CSE, fullmodel_preds$pred_CSE)
+metrics_pred_only
+
+ggplot(fullmodel_preds, aes(x = true_CSE, y = pred_CSE)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1.2) +
+  ylim(0, 1.2) +
+  theme_minimal() +
+  labs(title = "Predicted vs Observed CSE (CSE)",
+       x = "Observed CSE", y = "Predicted CSE (path-mean)")
+
+metrics_IBD_adjusted <- eval_metrics(fullmodel_preds$true_CSE, fullmodel_preds$pred_IBD)
+metrics_IBD_adjusted
+
+ggplot(fullmodel_preds, aes(x = true_CSE, y = pred_IBD)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1.2) +
+  ylim(0, 1.2) +
+  theme_minimal() +
+  labs(title = "Predicted vs Observed CSE (CSE)",
+       x = "Observed CSE", y = "Predicted CSE (IBD-adjusted)")
+
+# Post-hoc linear calibration
+cal_model <- lm(true_CSE ~ pred_IBD, data = fullmodel_preds)
+summary(cal_model)
+fullmodel_preds$pred_CSE_calibrated <- predict(cal_model)
+
+metrics_IBD_calibrated <- eval_metrics(fullmodel_preds$true_CSE, fullmodel_preds$pred_CSE_calibrated)
+metrics_IBD_calibrated 
+
+ggplot(fullmodel_preds, aes(x = true_CSE, y = pred_CSE_calibrated)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1.2) +
+  ylim(0, 1.2) +
+  theme_minimal() +
+  labs(title = "Predicted vs Observed CSE (CSE)",
+       x = "Observed CSE", y = "Predicted CSE (IBD-adjusted-calibrated)")
+```
+
+## 2b. Spatial R² on full model based on Scaled CSE (SCSE)
+```{r scaled}
+rf_model_full <- readRDS(file.path(results_dir, "rf_scaled_tuned.rds"))
+
+# Load pre-extracted path-level env data
+path_env_list <- readRDS(file.path(output_dir, "path_env_list.rds"))
+env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+
+# Load prepared file of least-cost paths (already filtered to 67 sites and has CSEdistance)
+lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp"))
+st_crs(lcp_sf) <- crs_geo
+names(lcp_sf)
+max_CSE <- max(lcp_sf$CSE, na.rm = TRUE)
+lcp_sf$CSE_scaled <- lcp_sf$CSE / max_CSE
+
+# Initialize output
+fullmodel_preds <- data.frame()
+
+# replace CSE with CSE_scaled
+
+# Define region based on Var1 
+Gff <- read.csv("../input/Gff_11loci_allsites_indinfo.txt", header=TRUE, sep = "\t")
+north_sites <- Gff$SiteCode[Gff$SiteMajCluster == "north"]
+
+# Initialize output again
+fullmodel_preds <- data.frame()
+
+# Loop over all path pairs
+for (row in seq_len(nrow(lcp_sf))) {
+  pair_id <- lcp_sf$id[row]
+  env_path <- path_env_list[[pair_id]]
+  names(env_path) <-  c("BIO1", "BIO2", "BIO3", "BIO4", "BIO5", "BIO6", "BIO7", "BIO8S","BIO9S", "BIO10S", "BIO11S", "BIO12", "BIO13", "BIO14", "BIO15", "BIO16S","BIO17S", "BIO18S", "BIO19S", "alt","slope", "riv_3km","samp_20km","lakes","pix_dist")
+  #env_path$samp_20km <- 1.027064e-11 # neutralize sampling bias = commented out
+  if (is.null(env_path) || nrow(env_path) == 0 || all(!complete.cases(env_path))) next
+
+  pred_vals <- predict(rf_model_full, newdata = env_path)
+  geo_dist <- sum(env_path$pix_dist, na.rm = TRUE)
+  pred_mean <- sum(pred_vals, na.rm = TRUE) / geo_dist
+
+  # Assign region (example: based on Var1)
+  site1 <- lcp_sf$Var1[row]
+  region <- if (site1 %in% north_sites) "North" else "South"
+
+             
+  # Use region-specific intercept and slope
+  if (region == "North") {
+    intercept <- 0.402927
+    slope <- 0.000943
+  } else {
+    intercept <- 0.429903
+    slope <- 0.001222
+  }
+
+  pred_CSE_IBD <- intercept + slope * geo_dist + pred_mean
+
+  fullmodel_preds <- rbind(fullmodel_preds, data.frame(
+    id = pair_id,
+    Var1 = site1,
+    Var2 = lcp_sf$Var2[row],
+    Region = region,
+    true_CSE = lcp_sf$CSE_scaled[row],
+    pred_CSE = pred_mean,
+    pred_IBD = pred_CSE_IBD
+  ))
+}
+
+
+
+eval_metrics <- function(true, predicted) {
+  resids <- true - predicted
+  ss_res <- sum(resids^2, na.rm = TRUE)
+  ss_tot <- sum((true - mean(true, na.rm = TRUE))^2, na.rm = TRUE)
+  rsq <- 1 - ss_res / ss_tot
+  rmse <- sqrt(mean(resids^2, na.rm = TRUE))
+  mae <- mean(abs(resids), na.rm = TRUE)
+  cor_val <- cor(true, predicted, use = "complete.obs")
+  data.frame(R2 = rsq, RMSE = rmse, MAE = mae, Correlation = cor_val)
+}
+
+metrics_pred_only <- eval_metrics(fullmodel_preds$true_CSE, fullmodel_preds$pred_CSE)
+metrics_pred_only
+
+ggplot(fullmodel_preds, aes(x = true_CSE, y = pred_CSE)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1.7) +
+  ylim(0, 1.7) +
+  theme_minimal() +
+  labs(title = "Predicted vs Observed Scaled CSE (SCSE)",
+       x = "Observed SCSE", y = "Predicted SCSE (path-mean)")
+
+metrics_IBD_adjusted <- eval_metrics(fullmodel_preds$true_CSE, fullmodel_preds$pred_IBD)
+metrics_IBD_adjusted
+
+ggplot(fullmodel_preds, aes(x = true_CSE, y = pred_IBD)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1.7) +
+  ylim(0, 1.7) +
+  theme_minimal() +
+  labs(title = "Predicted vs Observed Scaled CSE (SCSE)",
+       x = "Observed SCSE", y = "Predicted SCSE (IBD-adjusted)")
+
+# Post-hoc linear calibration
+cal_model <- lm(true_CSE ~ pred_IBD, data = fullmodel_preds)
+summary(cal_model)
+fullmodel_preds$pred_CSE_calibrated <- predict(cal_model)
+
+metrics_IBD_calibrated <- eval_metrics(fullmodel_preds$true_CSE, fullmodel_preds$pred_CSE_calibrated)
+metrics_IBD_calibrated 
+
+ggplot(fullmodel_preds, aes(x = true_CSE, y = pred_CSE_calibrated)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1.2) +
+  ylim(0, 1.2) +
+  theme_minimal() +
+  labs(title = "Predicted vs Observed Scaled CSE (SCSE)",
+       x = "Observed SCSE", y = "Predicted SCSE (IBD-adjusted-calibrated)")
+
+```
+
+The scaled CSE performs only very slighly better... so I will not scale CSE for the main study. 
+
+Specifically:  
+- Raw CSE already performs almost as well, and is easier to explain and justify.  
+- Scaling CSE provides only a very small gain (ΔR² ≈ 0.0061), with slight trade-offs in RMSE and MAE (lower error in models built with raw CSE). The correlation is already strong (≥0.84) in both cases.  
+- Scaling CSE obscures interpretation.
+
+## 2c. Spatial R² raw CSE with sampling effort neutralized 
+Sampling effort was retained during spatial evaluation due to its predictive value for CSE. Below we show that replacing env_path$samp_20km values with mean sampling density does not improve the model's predictive performance.
+
+```{r neutralizing-samp-effort, eval = FALSE}
+# Load full model
+rf_model_full <- readRDS(file.path(results_dir, "rf_mean18_tuned.rds"))
+
+# Load pre-extracted path-level env data
+path_env_list <- readRDS(file.path(output_dir, "path_env_list.rds"))
+env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+
+# Load prepared file of least-cost paths (already filtered to 67 sites and has CSEdistance)
+lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp"))
+st_crs(lcp_sf) <- crs_geo# Initialize output
+fullmodel_preds <- data.frame()
+
+# Define region based on Var1 
+Gff <- read.csv("../input/Gff_11loci_allsites_indinfo.txt", header=TRUE, sep = "\t")
+north_sites <- Gff$SiteCode[Gff$SiteMajCluster == "north"]
+
+# Initialize output again
+fullmodel_preds <- data.frame()
+
+# Loop over all path pairs
+for (row in seq_len(nrow(lcp_sf))) {
+  pair_id <- lcp_sf$id[row]
+  env_path <- path_env_list[[pair_id]]
+  names(env_path) <-  c("BIO1", "BIO2", "BIO3", "BIO4", "BIO5", "BIO6", "BIO7", "BIO8S","BIO9S", "BIO10S", "BIO11S", "BIO12", "BIO13", "BIO14", "BIO15", "BIO16S","BIO17S", "BIO18S", "BIO19S", "alt","slope", "riv_3km","samp_20km","lakes","pix_dist")
+  env_path$samp_20km <- 1.027064e-11 # neutralize sampling bias 
+  if (is.null(env_path) || nrow(env_path) == 0 || all(!complete.cases(env_path))) next
+
+  pred_vals <- predict(rf_model_full, newdata = env_path)
+  geo_dist <- sum(env_path$pix_dist, na.rm = TRUE)
+  pred_mean <- sum(pred_vals, na.rm = TRUE) / geo_dist
+
+  # Assign region (example: based on Var1)
+  site1 <- lcp_sf$Var1[row]
+  region <- if (site1 %in% north_sites) "North" else "South"
+
+  # Use region-specific intercept and slope
+  if (region == "North") {
+    intercept <- 0.2747140
+    slope <- 0.0006429
+  } else {
+    intercept <- 0.2931063
+    slope <- 0.0008329
+  }
+
+  pred_CSE_IBD <- intercept + slope * geo_dist + pred_mean
+
+  fullmodel_preds <- rbind(fullmodel_preds, data.frame(
+    id = pair_id,
+    Var1 = site1,
+    Var2 = lcp_sf$Var2[row],
+    Region = region,
+    true_CSE = lcp_sf$CSE[row],
+    pred_CSE = pred_mean,
+    pred_IBD = pred_CSE_IBD
+  ))
+}
+
+eval_metrics <- function(true, predicted) {
+  resids <- true - predicted
+  ss_res <- sum(resids^2, na.rm = TRUE)
+  ss_tot <- sum((true - mean(true, na.rm = TRUE))^2, na.rm = TRUE)
+  rsq <- 1 - ss_res / ss_tot
+  rmse <- sqrt(mean(resids^2, na.rm = TRUE))
+  mae <- mean(abs(resids), na.rm = TRUE)
+  cor_val <- cor(true, predicted, use = "complete.obs")
+  data.frame(R2 = rsq, RMSE = rmse, MAE = mae, Correlation = cor_val)
+}
+
+metrics_pred_only <- eval_metrics(fullmodel_preds$true_CSE, fullmodel_preds$pred_CSE)
+metrics_pred_only
+
+ggplot(fullmodel_preds, aes(x = true_CSE, y = pred_CSE)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1.2) +
+  ylim(0, 1.2) +
+  theme_minimal() +
+  labs(title = "Predicted vs Observed CSE (CSE)",
+       x = "Observed CSE", y = "Predicted CSE (path-mean neutralized")
+
+metrics_IBD_adjusted <- eval_metrics(fullmodel_preds$true_CSE, fullmodel_preds$pred_IBD)
+metrics_IBD_adjusted
+
+ggplot(fullmodel_preds, aes(x = true_CSE, y = pred_IBD)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1.2) +
+  ylim(0, 1.2) +
+  theme_minimal() +
+  labs(title = "Predicted vs Observed CSE (CSE)",
+       x = "Observed CSE", y = "Predicted CSE (IBD-adjusted-neutralized)")
+
+# Post-hoc linear calibration
+cal_model <- lm(true_CSE ~ pred_IBD, data = fullmodel_preds)
+summary(cal_model)
+fullmodel_preds$pred_CSE_calibrated <- predict(cal_model)
+
+metrics_IBD_calibrated <- eval_metrics(fullmodel_preds$true_CSE, fullmodel_preds$pred_CSE_calibrated)
+metrics_IBD_calibrated 
+
+ggplot(fullmodel_preds, aes(x = true_CSE, y = pred_CSE_calibrated)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1.2) +
+  ylim(0, 1.2) +
+  theme_minimal() +
+  labs(title = "Predicted vs Observed CSE (CSE)",
+       x = "Observed CSE", y = "Predicted CSE (IBD-adjusted-calibrated-neutralized)")
+```
+
+# 3. Spatial LOPOCV with IBD adjustment
+
+Conceptual Integration of IBD Adjustment into **Spatial LOPOCV**
+1. LOPOCV pipeline now... For each LOPOCV fold:  
+ - Train a model leaving out one site.
+ - Predict CSE across paths involving that site.
+ - Sum/Mean predictions across each path → predicted_CSE.
+ - Compare to true_CSE.
+
+2. Why IBD adjustment is needed  
+ - During **spatial evaluation**, the full model shows consistent under- or over-estimation because the effect of geographic distance is removed in the prediction raster (due to nullified pix_dist, geographic distance is always ZERO).
+ - This leads to systematic bias, which you correct post hoc using linear IBD models.  
+ 
+3. How to Apply IBD Adjustment to **Spatial LOPOCV**... For each LOPOCV fold: 
+ - Train a model leaving out one site, already done.
+ - Compute least-cost-paths from full model, already done.
+ - Predict CSE across paths involving that site.
+ - Mean pixel-level predictions across each path → pred_mean
+ - Note: Mean is the same as per-unit predicted CSE, raw_sum of prediction / geo_dist  
+ - Compute total geographic distance → geo_dist = sum of pix_dist along path  
+ - Adjust: Use geo_dist to apply IBD adjustment where pred_mean is acting as the residuals for the IBD linear model:
+     - Determine region (e.g., north or south) based on site location
+    - Use region-specific IBD model (intercept & slope) to get: pred_IBD = intercept + slope * geo_dist + pred_mean
+ - Calibrate: Fit the calibration model using the training predictions only:  
+ - lm(true_CSE ~ pred_IBD, data = training_df)
+ - Apply the calibration model to the testing predictions only.
+ - Evaluate R²/RMSE/MAE using the calibrated predictions (calibration was estimated with training paths only, and applied to testing paths only).
+ 
+**NOTE:** I wonder if training the model on the residuals from the IBD analysis as the response variable instead of raw CSE may be a more straight forward way to deal with geographic distance, although you would loose the ability to understand impact of geographic distance in the overall RF model, and so may get lower performance in the non-spatial evaluations. Something to think about!!! 
+
+**NOTE:** eval = FALSE so that it skips on knit
+```{r spatial-lopocv-ibd, eval = FALSE}
+# Spatial LOPOCV with IBD adjustment and per-fold calibration
+n_cores <- 8
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+# Load inputs
+path_env_list <- readRDS(file.path(output_dir, "path_env_list.rds"))
+lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp"))
+st_crs(lcp_sf) <- crs_geo
+
+# Define northern sites
+Gff <- read.csv("../input/Gff_11loci_allsites_indinfo.txt", sep = "\t")
+north_sites <- Gff$SiteCode[Gff$SiteMajCluster == "north"]
+
+# Output storage
+metrics_calibrated <- foreach(fold_idx = seq_along(sites), .combine = rbind,
+  .packages = c("dplyr", "randomForest")) %dopar% {
+
   rf_model <- readRDS(sprintf("%s/lopocv/rf_model_%02d.rds", results_dir, fold_idx))
-
+  test_site <- sites[fold_idx]
   fold_df <- data.frame()
 
-  for (row in seq_len(nrow(V.table))) {
-    pair_id <- V.table$id[row]
+  for (row in seq_len(nrow(lcp_sf))) {
+    pair_id <- lcp_sf$id[row]
     env_path <- path_env_list[[pair_id]]
-    if (is.null(env_path)) next
+    if (is.null(env_path) || nrow(env_path) == 0 || all(!complete.cases(env_path))) next
 
     pred_vals <- predict(rf_model, newdata = env_path)
-    pred_sum <- sum(pred_vals, na.rm = TRUE)
+    geo_dist <- sum(env_path$pix_dist, na.rm = TRUE)
+    pred_mean <- sum(pred_vals, na.rm = TRUE) / geo_dist
+
+    site1 <- lcp_sf$Var1[row]
+    
+    # Use region-specific intercept and slope for raw CSE fit to geodist in km
+    if (region == "North") {
+      intercept <- 0.2747140
+      slope <- 0.0006429
+    } else {
+      intercept <- 0.2931063
+      slope <- 0.0008329
+    }
+
+    pred_IBD <- intercept + slope * geo_dist + pred_mean
 
     fold_df <- rbind(fold_df, data.frame(
       Fold = fold_idx,
-      Var1 = V.table$Var1[row],
-      Var2 = V.table$Var2[row],
+      Var1 = site1,
+      Var2 = lcp_sf$Var2[row],
       id = pair_id,
-      predicted_CSE = pred_sum,
-      true_CSE = V.table$CSEdistance[row]
+      geo_dist = geo_dist,
+      region = region,
+      true_CSE = lcp_sf$CSE[row],
+      pred_CSE = pred_mean,
+      pred_IBD = pred_IBD
     ))
   }
 
-  test_ids <- V.table$id[V.table$Var1 == sites[fold_idx] | V.table$Var2 == sites[fold_idx]]
-  fold_test <- fold_df[fold_df$id %in% test_ids, ]
+  test_ids <- fold_df$id[fold_df$Var1 == test_site | fold_df$Var2 == test_site]
+  train_df <- fold_df[!fold_df$id %in% test_ids, ]
+  test_df  <- fold_df[fold_df$id %in% test_ids, ]
 
-  # Compute evaluation metrics
-  ss_res <- sum((fold_test$true_CSE - fold_test$predicted_CSE)^2, na.rm = TRUE)
-  ss_tot <- sum((fold_test$true_CSE - mean(fold_test$true_CSE, na.rm = TRUE))^2)
-  rsq_test <- 1 - ss_res / ss_tot
-  rmse <- sqrt(mean((fold_test$true_CSE - fold_test$predicted_CSE)^2, na.rm = TRUE))
-  mae <- mean(abs(fold_test$true_CSE - fold_test$predicted_CSE), na.rm = TRUE)
-  cor_test <- cor(fold_test$true_CSE, fold_test$predicted_CSE, use = "complete.obs")
+  cal_model <- lm(true_CSE ~ pred_IBD, data = train_df)
+  test_df$pred_CSE_calibrated <- predict(cal_model, newdata = test_df)
+
+  ss_res <- sum((test_df$true_CSE - test_df$pred_CSE_calibrated)^2, na.rm = TRUE)
+  ss_tot <- sum((test_df$true_CSE - mean(test_df$true_CSE, na.rm = TRUE))^2)
+  rsq <- 1 - ss_res / ss_tot
+  rmse <- sqrt(mean((test_df$true_CSE - test_df$pred_CSE_calibrated)^2, na.rm = TRUE))
+  mae <- mean(abs(test_df$true_CSE - test_df$pred_CSE_calibrated), na.rm = TRUE)
+  cor_val <- cor(test_df$true_CSE, test_df$pred_CSE_calibrated, use = "complete.obs")
 
   data.frame(
-    site = sites[fold_idx],
-    rsq_test = rsq_test,
+    site = test_site,
+    rsq_test = rsq,
     rmse = rmse,
     mae = mae,
-    cor_test = cor_test
+    cor_test = cor_val
   )
 }
 
-# Stop cluster
 stopCluster(cl)
 
-# Save metrics for real (observed) models
-write.csv(metrics_real, file.path(results_dir, "spatial_LOPOCV_summary.csv"), row.names = FALSE)
-write.csv(metrics_real, file.path("../results", "spatial_LOPOCV_summary.csv"), row.names = FALSE)
-
+# Save
+write.csv(metrics_calibrated, file.path(results_dir, "spatial_LOPOCV_calibrated_summary.csv"), row.names = FALSE)
 ```
 
 # 3. Visualize Spatial LOPOCV results
 ```{r visualize}
 # Load LOPOCV summary if not already in memory
-if (!exists("metrics_all")) {
-  metrics_all <- read.csv("../results/spatial_LOPOCV_summary.csv")
-}
+metrics_all <- read.csv(file.path(results_dir, "spatial_LOPOCV_calibrated_summary.csv"))
 
 # Load raster for extent
 altitude <- raster::raster(file.path(
@@ -253,12 +655,33 @@ ggplot(site_metadata, aes(x = rsq_test, fill = Subcluster)) +
 site_metadata$Cluster <- site_metadata$Subcluster
 site_metadata$Cluster[site_metadata$Subcluster == "west"]  <- "south"
 
+# Plot LOPOCV R² by site just N/S
+ggplot() +
+  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.5) +
+  geom_sf(data = lakes, fill = "gray80", color = NA) +
+
+  geom_point(data = filter(site_metadata, Symbol == "circle"),
+             aes(x = Longitude, y = Latitude, size = rsq_test, fill = Cluster),
+             shape = 21, color = "black", stroke = 0.3) +
+
+  geom_point(data = filter(site_metadata, Symbol == "low"),
+             aes(x = Longitude, y = Latitude, color = Cluster),
+             shape = 8, size = 3) +
+
+  scale_fill_manual(name = "Cluster", values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  scale_color_manual(name = "Cluster", values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  scale_size_continuous(name = "Test R²", range = c(2, 6)) +
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
+  theme_minimal() +
+  theme(panel.grid = element_blank()) +
+  labs(title = "Spatial LOPOCV Test R² by Site", x = "Longitude", y = "Latitude")
+
 # Overlapping density plot just S/N
 ggplot(site_metadata, aes(x = rsq_test, fill = Cluster)) +
   geom_density(alpha = 0.5, color = NA) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
-  labs(title = "Distribution of Test R² by Subcluster",
+  labs(title = "Distribution of Test R² by Cluster",
        x = "Test R² (Spatial LOPOCV)", y = "Density")
 
 # Overlapping count plot just S/N
@@ -266,7 +689,7 @@ ggplot(site_metadata, aes(x = rsq_test, fill = Cluster)) +
   geom_density(alpha = 0.5, color = NA, position = "identity", aes(y = ..count..)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
-  labs(title = "Test R² by Subcluster (Scaled by Count)",
+  labs(title = "Test R² by Cluster (Scaled by Count)",
        x = "Test R² (Spatial LOPOCV)",
        y = "Count")
 ```
@@ -277,106 +700,120 @@ GOAL: Create a 67 x 100 matrix where each cell is the rsq_test value for one LOP
 
 ## For each permutation/fold: predict only on path data
 **NOTE:** eval = FALSE so that it skips on knit
-```{r perm-spatial-lopocv, eval = FALSE}
-# Set number of cores and register cluster
+```{r perm-spatial-lopocv-calibrated, eval = FALSE}
 n_cores <- 8
 cl <- makeCluster(n_cores)
 registerDoParallel(cl)
 
-# Load pre-extracted path-level env data
+# Load inputs
 path_env_list <- readRDS(file.path(output_dir, "path_env_list.rds"))
+lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp"))
+st_crs(lcp_sf) <- crs_geo
 
-# Parallel over 100 permutations, each handling all 67 folds (LOPOCV models) internally
+# Define northern sites
+Gff <- read.csv("../input/Gff_11loci_allsites_indinfo.txt", sep = "\t")
+north_sites <- Gff$SiteCode[Gff$SiteMajCluster == "north"]
+
 metrics_perm_list <- foreach(p = 1:100, .packages = c("dplyr", "randomForest")) %dopar% {
-  
   metrics_all <- data.frame()
-  
-  # Loop over LOPOCV folds (per 100 permuted models)
+
   for (fold_idx in seq_along(sites)) {
     rf_model <- readRDS(sprintf("/scratch/general/vast/u6036559/rf_model_perm_%02d_fold_%02d.rds", p, fold_idx))
-    
+    test_site <- sites[fold_idx]
     fold_df <- data.frame()
-    
-    for (row in seq_len(nrow(V.table))) {
-      pair_id <- V.table$id[row]
+
+    for (row in seq_len(nrow(lcp_sf))) {
+      pair_id <- lcp_sf$id[row]
       env_path <- path_env_list[[pair_id]]
-      if (is.null(env_path)) next
-      
+      if (is.null(env_path) || nrow(env_path) == 0 || all(!complete.cases(env_path))) next
+
       pred_vals <- predict(rf_model, newdata = env_path)
-      pred_sum <- sum(pred_vals, na.rm = TRUE)
-      
+      geo_dist <- sum(env_path$pix_dist, na.rm = TRUE)
+      pred_mean <- sum(pred_vals, na.rm = TRUE) / geo_dist
+
+      site1 <- lcp_sf$Var1[row]
+      region <- if (site1 %in% north_sites) "North" else "South"
+
+      if (region == "North") {
+        intercept <- 0.2747140
+        slope <- 0.0006429
+      } else {
+        intercept <- 0.2931063
+        slope <- 0.0008329
+      }
+
+      pred_IBD <- intercept + slope * geo_dist + pred_mean
+
       fold_df <- rbind(fold_df, data.frame(
         Fold = fold_idx,
-        Var1 = V.table$Var1[row],
-        Var2 = V.table$Var2[row],
+        Var1 = site1,
+        Var2 = lcp_sf$Var2[row],
         id = pair_id,
-        predicted_CSE = pred_sum,
-        true_CSE = V.table$CSEdistance[row]
+        geo_dist = geo_dist,
+        region = region,
+        true_CSE = lcp_sf$CSE[row],
+        pred_CSE = pred_mean,
+        pred_IBD = pred_IBD
       ))
     }
 
-    test_ids <- V.table$id[V.table$Var1 == sites[fold_idx] | V.table$Var2 == sites[fold_idx]]
-    fold_test <- fold_df[fold_df$id %in% test_ids, ]
+    test_ids <- fold_df$id[fold_df$Var1 == test_site | fold_df$Var2 == test_site]
+    train_df <- fold_df[!fold_df$id %in% test_ids, ]
+    test_df  <- fold_df[fold_df$id %in% test_ids, ]
 
-    ss_res <- sum((fold_test$true_CSE - fold_test$predicted_CSE)^2, na.rm = TRUE)
-    ss_tot <- sum((fold_test$true_CSE - mean(fold_test$true_CSE, na.rm = TRUE))^2)
+    cal_model <- lm(true_CSE ~ pred_IBD, data = train_df)
+    test_df$pred_CSE_calibrated <- predict(cal_model, newdata = test_df)
+
+    ss_res <- sum((test_df$true_CSE - test_df$pred_CSE_calibrated)^2, na.rm = TRUE)
+    ss_tot <- sum((test_df$true_CSE - mean(test_df$true_CSE, na.rm = TRUE))^2)
     rsq_test <- 1 - ss_res / ss_tot
-    rmse <- sqrt(mean((fold_test$true_CSE - fold_test$predicted_CSE)^2, na.rm = TRUE))
-    mae <- mean(abs(fold_test$true_CSE - fold_test$predicted_CSE), na.rm = TRUE)
-    cor_test <- cor(fold_test$true_CSE, fold_test$predicted_CSE, use = "complete.obs")
+    rmse <- sqrt(mean((test_df$true_CSE - test_df$pred_CSE_calibrated)^2, na.rm = TRUE))
+    mae <- mean(abs(test_df$true_CSE - test_df$pred_CSE_calibrated), na.rm = TRUE)
+    cor_val <- cor(test_df$true_CSE, test_df$pred_CSE_calibrated, use = "complete.obs")
 
     metrics_all <- rbind(metrics_all, data.frame(
       permutation = p,
-      site = sites[fold_idx],
+      site = test_site,
       rsq_test = rsq_test,
       rmse = rmse,
       mae = mae,
-      cor_test = cor_test
+      cor_test = cor_val
     ))
   }
 
-  # Save each permutation's results as CSV
   write.csv(metrics_all,
-            file.path(output_dir, sprintf("spatial_perm_LOPOCV_%03d.csv", p)),
+            file.path(output_dir, sprintf("spatial_perm_LOPOCV_calibrated_%03d.csv", p)),
             row.names = FALSE)
 
-  return(NULL)  # return nothing, written to file instead
+  return(NULL)
 }
 
-# Stop cluster
 stopCluster(cl)
+message("Calibrated permutation-based spatial LOPOCV complete.")
 
-# Done
-message("Permutation matrix for spatial eval created and saved.")
-
-# Combine spatial permutation results into rsq matrix "rsq_null_spatial"
+# Combine into rsq matrix
 n_sites <- length(sites)
 n_perms <- 100
 rsq_null_spatial <- matrix(NA, nrow = n_sites, ncol = n_perms)
 rownames(rsq_null_spatial) <- sites
 colnames(rsq_null_spatial) <- paste0("perm_", 1:n_perms)
 
-# Loop through saved CSVs and fill matrix
 for (p in 1:n_perms) {
-  perm_file <- file.path(output_dir, sprintf("spatial_perm_LOPOCV_%03d.csv", p))
+  perm_file <- file.path(output_dir, sprintf("spatial_perm_LOPOCV_calibrated_%03d.csv", p))
   if (!file.exists(perm_file)) {
     warning(sprintf("File missing: %s", perm_file))
     next
   }
 
   df <- read.csv(perm_file)
-  
-  # Match site ordering to ensure alignment
   df <- df[match(sites, df$site), ]
-  
   rsq_null_spatial[, p] <- df$rsq_test
 }
 
-# Save final matrix to CSV
-write.csv(rsq_null_spatial, file.path(output_dir, "rsq_spatial_LOPOCV_null_matrix.csv"), row.names = TRUE)
-write.csv(rsq_null_spatial, "../results/rsq_spatial_LOPOCV_null_matrix.csv", row.names = TRUE)
+write.csv(rsq_null_spatial, file.path(output_dir, "rsq_spatial_LOPOCV_calibrated_null_matrix.csv"), row.names = TRUE)
+write.csv(rsq_null_spatial, "../results/rsq_spatial_LOPOCV_calibrated_null_matrix.csv", row.names = TRUE)
 
-message("67 x 100 spatial R² matrix saved.")
+message("Calibrated 67 x 100 spatial R² null matrix saved.")
 ```
 
 # 4. Compute Empirical p-values
@@ -385,8 +822,11 @@ GOAL: Run wilcox.test() for each column of rsq_null_spatial... This provides a d
 ## Plot the distribution of observed/permuted R² values 
 ```{r plot-r2-spatial}
 # Load permuted R² matrix and convert to long format
-rsq_null_spatial_mat <- as.matrix(read.csv("../results/rsq_spatial_LOPOCV_null_matrix.csv"))
+rsq_null_spatial_mat <- as.matrix(read.csv("../results/rsq_spatial_LOPOCV_calibrated_null_matrix.csv"))
 rsq_null_spatial_long <- as.vector(rsq_null_spatial_mat)
+
+# Load LOPOCV summary if not already in memory
+metrics_all <- read.csv(file.path(results_dir, "spatial_LOPOCV_calibrated_summary.csv"))
 rsq_obs <- metrics_all$rsq_test
 
 # Build data frame for plotting

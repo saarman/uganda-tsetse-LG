@@ -67,7 +67,7 @@ tr <- transition(1/resistance_rast, transitionFunction = mean, directions = 16)
 tr_corr <- geoCorrection(tr, type = "c")
 
 # Load V.table (after filtering)
-V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
+V.table_full <- read.csv("../input/Gff_cse_envCostPaths.csv")
 V.table <- V.table_full %>%
   filter(Var1 != "50-KB", Var2 != "50-KB") %>%
   filter(Pop1_cluster == Pop2_cluster) %>%
@@ -116,12 +116,18 @@ stopCluster(cl)
 # Combine list into single sf object
 paths_sf <- do.call(rbind, paths_list)
 st_crs(paths_sf) <- st_crs(resistance_rast)
+paths_sf <- st_transform(paths_sf, crs = st_crs(crs_geo))
+
+# Join CSEdistance from V.table into lcp_sf
+paths_sf <- left_join(paths_sf, V.table[, c("id", "CSEdistance")], by = "id")
+paths_sf <- paths_sf %>%
+  rename(CSE = CSEdistance) # note rename!!!
 
 # Save to shapefile
 st_write(paths_sf, file.path(results_dir, "LC_paths_fullRF.shp"), delete_layer = TRUE)
 
 ```
-# Visualize LCPs
+# Visualize Least Cost Paths
 ```{r map-paths}
 # Load shapefile of least-cost paths
 lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp")) 
@@ -135,6 +141,9 @@ lakes <- ne_download(scale = 10, type = "lakes", category = "physical", returncl
 
 # (Optional) Load resistance raster for background
 resistance_rast <- raster(file.path(results_dir, "fullRF_CSE_resistance.tif"))
+
+xlim <- c(28.6, 35.4)
+ylim <- c(-1.500000 , 4.733333)
 
 # Basic plot with paths and country
 ggplot() +

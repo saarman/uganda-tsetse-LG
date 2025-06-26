@@ -221,16 +221,22 @@ for (region in c("north","south")) {
 
 Filter out any Gff$Cluster == nogroup to avoid admixed individuals, which will inflate the genetic distance within each geographic region.  
 
+Filter out 50-KB because it is so geographically separate and Beadell's mtDNA sequence data shows it is distinct.
+
 Filtering for only largest/most complete genetic sample from each 5 km radius for gps within each Gff$SiteMajCluster independently so that we get best samples from both north and south of the river/Lake Kyoga dividing north and south. 
 
 ```{r distm}
 # Create filtered copy of Gff excluding 'nogroup'
 Gff_filt <- Gff[Gff$Cluster != "nogroup", ]
 
+# Remove "50-KB"
+Gff_filt <- Gff[Gff$SiteCode != "50-KB", ]
+
 # Ensure Gff$SiteCode matches pop(Gff.genind)
 Gff_filt$SiteCode <- as.character(Gff_filt$SiteCode)
 pop_names <- as.character(pop(Gff.genind))
-if (!all(pop_names == Gff_filt$SiteCode)) {
+
+if (!all(Gff_filt$SiteCode %in% pop_names)) {
   Gff_filt <- Gff_filt[match(pop_names, Gff_filt$SiteCode), ]
   stopifnot(all(as.character(pop(Gff.genind)) == Gff_filt$SiteCode))
 }
@@ -541,7 +547,7 @@ south_df <- south_df[, c(
 cse_combined <- rbind(north_df, south_df)
 
 # Save to CSV
-#write.csv(cse_combined, "../input/Gff_11loci_68sites_cse.csv", row.names = FALSE)
+#write.csv(cse_combined, "../input/Gff_11loci_67sites_cse.csv", row.names = FALSE)
 
 # View the first few rows
 head(cse_combined)
@@ -644,6 +650,8 @@ cse_figure
 
 # Isolation by Distance & Mantel tests  
 ```{r ibd}
+cse_combined <- read.csv("../input/Gff_11loci_67sites_cse.csv")
+
 cse_combined <- cse_combined %>%
   mutate(
     geo_km = distHaversine(
@@ -667,6 +675,7 @@ for (i in seq_len(nrow(north_df))) {
 gen_dist_n <- as.dist(mat_gen_n)
 geo_dist_n <- as.dist(mat_geo_n)
 mt_n       <- mantel.rtest(gen_dist_n, geo_dist_n, nrepet = 999)
+mt_n
 
 # Southern cluster
 south_df  <- filter(cse_combined, Pop1_cluster == "Southern", Pop2_cluster == "Southern")
@@ -683,6 +692,7 @@ for (i in seq_len(nrow(south_df))) {
 gen_dist_s <- as.dist(mat_gen_s)
 geo_dist_s <- as.dist(mat_geo_s)
 mt_s       <- mantel.rtest(gen_dist_s, geo_dist_s, nrepet = 999)
+mt_s
 
 # panel labels
 label_A <- "A. Northern Mantel test (p < 0.001)"
@@ -712,7 +722,8 @@ plot(
 )
 mtext(label_B, side = 3, line = 0.5, font = 2, adj = 0)
 abline(lm(as.vector(gen_dist_n) ~ as.vector(geo_dist_n)), col = "red")
-
+lm(as.vector(gen_dist_n) ~ as.vector(geo_dist_n))
+   
 # C: Southern null distribution
 plot(mt_s, main = "", xlab = "sim")
 mtext(label_C, side = 3, line = 0.5, font = 2, adj = 0)
@@ -728,11 +739,114 @@ plot(
 )
 mtext(label_D, side = 3, line = 0.5, font = 2, adj = 0)
 abline(lm(as.vector(gen_dist_s) ~ as.vector(geo_dist_s)), col = "red")
-
+lm(as.vector(gen_dist_s) ~ as.vector(geo_dist_s))
+   
 ibd_figure <- recordPlot()
 # Display plots of IBD
 #pdf("../figures/ibd_mantel.pdf",width=6.5,height=6.5)
-#ibd_figure
+ibd_figure
+#dev.off()  
+```
+# Isolation by Distance & Mantel tests for scaled CSE
+```{r ibd-scaled}
+cse_combined <- read.csv("../input/Gff_11loci_67sites_cse.csv")
+
+cse_combined <- cse_combined %>%
+  mutate(
+    geo_km = distHaversine(
+      cbind(long1, lat1),
+      cbind(long2, lat2)
+    ) / 1000
+  )
+
+max_CSE <- max(cse_combined$CSEdistance, na.rm = TRUE)
+cse_combined$CSE_scaled <- cse_combined$CSEdistance / max_CSE
+
+# Northern cluster
+north_df  <- filter(cse_combined, Pop1_cluster == "Northern", Pop2_cluster == "Northern")
+pops_n    <- sort(unique(c(north_df$Var1, north_df$Var2)))
+mat_gen_n <- matrix(0, length(pops_n), length(pops_n), dimnames = list(pops_n, pops_n))
+mat_geo_n <- mat_gen_n
+for (i in seq_len(nrow(north_df))) {
+  v1 <- north_df$Var1[i]; v2 <- north_df$Var2[i]
+  mat_gen_n[v1, v2] <- north_df$CSE_scaled[i]
+  mat_gen_n[v2, v1] <- north_df$CSE_scaled[i]
+  mat_geo_n[v1, v2] <- north_df$geo_km[i]
+  mat_geo_n[v2, v1] <- north_df$geo_km[i]
+}
+gen_dist_n <- as.dist(mat_gen_n)
+geo_dist_n <- as.dist(mat_geo_n)
+mt_n       <- mantel.rtest(gen_dist_n, geo_dist_n, nrepet = 999)
+mt_n
+
+# Southern cluster
+south_df  <- filter(cse_combined, Pop1_cluster == "Southern", Pop2_cluster == "Southern")
+pops_s    <- sort(unique(c(south_df$Var1, south_df$Var2)))
+mat_gen_s <- matrix(0, length(pops_s), length(pops_s), dimnames = list(pops_s, pops_s))
+mat_geo_s <- mat_gen_s
+for (i in seq_len(nrow(south_df))) {
+  v1 <- south_df$Var1[i]; v2 <- south_df$Var2[i]
+  mat_gen_s[v1, v2] <- south_df$CSE_scaled[i]
+  mat_gen_s[v2, v1] <- south_df$CSE_scaled[i]
+  mat_geo_s[v1, v2] <- south_df$geo_km[i]
+  mat_geo_s[v2, v1] <- south_df$geo_km[i]
+}
+gen_dist_s <- as.dist(mat_gen_s)
+geo_dist_s <- as.dist(mat_geo_s)
+mt_s       <- mantel.rtest(gen_dist_s, geo_dist_s, nrepet = 999)
+mt_s
+
+# panel labels
+label_A <- "A. Northern Mantel test (p < 0.001)"
+label_B <- sprintf("B. Northern correlation (r = %.2f)", mt_n$obs)
+label_C <- "C. Southern Mantel test (p < 0.001)"
+label_D <- sprintf("D. Southern correlation (r = %.2f)", mt_s$obs)
+
+# 2×2 layout, reading rows left-to-right
+par(
+  mfrow = c(2, 2),
+  mar   = c(4, 4, 2, 1),
+  mgp   = c(1.5, .4, 0)  # axis title, label, line
+)
+
+# A: Northern null distribution
+plot(mt_n, main = "", xlab = "Simulated r values")
+mtext(label_A, side = 3, line = 0.5, font =2, adj = 0)
+
+# B: Northern scatter
+plot(
+  as.vector(geo_dist_n),
+  as.vector(gen_dist_n),
+  pch  = 20,
+  xlab = "Geographic distance (km)",
+  ylab = "Genetic distance (CSE)",
+  main = ""
+)
+mtext(label_B, side = 3, line = 0.5, font = 2, adj = 0)
+abline(lm(as.vector(gen_dist_n) ~ as.vector(geo_dist_n)), col = "red")
+lm(as.vector(gen_dist_n) ~ as.vector(geo_dist_n))
+   
+# C: Southern null distribution
+plot(mt_s, main = "", xlab = "sim")
+mtext(label_C, side = 3, line = 0.5, font = 2, adj = 0)
+
+# D: Southern scatter
+plot(
+  as.vector(geo_dist_s),
+  as.vector(gen_dist_s),
+  pch  = 20,
+  xlab = "Geographic distance (km)",
+  ylab = "Genetic distance (CSE)",
+  main = ""
+)
+mtext(label_D, side = 3, line = 0.5, font = 2, adj = 0)
+abline(lm(as.vector(gen_dist_s) ~ as.vector(geo_dist_s)), col = "red")
+lm(as.vector(gen_dist_s) ~ as.vector(geo_dist_s))
+   
+ibd_figure <- recordPlot()
+# Display plots of IBD
+#pdf("../figures/ibd_mantel_scaled.pdf",width=6.5,height=6.5)
+ibd_figure
 #dev.off()  
 ```
 
