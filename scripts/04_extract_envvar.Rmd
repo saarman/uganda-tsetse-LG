@@ -35,6 +35,8 @@ library(future.apply)
 # base directories
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
 input_dir <- "../input"
+results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results"
+
 
 # read the combined CSE + coords table
 G.table <- read.csv(file.path(input_dir, "Gff_11loci_68sites_cse.csv"),
@@ -139,6 +141,7 @@ writeRaster(envstack,
             filename = file.path(data_dir, "processed", "env_stack.tif"),
             format = "GTiff",
             overwrite = FALSE)
+
 write.csv(names(envstack),file.path(data_dir, "processed", "env_stack_layers.csv"))
 ```
 ## Plot as a check an for fun :) 
@@ -150,7 +153,93 @@ plot(envstack, axes = FALSE, box = FALSE, frame.plot = FALSE, maxnl = nlayers(en
 plot(envstack[["slope"]], axes = FALSE, box = FALSE, frame.plot = FALSE)
 ```
 
-# 2. Extract mean, median, mode for each env summaries in parallel
+# 2. Load forecast RCP 4.5 environmental rasters  
+```{r, forecast-rasters}
+# define WGS84 CRS
+crs_geo <- "+proj=longlat +datum=WGS84 +no_defs"
+
+# load seasonal BioClim stack and assign CRS
+envvars1 <- stack(
+  file.path(data_dir, "forecasts", "UgandaBiovarsSeasonalFuture.tif"))
+crs(envvars1) <- crs_geo
+plot(envvars1)
+names(envvars1) <- c(paste0("BIO", 8:11, "S"), paste0("BIO", 16:19, "S"))
+
+# load additional BioClim layers (annual, monthly, etc) and assign CRS
+envvars2 <- stack(
+  file.path(data_dir, "forecasts","UgandaBiovarsFuture.tif"))
+crs(envvars2) <- crs_geo
+plot(envvars2)
+names(envvars2) <- paste0("BIO",c(1:19))
+
+# combine envvars in order
+envvars <- raster::stack(envvars2[[1:7]],envvars1[[1:4]],envvars2[[12:15]],envvars1[[5:8]])
+
+# load elevation and slope rasters
+altitude <- raster(
+  file.path(data_dir, "processed", "altitude_1KMmedian_MERIT_UgandaClip.tif"))
+crs(altitude) <- crs_geo
+names(altitude) <- "alt"
+
+slope <- raster(
+  file.path(data_dir, "processed", "slope_1KMmedian_MERIT_UgandaClip.tif"))
+crs(slope) <- crs_geo
+names(slope) <- "slope"
+
+# load river and sampling kernels
+rivers <- raster(
+  file.path(data_dir, "processed", "river_kernel_density_3km.tif"))
+crs(rivers) <- crs_geo
+names(rivers) <- "riv_3km" 
+
+kernel <- raster(
+  file.path(data_dir, "processed", "sample_kernel_density_20km.tif"))
+crs(kernel) <- crs_geo
+names(kernel) <- "samp_20km" 
+
+# load lake binary layer
+lakeRaster <- raster(
+  file.path(data_dir, "processed", "lake_binary.tif"))
+crs(lakeRaster) <- crs_geo
+names(lakeRaster) <- "lakes"
+
+# load uniform geo‐distance raster
+geo_dist <- raster(
+  file.path(data_dir, "processed", "geo_dist_uniform.tif"))
+crs(geo_dist) <- crs_geo
+names(geo_dist) <- "pix_dist"
+
+# Stack all for extracting mean/median/mode
+env <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster)
+plot(env, maxnl = nlayers(env), axes = FALSE, box = FALSE, frame.plot = FALSE)
+
+# Save to File: full env stack including pix_dist
+## for later projection, need all layers
+envstack <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster, geo_dist)
+
+
+# Double check extent/cropping/CRS is same as current
+envBase <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+  
+envstack <- crop(envstack, envBase)
+envstack <- mask(envstack, envBase)
+
+# write to file as .grd to retain layer names
+writeRaster(envstack,
+            filename = file.path(data_dir, "processed", "env_stack_RCP4_5.grd"),
+            format = "raster",
+            overwrite = TRUE)
+
+# write to file as .tif as backup
+writeRaster(envstack,
+            filename = file.path(data_dir, "processed", "env_stack_RCP4_5.tif"),
+            format = "GTiff",
+            overwrite = TRUE)
+
+write.csv(names(envstack),file.path(data_dir, "processed", "env_stack_layers_RCP4_5.csv"))
+```
+
+# 3. Extract mean, median, mode for each env summaries in parallel
 ```{r extract, eval=FALSE}
 # assumes shape file of least-cost paths have already been created
 lines_sf <- st_read(file.path(data_dir,"processed","LC_paths.shp"), quiet=TRUE)

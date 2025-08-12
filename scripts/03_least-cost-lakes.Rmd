@@ -125,7 +125,7 @@ lines_sf
 ```
 Plot least cost paths with Uganda outline and lakes to check behavior
 ```{r plot_least_cost_paths, fig.cap="Least‐cost paths colored by CSE", warning=FALSE}
-# assumes shape file of least-cost paths have already been created
+# assumes shape file of lake least-cost paths have already been created
 lines_sf <- st_read(file.path(data_dir,"processed","LC_paths.shp"), quiet=TRUE)
 
 # This was added only after completing LOPOCV...

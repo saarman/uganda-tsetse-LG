@@ -25,6 +25,11 @@ library(raster)
 library(sf)
 library(viridis)
 library(dplyr)
+library(terra)
+library(sf)
+library(classInt)
+library(raster)
+library(RColorBrewer)
 
 # base directories
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
@@ -57,11 +62,11 @@ clusterExport(cl, "get_mode")
 # Inputs  
   - `../input/Gff_cse_envCostPaths.csv`  - Combined CSE table with coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance in sum of pixels, and mean, median, mode of each Env parameter  
 # Outputs  
-  - `../results_dir/rf_mean18_tuned.rds`  - Full RF model output, readRDS() to load  
+  - `../results_dir/rf_mean_full_tuned.rds`  - Full RF model output, readRDS() to load  
   - `../results_dir/predicted_CSEdistance.tif` - Projection of full RF model, with pix_dist and samp_20km nuetralized by using uniform layers in projection
   
 # 1. Prepare the data
-```{r, prep}
+```{r prep, warning=FALSE}
 # Assign input, checking for any rows with NA
 sum(!complete.cases(V.table))  # should return 0
 rf_data <- na.omit(V.table)    # should omit zero rows
@@ -96,7 +101,7 @@ rf_data <- rf_data[, c("CSEdistance", predictor_vars)]
 ```
 
 # 2. Build full Random Forest model 
-```{r rf}
+```{r rf-full, warning=FALSE}
 # Build full RF model
 set.seed(1234)  # ensures reproducibility
 rf_full <- randomForest(
@@ -114,7 +119,7 @@ importance(rf_full)
 # 2. Prune variables?
 
 ## Compare mean versus median versus mode:
-```{r mean-v-median-v-mode}
+```{r mean-v-median-v-mode, warning=FALSE}
 # Extract groups of variables by suffix
 mean_vars   <- grep("_mean$", names(rf_data), value = TRUE)
 median_vars <- grep("_median$", names(rf_data), value = TRUE)
@@ -137,9 +142,9 @@ c(mean = rf_mean$rsq[500] * 100,
 
 Including mean of env variable along least cost paths performs the best, adding median and mode does not greatly improve the model and increases risks of over fitting...
 
-## Prune more variables after narrowing to mean only?
+## (Optional) Prune more variables after narrowing to mean only?
 
-```{r mean}
+```{r prune-mean, warning=FALSE, eval=FALSE}
 # Plot variable importance
 par(mar = c(5, 10, 2, 2))  # bottom, left, top, right
 varImpPlot(rf_mean, main = "Mean Model Importance",cex = 0.6, pch = 19)
@@ -176,43 +181,49 @@ sapply(prune_results, function(mod) {
 
 OOB MSE decreases quickly early on, with minimal gains beyond the top ~18 predictors.
 
-## Top 18 predictors
+However, there are not too many more than 18 total, and many of the env variables have similar node purity, so I will leave all mean variables in.
 
-```{r top18}
-# Get variable importance
-var_imp <- importance(rf_mean)[, "%IncMSE"]
+# 3. Final full model - (Tune random forest with mean variables)
+```{r tune, warning=FALSE}
+# Load data
+V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
 
-# Sort and get names of top 18 predictors
-top18_vars <- names(sort(var_imp, decreasing = TRUE))[1:18]
+# estimate mean sampling density
+mean(V.table_full$samp_20km_mean, na.rm = TRUE)
 
-rf_top18_data <- rf_data[, c("CSEdistance", top18_vars)]
-```
+# Filter out western outlier "50-KB" 
+V.table <- V.table_full %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB")
 
-# 3. Tune random forest with chosen variables
-```{r tune}
+# Filter for within-cluster pairs AND geographic distance ≤ 100 km
+#V.table <- V.table_full %>%
+#  filter(Pop1_cluster == Pop2_cluster) %>%
+#  filter(pix_dist <= 100)
 
-# Subset data for the mean-only model
-#rf_data <- rf_data[, c("CSEdistance", common_var, mean_vars)]
-rf_data <- rf_data[, c("CSEdistance", top18_vars)]
+# Create unique ID after filtering
+V.table$id <- paste(V.table$Var1, V.table$Var2, sep = "_")
+
+# Define site list
+sites <- sort(unique(c(V.table$Var1, V.table$Var2)))
+
+# How many rows of data for each?
+table(V.table$Pop1_cluster)
+
+# How many unique sites?
+length(sites)
+
+# Choose predictors for RF model (adjust names if necessary)
+predictor_vars <- c("BIO1_mean","BIO2_mean","BIO3_mean","BIO4_mean", "BIO5_mean","BIO6_mean","BIO7_mean", "BIO8S_mean", "BIO9S_mean","BIO10S_mean", "BIO11S_mean","BIO12_mean", "BIO13_mean","BIO14_mean","BIO15_mean","BIO16S_mean","BIO17S_mean", "BIO18S_mean","BIO19S_mean","slope_mean","alt_mean", "lakes_mean","riv_3km_mean", "samp_20km_mean","pix_dist")
+
+# Filter to modeling-relevant columns only
+rf_mean_data <- V.table[, c("CSEdistance", predictor_vars)]
 
 # Rename predictors by removing "_mean" for later projections
 names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
 
-# Build full RF model
-set.seed(10981234)  # ensures reproducibility
-rf_mean18 <- randomForest(
-  CSEdistance ~ .,
-  data = rf_mean_data,
-  importance = TRUE,
-  ntree = 500
-)
-
-print(rf_mean18)
-importance(rf_mean18)
-
 # Tune mtry (number of variables tried at each split)
 set.seed(92834567)
-rf_mean18_tuned <- tuneRF(
+rf_mean_full_tuned <- tuneRF(
   x = rf_mean_data[, -1],   # exclude response variable
   y = rf_mean_data$CSEdistance,
   ntreeTry = 500,
@@ -226,58 +237,69 @@ rf_mean18_tuned <- tuneRF(
 
 
 # Save the tuned random forest model to disk
-saveRDS(rf_mean18_tuned, file = file.path(results_dir, "rf_mean18_tuned.rds"))
+saveRDS(rf_mean_full_tuned, file = file.path(results_dir, "rf_mean_full_tuned.rds"))
 
 # Preserve as-is for projection
-rf_final <- rf_mean18_tuned
+rf_final <- rf_mean_full_tuned
 ```
 FYI: Later, to load the model back into R:
-`rf_mean18_tuned <- readRDS(file.path(results_dir, "rf_mean18_tuned.rds"))`
+`rf_mean_full_tuned <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))`
 
+## (Optional) Compare full and full tuned models (mean-only predictors)
+```{r compare, eval=FALSE,warning=FALSE}
 
-## Compare full and full tuned models (top 18 mean-only predictors)
-```{r compare}
-print(rf_mean18)
-print(rf_mean18_tuned)
+# Build full RF model
+set.seed(10981234)  # ensures reproducibility
+rf_mean_full <- randomForest(
+  CSEdistance ~ .,
+  data = rf_mean_data,
+  importance = TRUE,
+  ntree = 500
+)
+
+print(rf_mean_full)
+importance(rf_mean_full)
+
+print(rf_mean_full_tuned)
+importance(rf_mean_full_tuned)
 
 data.frame(
-  Model = c("Full (default mtry)", paste("Tuned (mtry = ",rf_mean18_tuned$mtry,")")),
-  MSE = c(rf_mean18$mse[rf_mean18$ntree], rf_mean18_tuned$mse[rf_mean18_tuned$ntree]),
-  Rsq = c(rf_mean18$rsq[rf_mean18$ntree], rf_mean18_tuned$rsq[rf_mean18_tuned$ntree])
+  Model = c("Full (default mtry)", paste("Tuned (mtry = ",rf_mean_full_tuned$mtry,")")),
+  MSE = c(rf_mean_full$mse[rf_mean_full$ntree], rf_mean_full_tuned$mse[rf_mean_full_tuned$ntree]),
+  Rsq = c(rf_mean_full$rsq[rf_mean_full$ntree], rf_mean_full_tuned$rsq[rf_mean_full_tuned$ntree])
 )
 
 # pad names to trick varImpPlot
-rownames(rf_mean18$importance) <- paste0("  ", rownames(rf_mean18$importance), "  ")
-rownames(rf_mean18_tuned$importance) <- paste0("  ", rownames(rf_mean18_tuned$importance), "  ")
+rownames(rf_mean_full$importance) <- paste0("  ", rownames(rf_mean_full$importance), "  ")
+rownames(rf_mean_full_tuned$importance) <- paste0("  ", rownames(rf_mean_full_tuned$importance), "  ")
 
 # plot with varImpPlot
 par(mar = c(5, 30, 2,2))  # bottom, left, top, right
-varImpPlot(rf_mean18, main = "Full Model Importance",cex = 0.6, pch = 19)
-varImpPlot(rf_mean18_tuned, main = "Tuned Full Model Importance",cex = 0.6, pch = 19)
+varImpPlot(rf_mean_full, main = "Full Model Importance",cex = 0.6, pch = 19)
+varImpPlot(rf_mean_full_tuned, main = "Tuned Full Model Importance",cex = 0.6, pch = 19)
 ```
 
 The tuned model performs slightly better, but the gain may not be meaningful... however, it does confirm that the model is stable and that the mean-only predictors carry strong signal.
 
 Top 18 mean-based predictors retain nearly all the explanatory power of the original full model with 42 predictors.
 
-# 4. Projection of model
-```{r projection}
+# 4. Map of projected model
+
+## Build Projection
+```{r projection, warning=FALSE}
 # Load env stack with named layers
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+env$samp_20km <- 1.027064e-11 #neutralize sampling bias
 
-# Replace samp_20km with neutral constant raster, 
-# retains sampling bias in the model but neutralize 
-# sampling bias during projection
-samp_uniform <- env[["samp_20km"]]
-values(samp_uniform) <- mean(rf_data$samp_20km_mean, na.rm = TRUE)
-env[["samp_20km"]] <- samp_uniform # Replace in raster stack
-
+# Load rdf of final model
+rf_final <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
 prediction_raster <- predict(env, rf_final, type = "response")
 
 # Write Prediction Raster to file
 #writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE_resistance.tif"), format = "GTiff", overwrite = TRUE)
 ```
-
+  
+## Plot predicted CSE
 ```{r plot-projection, warning=FALSE}
 # Create base plot with viridis
 plot(prediction_raster,
@@ -285,7 +307,8 @@ plot(prediction_raster,
      main = "Predicted CSE Distance",
      axes = FALSE,
      box = FALSE,
-     legend.args = list(text = "CSE Distance", side = 2, line = 2.5, cex = 0.8))
+     #zlim = c(.15,.45),  # CSE limits
+     legend.args = list(text = "Predicted CSE", side = 3, line = 1, cex = 1))
 
 # Overlay lakes in dark gray
 lakes <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
@@ -302,8 +325,8 @@ uganda <- st_intersection(uganda, r_ext) # clip to extent
 plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```
 
-
-```{r scaled-CSE, eval = FALSE, include = FALSE}
+## (Optional) Scale CSE 
+```{r scaled-CSE, eval = FALSE, warning=FALSE}
 # Explored scaled-CSE, but performance was minimally improved
 # Load data
 V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
@@ -423,7 +446,7 @@ plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 prediction_raster <- (predict(env, rf_final, type = "response")) * max_CSE
 
 # Write Prediction Raster to file
-#writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE_unscaled_resistance.tif"), format = "GTiff", overwrite = TRUE)
+writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE_unscaled_resistance.tif"), format = "GTiff", overwrite = TRUE)
 
 # Create base plot with viridis
 plot(prediction_raster,
@@ -447,5 +470,676 @@ uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", re
 uganda <- st_intersection(uganda, r_ext) # clip to extent
 plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```
+Performance of the full model did not improve, so no need to scale CSE before modeling.
 
+# 5. Scale CSE and SDM
+
+## Scale 0-1, habitat suitability and inverse of CSE
+```{r bivmap-scale, warning=FALSE}
+
+# Load raster layers
+con_raster <- rast(file.path(results_dir, "fullRF_CSE_resistance.tif"))
+fao <- rast(file.path(data_dir, "FAO_fuscipes_2001.tif"))
+update <- rast(file.path(data_dir, "SDM_2018update.tif"))
+
+# Match extent and resolution first
+fao_crop <- crop(fao, update)
+update_crop <- crop(update, fao_crop)
+fao_resamp <- resample(fao_crop, update_crop)  # if needed to match resolution
+
+# Combine
+sdm_raw <- max(fao_resamp, update_crop, na.rm = TRUE)
+
+# Crop to overlapping extent
+sdm <- crop(sdm_raw, con_raster)
+con <- crop(con_raster, sdm)
+
+# Mask low-suitability areas
+sdm[sdm <= 0.05] <- NA
+
+
+# Rescale to 0–1
+sdm_min <- global(sdm, "min", na.rm = TRUE)$min
+sdm_max <- global(sdm, "max", na.rm = TRUE)$max
+sdm <- (sdm - sdm_min) / (sdm_max - sdm_min)
+
+# Mask to common suitable area
+con <- mask(con, sdm)
+
+# Rescale inverse of CSE to 0-1
+con_min <- global(con, "min", na.rm = TRUE)$min
+con_max <- global(con, "max", na.rm = TRUE)$max
+con <- 1 - ((con - con_min) / (con_max - con_min))
+
+# Convert back to raster for compatibility with bivariate.map function
+sdm_r <- raster(sdm)
+con_r <- raster(con)
+```
+## Plot scaled CSE and SDM
+
+```{r plot-sdm-con, warning=FALSE}
+# Plot Genetic Connectivity (inverse CSE)
+plot(con,
+     col = rev(viridis::plasma(100)),  # high connectivity = dark
+     main = "Genetic Connectivity (inverse CSE)",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+
+# Plot Habitat Suitability
+plot(sdm,
+     col = viridis::viridis(100),  # high suitability = dark
+     main = "Habitat Suitability",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Suitability", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+
+
+# Plot with custom colors
+
+# Custom palettes based on Bishop et al.
+connectivity_colors <- colorRampPalette(c("#FFFF00", "#FFA500", "#FF4500", "#700E40", "#2E003E"))(100)
+suitability_colors  <- colorRampPalette(c("white", "lightblue", "blue4"))(100)     # white → light blue → dark blue
+
+# Plot Genetic Connectivity (inverse CSE) with custom colors
+plot(con,
+     col = connectivity_colors,
+     main = "Genetic Connectivity (inverse CSE)",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+
+# Plot Habitat Suitability with custom colors
+plot(sdm,
+     col = suitability_colors,
+     main = "Habitat Suitability",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Suitability", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = .25, add = TRUE)
+```
+
+# 6. Bivariate map
+## Define and run functions
+```{r bivmap-functions, warning=FALSE}
+# Define color matrix function
+colmat <- function(nquantiles = 10, 
+                   upperleft = rgb(0,150,235, maxColorValue=255), 
+                   upperright = "#700E40", 
+                   bottomleft = "grey", 
+                   bottomright = rgb(255,230,15, maxColorValue=255), 
+                   xlab = "x label", 
+                   ylab = "y label") {
+  my.data <- seq(0, 1, .01)
+  my.class <- classIntervals(my.data, n = nquantiles, style = "quantile")
+  my.pal.1 <- findColours(my.class, c(upperleft, bottomleft))
+  my.pal.2 <- findColours(my.class, c(upperright, bottomright))
+  col.matrix <- matrix(nrow = 101, ncol = 101, NA)
+  for (i in 1:101) {
+    my.col <- c(paste(my.pal.1[i]), paste(my.pal.2[i]))
+    col.matrix[102 - i, ] <- findColours(my.class, my.col)
+  }
+  plot(c(1,1), pch = 19, col = my.pal.1, cex = 0.5, xlim = c(0,1), ylim = c(0,1),
+       frame.plot = FALSE, xlab = xlab, ylab = ylab, cex.lab = 1.8)
+  for (i in 1:101) {
+    col.temp <- col.matrix[i - 1, ]
+    points(my.data, rep((i - 1)/100, 101), pch = 15, col = col.temp, cex = 1)
+  }
+  seqs <- seq(0, 100, (100 / nquantiles))
+  seqs[1] <- 1
+  col.matrix <- col.matrix[c(seqs), c(seqs)]
+}
+
+# Define bivmap function
+bivariate.map <- function(rasterx, rastery, colormatrix = col.matrix, nquantiles = 10) {
+  # Quantiles for raster x
+  quanmean <- getValues(rasterx)
+  temp <- data.frame(quanmean, quantile = rep(NA, length(quanmean)))
+  brks <- with(temp, unique(quantile(quanmean, na.rm = TRUE, probs = seq(0, 1, 1 / nquantiles))))
+  r1 <- within(temp, quantile <- cut(quanmean, breaks = brks, labels = 2:length(brks), include.lowest = TRUE))
+  quantr <- data.frame(r1[,2]) 
+
+  # Quantiles for raster y
+  quanvar <- getValues(rastery)
+  temp <- data.frame(quanvar, quantile = rep(NA, length(quanvar)))
+  brks <- with(temp, unique(quantile(quanvar, na.rm = TRUE, probs = seq(0, 1, 1 / nquantiles))))
+  r2 <- within(temp, quantile <- cut(quanvar, breaks = brks, labels = 2:length(brks), include.lowest = TRUE))
+  quantr2 <- data.frame(r2[,2])
+
+  # Color assignment
+  as.numeric.factor <- function(x) as.numeric(levels(x))[x]
+  col.matrix2 <- colormatrix
+  cn <- unique(colormatrix)
+  for (i in 1:length(col.matrix2)) {
+    col.matrix2[i] <- ifelse(is.na(col.matrix2[i]), 1, which(col.matrix2[i] == cn)[1])
+  }
+
+  cols <- numeric(length(quantr[,1]))
+  for (i in 1:length(quantr[,1])) {
+    a <- as.numeric.factor(quantr[i,1])
+    b <- as.numeric.factor(quantr2[i,1])
+    cols[i] <- as.numeric(col.matrix2[b, a])
+  }
+
+  r <- rasterx
+  r[1:length(r)] <- cols
+  return(r)
+}
+
+# Check how many quantiles are available
+length(unique(quantile(getValues(con_r), probs = seq(0, 1, 0.1), na.rm = TRUE)))
+length(unique(quantile(getValues(sdm_r), probs = seq(0, 1, 0.1), na.rm = TRUE)))
+
+# Create color matrix
+col.matrix <- colmat(nquantiles = 9, xlab = "Genetic Connectivity", ylab = "Habitat Suitability")
+
+# Create bivariate map
+bivmap <- bivariate.map(con_r, sdm_r, colormatrix = col.matrix, nquantiles = 9)
+bivmap_terra <- rast(bivmap)  # convert from RasterLayer to SpatRaster
+
+# Write raster file
+writeRaster(bivmap, file.path(results_dir, "bivmap_suitability_connectivity.tif"),
+            filetype = "GTiff", overwrite = TRUE)
+
+```
+## Plot bivmap
+```{r plot-bivmap, warning=FALSE}
+# Load shape files with sf
+lakes   <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
+uganda  <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf", continent = "Africa")
+library(terra)
+
+bivmap_terra <- rast(bivmap)  # convert from RasterLayer to SpatRaster
+uganda_cropped <- st_crop(uganda, bivmap_terra)
+
+# Plot
+#pdf("../figures/bivmap.pdf", width = 14, height = 10)
+plot(bivmap,
+     col = as.vector(col.matrix),
+     legend = FALSE,
+     axes = FALSE,
+     box = FALSE,
+     main = "Habitat Suitability vs Genetic Connectivity")
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+#dev.off()
+```
+
+# 7. Forecast projection 
+
+## Build forecast projection: Predict across raster
+```{r predict-on-raster, warning=FALSE}
+# Load rdf of final model
+rf_final <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+
+# Load env stack with named layers
+envRCP <- stack(file.path(data_dir, "processed", "env_stack_RCP4_5.grd"))
+
+plot(envRCP[[20:25]])
+plot(env[[20:25]])
+
+# check names are correct
+names(envRCP)
+rownames(rf_final$importance)
+
+# make ABSOLUTELY CERTAIN all layers I want to stay the same DO stay the same
+#envRCP$alt <- env$alt
+#envRCP$slope <- env$slope
+#envRCP$riv_3km <- env$riv_3km
+#envRCP$samp_20km <- env$samp_20km
+#envRCP$lakes <- env$lakes
+#envRCP$pix_dist <- env$pix_dist
+
+#neutralize sampling bias
+envRCP$samp_20km <- 1.027064e-11 
+
+# predict with model
+prediction_RCP4_5 <- predict(envRCP, rf_final, type = "response")
+prediction_raster <- predict(env, rf_final, type = "response")
+delta <- prediction_RCP4_5 - prediction_raster
+
+
+plot(stack(prediction_RCP4_5, prediction_raster,delta))
+
+
+# Write Prediction Raster to file
+writeRaster(prediction_RCP4_5, file.path(results_dir,"fullRF_CSE_resistance_RCP4_5.tif"), format = "GTiff", overwrite = TRUE)
+```
+## Plot forecast
+```{r plot-projection, warning=FALSE}
+# Create base plot with viridis
+plot(prediction_RCP4_5,
+     col = viridis::magma(100),
+     main = "Predicted CSE Distance",
+     axes = FALSE,
+     box = FALSE,
+     #zlim = c(.15,.45),  # CSE limits
+     legend.args = list(text = "Predicted CSE", side = 3, line = 1, cex = 1))
+
+# Overlay lakes in dark gray
+lakes <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
+lakes <- st_transform(lakes, crs = st_crs(prediction_raster))  # match CRS 
+lakes <- st_make_valid(lakes) # fix geometries
+r_ext <- st_as_sfc(st_bbox(prediction_raster)) # extent
+st_crs(r_ext) <- st_crs(prediction_raster) # match CRS
+lakes <- st_intersection(lakes, r_ext) # clip to extent
+plot(st_geometry(lakes), col = "gray20", border = NA, add = TRUE)
+
+# Overlay country outline
+uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", returnclass = "sf")
+uganda <- st_intersection(uganda, r_ext) # clip to extent
+plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
+```
+
+## Scale forecast
+```{r scale-forecast, warning=FALSE}
+
+# Load raster layers
+con_raster_forecast <- rast(file.path(results_dir, "fullRF_CSE_resistance_RCP4_5.tif"))
+
+# Crop to overlapping extent
+con_forecast<- crop(con_raster_forecast, sdm)
+
+# Mask to common suitable area
+con_forecast <- mask(con_forecast,sdm)
+
+# Rescale inverse of CSE to 0-1
+forecast_min <- global(con_forecast, "min", na.rm = TRUE)$min
+forecast_max <- global(con_forecast, "max", na.rm = TRUE)$max
+con_forecast <- 1 - ((con_forecast - forecast_min) / (forecast_max - forecast_min))
+```
+
+## Plot scaled forecast of CSE 
+```{r plot-scaled-forecast, warning=FALSE}
+uganda_cropped <- st_crop(uganda, con_forecast)
+
+# Plot Forecast of Genetic Connectivity (inverse CSE)
+plot(con_forecast,
+     col = rev(viridis::plasma(100)),  # high connectivity = dark
+     main = "Genetic Connectivity (inverse CSE)",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+```
+# 8. Compare surfaces 
+
+## Env conditions
+```{r compare-env, warning=FALSE}
+
+# Create the difference layers
+diff_list <- list(
+  envRCP$BIO1 - env$BIO1,
+  envRCP$BIO2 - env$BIO2,
+  envRCP$BIO3 - env$BIO3,
+  envRCP$BIO4 - env$BIO4,
+  envRCP$BIO5 - env$BIO5,
+  envRCP$BIO6 - env$BIO6,
+  envRCP$BIO7 - env$BIO7,
+  envRCP$BIO8S - env$BIO8S,
+  envRCP$BIO9S - env$BIO9S,
+  envRCP$BIO10S - env$BIO10S,
+  envRCP$BIO11S - env$BIO11S,
+  envRCP$BIO12 - env$BIO12,
+  envRCP$BIO13 - env$BIO13,
+  envRCP$BIO14 - env$BIO14,
+  envRCP$BIO15 - env$BIO15,
+  envRCP$BIO16S - env$BIO16S,
+  envRCP$BIO17S - env$BIO17S,
+  envRCP$BIO18S - env$BIO18S,
+  envRCP$BIO19S - env$BIO19S,
+  envRCP$slope - env$slope,
+  envRCP$alt- env$alt,
+  envRCP$lakes - env$lakes,
+  envRCP$riv_3km - env$riv_3km,   
+  envRCP$samp_20km - env$samp_20km,   
+  envRCP$pix_dist - env$pix_dist
+)
+
+# Stack the result
+diff_stack <- stack(diff_list)
+
+# Name the layers
+names(diff_stack) <-c("BIO1","BIO2","BIO3","BIO4","BIO5","BIO6","BIO7","BIO8S","BIO9S","BIO10S","BIO11S","BIO12","BIO13","BIO14","BIO15","BIO16S","BIO17S","BIO18S","BIO19S","slope","alt","lakes","riv_3km","samp_20km","pix_dist")
+
+# Plot in 4s:
+plot(diff_stack[[1:4]], col = rev(brewer.pal(9, "YlGnBu")))
+plot(diff_stack[[5:8]], col = rev(brewer.pal(9, "YlGnBu")))
+plot(diff_stack[[5:8]], col = rev(brewer.pal(9, "YlGnBu")))
+plot(diff_stack[[9:12]], col = rev(brewer.pal(9, "YlGnBu")))
+plot(diff_stack[[13:16]], col = rev(brewer.pal(9, "YlGnBu")))
+plot(diff_stack[[17:19]], col = rev(brewer.pal(9, "YlGnBu")))
+plot(diff_stack[[20:25]], col = rev(brewer.pal(9, "YlGnBu")))
+```  
+
+## Delta: Forecast - current 
+
+## Unscaled predicted CSE
+```{r delta, warning=FALSE}
+# Raw CSE raster layers
+con_raster_forecast <- rast(file.path(results_dir, "fullRF_CSE_resistance_RCP4_5.tif"))
+con_raster <- rast(file.path(results_dir, "fullRF_CSE_resistance.tif"))
+
+# Crop to overlapping extent
+con_raster_forecast <- crop(con_raster_forecast, sdm)
+con_raster <- crop(con_raster, sdm)
+
+# Compute difference
+delta_raster <- con_raster_forecast - con_raster
+  
+# Mask to common suitable area
+delta_raster <- mask(delta_raster,sdm)
+
+# Get true min and max
+zrange <- range(values(delta_raster), na.rm = TRUE)
+zmin <- zrange[1]
+zmax <- zrange[2]
+
+# Choose number of colors
+n_colors <- 100
+
+# Split color count proportionally around zero
+n_neg <- round(n_colors * abs(zmin) / (abs(zmin) + abs(zmax)))
+n_pos <- n_colors - n_neg
+
+# Build color ramps to white (centered at 0)
+neg_col <- colorRampPalette(c("#924532", "darkorange", "gold", "white"))(n_neg) #red4
+pos_col <- colorRampPalette(c("white", "#8db4c9", "deepskyblue3", "blue4"))(n_pos) #lightgreen
+
+# Combine (removing duplicate white)
+custom_diverging <- c(neg_col, pos_col[-1])
+
+#Plot with exact matching zlim:
+
+plot(delta_raster,
+     col = custom_diverging,
+     main = "Projected Change in Connectivity",
+     axes = FALSE, box = FALSE,
+     zlim = c(zmin, zmax),
+     legend.args = list(text = "Change", side = 1, line = 2.5, cex = 0.8))
+
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
+```
+  
+## Scaled inverse CSE
+```{r delta-con, warning=FALSE}
+
+# Using scaled inverse CSE
+delta_con <- con_forecast - con
+
+# Get true min and max
+zrange <- range(values(delta_con), na.rm = TRUE)
+zmin <- zrange[1]
+zmax <- zrange[2]
+
+# Choose number of colors
+n_colors <- 100
+
+# Split color count proportionally around zero
+n_neg <- round(n_colors * abs(zmin) / (abs(zmin) + abs(zmax)))
+n_pos <- n_colors - n_neg
+
+# Build color ramps to white (centered at 0)
+neg_col <- rev(colorRampPalette(c("white", "#8db4c9", "deepskyblue3", "blue4"))(n_neg)) #lightgreen
+pos_col <- rev(colorRampPalette(c("#924532", "darkorange", "gold", "white"))(n_pos)) #red4
+
+# Combine (removing duplicate white)
+custom_diverging <- c(neg_col, pos_col[-1])
+
+#Plot with exact matching zlim:
+
+plot(delta_con,
+     col = custom_diverging,
+     main = "Projected Change in Connectivity",
+     axes = FALSE, box = FALSE,
+     zlim = c(zmin, zmax),
+     legend.args = list(text = "Change", side = 1, line = 2.5, cex = 0.8))
+
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
+```
+
+# 9. Figures for paper  
+
+Connectivity: 
+low = #d6ce7c, "DarkKhaki", rgba(206, 200, 146, 1)
+high = #924532, "Sienna", rgba(146, 69, 50, 1)
+
+Suitability:
+low = #8db4c9, "LightSteelBlue", rgba(141, 180, 201, 1)
+high = #55306a, "DarkSlateBlue", rgba(85, 48, 106, 1)
+
+## 9a. Connectivity and Suitability bivmap companion maps with custom colors
+```{r figures, warning=FALSE}
+
+# Plot with custom colors
+
+# Custom palette #1 based on Bishop et al.
+connectivity_colors <- colorRampPalette(c("#c5c3a7","#ffe60c","#c79620", "#934334","#802839", "#6f0f40"))(100) #"#d6ce7c"
+suitability_colors  <- colorRampPalette(c("lightgray", "#7fabb9","#3c94c8","#595379","#54306a"))(100)  #"#617189"
+
+
+# Plot lines of Genetic Connectivity (inverse CSE with custom colors)
+lines_sf <- st_read(file.path(data_dir,"processed","LC_paths.shp"), quiet=TRUE)
+line_colors <- connectivity_colors
+con_vals <- 1 - ((lines_sf$CSE - con_min) / (con_max - con_min))
+con_cols <- line_colors[cut(con_vals, breaks = seq(0, 1, length.out = 101), include.lowest = TRUE)]
+plot(con, col = connectivity_colors,
+     axes = FALSE, box = FALSE,
+     zlim = c(0,1),
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(con, col = "white",
+     axes = FALSE, box = FALSE, legend = FALSE, add = TRUE)
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(lines_sf), col = con_cols, lwd = 0.6, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 1, add = TRUE)
+
+
+# Plot Genetic Connectivity (inverse CSE) with custom colors
+plot(con,
+     col = connectivity_colors,
+     #main = "Genetic Connectivity (inverse CSE)",
+     axes = FALSE, box = FALSE,
+     zlim = c(0,1),
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 1, add = TRUE)
+
+# Plot Habitat Suitability with custom colors
+plot(sdm,
+     col = suitability_colors,
+     #main = "Habitat Suitability",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Suitability", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 1, add = TRUE)
+```
+## 9b. Env change --- Forecasted changes
+
+```{r env-tiles, warning=FALSE}
+
+
+# Create the difference layers
+diff_list <- list(
+  envRCP$BIO1 - env$BIO1,
+  envRCP$BIO2 - env$BIO2,
+  envRCP$BIO3 - env$BIO3,
+  envRCP$BIO4 - env$BIO4,
+  envRCP$BIO5 - env$BIO5,
+  envRCP$BIO6 - env$BIO6,
+  envRCP$BIO7 - env$BIO7,
+  envRCP$BIO8S - env$BIO8S,
+  envRCP$BIO9S - env$BIO9S,
+  envRCP$BIO10S - env$BIO10S,
+  envRCP$BIO11S - env$BIO11S,
+  envRCP$BIO12 - env$BIO12,
+  envRCP$BIO13 - env$BIO13,
+  envRCP$BIO14 - env$BIO14,
+  envRCP$BIO15 - env$BIO15,
+  envRCP$BIO16S - env$BIO16S,
+  envRCP$BIO17S - env$BIO17S,
+  envRCP$BIO18S - env$BIO18S,
+  envRCP$BIO19S - env$BIO19S,
+  envRCP$slope - env$slope,
+  envRCP$alt- env$alt,
+  envRCP$lakes - env$lakes,
+  envRCP$riv_3km - env$riv_3km,   
+  envRCP$samp_20km - env$samp_20km,   
+  envRCP$pix_dist - env$pix_dist
+)
+
+# Variable names
+layer_names <- c(
+  "BIO1","BIO2","BIO3","BIO4","BIO5","BIO6","BIO7",
+  "BIO8S","BIO9S","BIO10S","BIO11S","BIO12","BIO13","BIO14","BIO15",
+  "BIO16S","BIO17S","BIO18S","BIO19S",
+  "slope","alt","lakes","riv_3km","samp_20km","pix_dist"
+)
+
+# Convert and assign names individually
+diff_list <- lapply(seq_along(diff_list), function(i) {
+  r <- terra::rast(diff_list[[i]])
+  names(r) <- layer_names[i]
+  return(r)
+})
+
+# Stack into a multi-layer SpatRaster
+diff_stack <- do.call(c, diff_list)
+
+# Reference raster for extent, resolution, and CRS
+ref_raster <- con
+
+# Convert lakes and uganda to sf if needed
+if (!inherits(lakes, "sf")) lakes <- st_as_sf(lakes)
+if (!inherits(uganda, "sf")) uganda <- st_as_sf(uganda)
+
+# Reproject lakes and uganda to match raster CRS
+if (st_crs(lakes) != crs(ref_raster)) lakes <- st_transform(lakes, crs(ref_raster))
+if (st_crs(uganda) != crs(ref_raster)) uganda <- st_transform(uganda, crs(ref_raster))
+
+# Convert sf to SpatVector for terra mask() and crop()
+lakes_v <- vect(lakes)
+uganda_v <- vect(uganda)
+
+
+#pdf("Env_change_panels.pdf", width = 7, height = 7) # Optional: save to PDF
+#par(mfrow = c(2, 2), mar = c(4, 2, 2, 3))  # More space for legend
+
+for (i in 1:nlyr(diff_stack)) {
+  r <- diff_stack[[i]]
+  title <- names(r)
+
+  # Crop and mask to reference raster
+  r <- crop(r, ref_raster)
+  r <- mask(r, ref_raster)  # removes extra NA/edge artifacts
+
+  # Get value range
+  zr <- global(r, fun = range, na.rm = TRUE, names = FALSE)
+  zmin <- zr[1, 1]
+  zmax <- zr[1, 2]
+
+  # Choose number of color bins
+  n <- 100
+
+  # Build diverging palette centered on 0
+  if (is.na(zmin) || is.na(zmax)) {
+    cols <- rep("white", n)
+    zlim <- c(0, 0)
+  } else if (zmin >= 0) {
+    cols <- colorRampPalette(c("white", "gold", "darkorange","#924532" ))(n)
+    zlim <- c(0, zmax)
+  } else if (zmax <= 0) {
+    cols <- colorRampPalette(c("blue4", "deepskyblue3", "#8db4c9", "white"))(n)
+    zlim <- c(zmin, 0)
+  } else {
+    n_neg <- max(1, round(n * abs(zmin) / (abs(zmin) + abs(zmax))))
+    n_pos <- max(1, n - n_neg)
+    # Swap here: blues for negative, warm colors for positive
+    neg_col <- colorRampPalette(c("blue4", "deepskyblue3", "#8db4c9",   "white"))(n_neg)
+    pos_col <- colorRampPalette(c("white", "gold", "darkorange",   "#924532"))(n_pos)
+    cols <- c(neg_col, pos_col[-1])
+    zlim <- c(zmin, zmax)
+  }
+  # Plot raster
+  plot(r,
+       col = cols,
+       zlim = zlim,
+       main = title,
+       axes = FALSE, box = FALSE,
+       legend.args = list(text = "Change", side = 1, line = 2.5, cex = 0.8))
+
+  # Overlay lakes and uganda outline
+  plot(lakes_v, col = "black", border = NA, add = TRUE)
+  plot(uganda_v, border = "black", lwd = 0.25, add = TRUE)
+}
+
+
+#dev.off()
+
+```
+## 9c. Env current
+
+```{r plot-raw-env}
+# Convert env to SpatRaster for terra functions
+raw_stack <- terra::rast(env)
+
+for (nm in names(raw_stack)) {
+  r <- raw_stack[[nm]]
+  title <- nm
+
+  # Crop/mask to reference
+  r <- terra::crop(r, ref_raster)
+  r <- terra::mask(r, ref_raster)
+
+  # Range and mean
+  zr   <- terra::global(r, fun = range, na.rm = TRUE, names = FALSE)
+  zmin <- zr[1, 1]
+  zmax <- zr[1, 2]
+  zmu  <- as.numeric(terra::global(r, fun = "mean", na.rm = TRUE))
+
+  n <- 100
+
+  if (is.na(zmin) || is.na(zmax) || zmin == zmax) {
+    cols <- rep("white", n)
+    zlim <- c(0, 0)
+  } else {
+    below <- max(0, zmu - zmin)
+    above <- max(0, zmax - zmu)
+    total <- below + above
+    if (total == 0) {
+      zmu <- (zmin + zmax) / 2
+      below <- zmu - zmin
+      above <- zmax - zmu
+      total <- below + above
+    }
+    n_neg <- max(1, round(n * below / total))
+    n_pos <- max(1, n - n_neg)
+
+    # blue (below mean) → white → warm (above mean)
+    neg_col <- colorRampPalette(c("blue4", "deepskyblue3", "#8db4c9", "white"))(n_neg)
+    pos_col <- colorRampPalette(c("white", "gold", "darkorange", "#924532"))(n_pos)
+
+    cols <- c(neg_col, pos_col[-1])
+    zlim <- c(zmin, zmax)
+  }
+
+  plot(r,
+       col = cols,
+       zlim = zlim,
+       main = title,
+       axes = FALSE, box = FALSE,
+       legend.args = list(text = "Value", side = 1, line = 2.5, cex = 0.8))
+
+  # Overlays (assumes lakes_v and uganda_v already created)
+  plot(lakes_v,  col = "black", border = NA, add = TRUE)
+  plot(uganda_v, border = "black", lwd = 0.25, add = TRUE)
+}
+
+
+```
+# I'm thinking now I want to make similar plots that show the Pearson's r in a sliding window, of the current/future/direction-of-change of variable versus full model.
 

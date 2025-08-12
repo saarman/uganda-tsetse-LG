@@ -31,6 +31,8 @@ library(sf)
 library(raster)
 library(rnaturalearth)
 library(rnaturalearthdata)
+library(randomForest)
+library(tidyverse)
 
 # Define Paths to directories
 input_dir <- "../input"
@@ -48,7 +50,7 @@ scratch_dir <- "/scratch/general/vast/u6036559"
 # Outputs
 
 -   `../results_dir/lopocv/` -
-
+  
 # 1. Load data and create Folds
 
 ```{r, fold-files}
@@ -79,16 +81,13 @@ table(V.table$Pop1_cluster)
 # How many unique sites?
 length(sites)
 
-# Define top 18 mean predictors (adjust names if necessary)
-predictor_vars <- c("pix_dist", "samp_20km_mean", "BIO3_mean", "BIO6_mean", "BIO15_mean","BIO13_mean", "BIO11S_mean", "BIO7_mean", "BIO1_mean", "BIO9S_mean","BIO12_mean", "alt_mean", "BIO18S_mean", "BIO4_mean", "BIO2_mean","slope_mean", "BIO10S_mean", "riv_3km_mean")
-
-# (Optional) Remove samp_20km_mean... Define top 17 mean predictors (adjust names if necessary)
-# predictor_vars <- c("pix_dist", "BIO3_mean", "BIO6_mean", "BIO15_mean","BIO13_mean", "BIO11S_mean", "BIO7_mean", "BIO1_mean", "BIO9S_mean","BIO12_mean", "alt_mean", "BIO18S_mean", "BIO4_mean", "BIO2_mean","slope_mean", "BIO10S_mean", "riv_3km_mean")
+# Choose predictors for RF model (adjust names if necessary)
+predictor_vars <- c("BIO1_mean","BIO2_mean","BIO3_mean","BIO4_mean", "BIO5_mean","BIO6_mean","BIO7_mean", "BIO8S_mean", "BIO9S_mean","BIO10S_mean", "BIO11S_mean","BIO12_mean", "BIO13_mean","BIO14_mean","BIO15_mean","BIO16S_mean","BIO17S_mean", "BIO18S_mean","BIO19S_mean","slope_mean","alt_mean", "lakes_mean","riv_3km_mean", "samp_20km_mean","pix_dist")
 
 # Filter to modeling-relevant columns only
 V.model <- V.table[, c("CSEdistance", predictor_vars)]
 ```
-
+  
 # 2. Test LOPOCV with first fold
 
 ```{r lopocv-test}
@@ -157,8 +156,10 @@ varImpPlot(rf_model)
 
 cat(sprintf("Fold %02d completed and saved.\n", i))
 ```
+  
+# 3. Leave-one-point-out Cross Validation
 
-# 3. Run LOPOCV in Parallel   
+## Run LOPOCV
 **NOTE:** eval = FALSE so that it skips on knit
 ```{r lopocv, eval = FALSE}
 # Parallel setup
@@ -260,18 +261,16 @@ write.csv(metrics_all, file.path(output_dir, "LOPOCV_summary.csv"), row.names = 
 # Write summary CSV again within GitHub
 write.csv(metrics_all, "../results/LOPOCV_summary.csv", row.names = FALSE)
 
-metrics_all 
-```
 
-# Visualize LOPOCV results
+```
+  
+## Visualize LOPOCV results
 
 Plot and summarize metrics, especially RSQ_test, try to figure out what could be reducing accuracy
 
-```{r visualize}
-# Load LOPOCV summary if not already in memory
-if (!exists("metrics_all")) {
-  metrics_all <- read.csv("../results/LOPOCV_summary.csv")
-}
+```{r visualize, warning = FALSE}
+# Load LOPOCV summary
+metrics_all <- read.csv("../results/LOPOCV_summary.csv")
 
 # Load raster for extent
 altitude <- raster::raster(file.path(
@@ -292,7 +291,7 @@ site_metadata <- V.table %>%
   distinct() %>%
   left_join(site_clusters, by = "Site") %>%
   left_join(metrics_all, by = c("Site" = "site")) %>%
-  mutate(Symbol = ifelse(rsq_test < 0.5, "low", "circle")) %>%
+  mutate(Symbol = ifelse(rsq_test < 0.3, "low", "circle")) %>%
   arrange(desc(rsq_test))
 
 # Extract map extent
@@ -306,20 +305,20 @@ lakes <- ne_download(scale = 10, type = "lakes", category = "physical", returncl
 
 # Plot LOPOCV R² by site
 ggplot() +
-  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.5) +
-  geom_sf(data = lakes, fill = "gray80", color = NA) +
+  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.1) +
+  geom_sf(data = lakes, fill = "black", color = NA) +
 
   geom_point(data = filter(site_metadata, Symbol == "circle"),
              aes(x = Longitude, y = Latitude, size = rsq_test, fill = Subcluster),
              shape = 21, color = "black", stroke = 0.3) +
 
   geom_point(data = filter(site_metadata, Symbol == "low"),
-             aes(x = Longitude, y = Latitude, color = Subcluster),
-             shape = 8, size = 3) +
+             aes(x = Longitude, y = Latitude, fill = Subcluster),
+             shape = 21, color = "black", stroke = 0.3, size = 1) +
 
   scale_fill_manual(name = "Subcluster", values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
   scale_color_manual(name = "Subcluster", values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
-  scale_size_continuous(name = "Test R²", range = c(2, 6)) +
+  scale_size_continuous(name = "LOPOCV \n Test R²", range = c(1, 9), limits = c(0.3, 1), breaks = c(0.4, 0.5,0.6,0.7,0.8,0.9)) +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
@@ -340,11 +339,32 @@ ggplot(site_metadata, aes(x = rsq_test, fill = Subcluster)) +
   theme_minimal() +
   labs(title = "Test R² by Subcluster (Scaled by Count)",
        x = "Test R² (LOPOCV)",
-       y = "Count")
+       y = "Count (Count/100 for Permutations)")
 
 # reassign Cluster
 site_metadata$Cluster <- site_metadata$Subcluster
 site_metadata$Cluster[site_metadata$Subcluster == "west"]  <- "south"
+
+# Plot LOPOCV R² by site just N/S
+ggplot() +
+  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.1) +
+  geom_sf(data = lakes, fill = "black", color = NA) +
+
+  geom_point(data = filter(site_metadata, Symbol == "circle"),
+             aes(x = Longitude, y = Latitude, size = rsq_test, fill = Cluster),
+             shape = 21, color = "black", stroke = 0.3) +
+
+  geom_point(data = filter(site_metadata, Symbol == "low"),
+             aes(x = Longitude, y = Latitude, fill = Cluster),
+             shape = 21, color = "black", size = 1, stroke = 0.3) +
+
+  scale_fill_manual(name = "Cluster", values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  scale_color_manual(name = "Cluster", values = c("north" = "#1f78b4", "south" = "#e66101")) +
+  scale_size_continuous(name = "LOPOCV \n Test R²", range = c(1, 9), limits = c(0.3, 1), breaks = c(0.4, 0.5,0.6,0.7,0.8,0.9)) +
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
+  theme_minimal() +
+  theme(panel.grid = element_blank()) +
+  labs(title = "LOPOCV Test R² by Site", x = "Longitude", y = "Latitude")
 
 # Overlapping density plot just S/N
 ggplot(site_metadata, aes(x = rsq_test, fill = Cluster)) +
@@ -361,11 +381,15 @@ ggplot(site_metadata, aes(x = rsq_test, fill = Cluster)) +
   theme_minimal() +
   labs(title = "Test R² by Subcluster (Scaled by Count)",
        x = "Test R² (LOPOCV)",
-       y = "Count")
+       y = "Count (Count/100 for Permutations)")
+
+# Save site_metadata for future use
+#write.csv(site_metadata, "../results/site_metadata.csv", row.names = FALSE)
+
 ```
 
-
-Which sites are performing worst?
+  
+## Which sites are performing worst?
 
 ```{r}
 # Identify worst-performing sites by subcluster
@@ -398,10 +422,13 @@ Final decision:\
 - Keep all intra-cluster pairs (no geodist pruning).\
 - Just exclude 50-KB as a clear spatial outlier.\
 - Use subclusters only for interpretation, not model restriction.
+  
+# 4.  Permutation test for LOPOCV R²
+  
+## LOPOCV on permuted models
 
-# Permutation test for LOPOCV R²
+GOAL: Create a 67 x 100 matrix where each cell is the rsq_test value for one LOPOCV fold (site) under a permuted response (CSEdistance).
 
-GOAL: Create a 67 x 100 matrix where each cell is the rsq_test value for one LOPOCV fold (site) under a permuted response (CSEdistance)
 ```{r permutation-LOPOCV, eval = FALSE}
 # Set number of permutations
 n_perm <- 100
@@ -472,12 +499,10 @@ write.csv(rsq_null, "../results/rsq_LOPOCV_null_matrix.csv", row.names = TRUE)
 # Done
 message("Permutation matrix created and saved.")
 ```
+  
+## Compare Distributions
 
-# Compute Empirical p-values
-
-GOAL: Run wilcox.test() for each column of rsq_null... This provides a distribution of test statistics (or p-values), from which you compute an empirical p-value:  
- - Compares observed R² values to the mean R² across columns (permutated replicate).
- - Compare the distribution of observed R² values (from real LOPOCV) to those from the permuted data
+Compare the distribution of observed R² values (from real LOPOCV) to those from the permuted data
 ```{r plot-r2}
 # Load permuted R² matrix and convert to long format
 rsq_null_mat <- as.matrix(read.csv("../results/rsq_LOPOCV_null_matrix.csv"))
@@ -507,49 +532,354 @@ GOAL: Calculate a Wilcoxon signed-rank statistic for each column (permuted repli
 
 ```{r Wilcoxon}
 # Vector of observed R² values (length = number of folds)
-rsq_obs <- metrics_all$rsq_test
+metrics_all <- read.csv(file.path("../results/LOPOCV_summary.csv"))
+rsq_obs <- as.numeric(metrics_all$rsq_test)
 
 # Matrix of permuted R² values: rows = folds, columns = permutations
-rsq_null_mat <- as.matrix(read.csv("../results/rsq_LOPOCV_null_matrix.csv"))
+rsq_null_raw <- read.csv("../results/rsq_LOPOCV_null_matrix.csv", row.names = 1)
+rsq_null_mat <- apply(rsq_null_raw, 2, as.numeric)
+rownames(rsq_null_mat) <- rownames(rsq_null_raw)
 
-# Function to compute signed rank statistic for a single permuted replicate
-signed_rank_stat <- function(null_rsq) {
-  # Remove any rows with missing observed values
-  non_na_idx <- !is.na(rsq_obs) & !is.na(null_rsq)
-  obs <- rsq_obs[non_na_idx]
-  null <- null_rsq[non_na_idx]
-  
-  # Calculate signed ranks
-  diffs <- obs - null
+# Function to compute signed-rank statistic between two vectors
+signed_rank_stat <- function(a, b) {
+  non_na_idx <- !is.na(a) & !is.na(b)
+  diffs <- a[non_na_idx] - b[non_na_idx]
   signed_ranks <- rank(abs(diffs)) * sign(diffs)
   sum(signed_ranks)
 }
 
-# Observed signed-rank statistic (using observed vs. permuted mean)
-obs_stat <- signed_rank_stat(rowMeans(rsq_null_mat, na.rm = TRUE))
+# Null distribution of signed-rank stats: compare each permutation vs. observed
+perm_stats <- apply(rsq_null_mat, 2, function(null_col) signed_rank_stat(rsq_obs, null_col))
 
-# Null distribution of signed-rank stats across permutations
-perm_stats <- apply(rsq_null_mat, 2, signed_rank_stat)
+# Observed vs. true null (here: 0 vector or permuted mean — pick based on test framing)
+# Here’s the fair approach: compare to 0 vector (i.e., test if observed > null overall)
+obs_stat <- signed_rank_stat(rsq_obs, rep(0, length(rsq_obs)))
 
-# Empirical p-value (one-sided: observed > permuted)
+# One-sided p-value: how many permuted stats < observed
 p_val <- mean(perm_stats <= obs_stat)
 
-# Output
-cat(sprintf("Empirical p-value (Wilcoxon signed-rank test across folds): %.4f\n", p_val))
+cat(sprintf("Empirical p-value (Wilcoxon signed-rank): %.4f\n", p_val))
+```
+  
+# 5. Plot LOPOCV and permutated LOPOCV side-by-side
+
+```{r plot-side-by-side}
+# Define region based on SiteMajCluster
+Gff <- read.csv("../input/Gff_11loci_allsites_indinfo.txt", header=TRUE, sep = "\t")
+north_sites <- unique(Gff$SiteCode[Gff$SiteMajCluster == "north"])
+
+# Load observed rsq 
+rsq_obs <- read.csv("../results/LOPOCV_summary.csv")
+rsq_obs_df <- data.frame("site" =  rsq_obs$site, "rsq" = rsq_obs$rsq_test)
+rsq_obs_df$cluster <- ifelse(rsq_obs_df$site %in% north_sites, "north", "south")
+rsq_obs_df$type <- "Observed"
+
+# Load permuted rsq
+rsq_null <- read.csv("../results/rsq_LOPOCV_null_matrix.csv")
+rsq_null_df <- data.frame("site"= rsq_obs_df$site, "cluster" = rsq_obs_df$cluster)
+rsq_null_df <- cbind(rsq_null_df,rsq_null[,-1])
+
+
+# Stack all 100 columns into one long column
+rsq_null_long <- reshape2::melt(rsq_null_df, id.vars = c("site", "cluster"), variable.name = "perm", value.name = "rsq")
+rsq_null_long$type <- "Permuted"
+  
+# Combine
+rsq_plot_df <- rbind(rsq_obs_df, rsq_null_long[,-3])
+
+# Plot
+ggplot(rsq_plot_df, aes(x = rsq, fill = interaction(type, cluster))) +
+  geom_density(
+    data = subset(rsq_plot_df, type == "Observed"),
+    aes(y = ..count..), alpha = 0.6, color = NA, position = "identity"
+  ) +
+  geom_density(
+    data = subset(rsq_plot_df, type == "Permuted"),
+    aes(y = ..count.. / 100), alpha = 0.3, color = NA, position = "identity"
+  ) +
+  scale_fill_manual(
+    name = "Cluster",
+    values = c(
+      "Observed.north" = "#1f78b4",
+      "Observed.south" = "#e66101",
+      "Permuted.north" = "#2c3e50",      # dark slate blue
+      "Permuted.south" = "#4e342e"       # dark orange-black
+    ),
+    labels = c(
+      "Observed.north" = "north",
+      "Observed.south" = "south",
+      "Permuted.north" = "Permuted north",
+      "Permuted.south" = "Permuted south"
+    )
+  ) +
+  coord_cartesian(xlim = c(-1, 1)) +
+  theme_minimal() +
+  labs(
+    title = "Test R² by Cluster with Permuted Overlay (Counts Scaled)",
+    x = "Test R² (LOPOCV)",
+    y = "Count (Count/100 for Permutations)"
+  )
 ```
 
-More detail on the Empirical P-values via Permutation:
+# 6. Plot Full Model: Predicted vs Observed
+```{r plot-R2}
+# Load full RF model trained on V.model (non-spatial)
+rf_model_raw <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+rownames(rf_model_raw$importance) # predictor variables used in final model
 
--   **rsq_null_mat is a matrix:**
+# Filter to modeling-relevant columns only
+predictor_vars <- c("BIO1_mean","BIO2_mean","BIO3_mean","BIO4_mean", "BIO5_mean","BIO6_mean","BIO7_mean", "BIO8S_mean", "BIO9S_mean","BIO10S_mean", "BIO11S_mean","BIO12_mean", "BIO13_mean","BIO14_mean","BIO15_mean","BIO16S_mean","BIO17S_mean", "BIO18S_mean","BIO19S_mean","slope_mean","alt_mean", "lakes_mean","riv_3km_mean", "samp_20km_mean","pix_dist")
 
-    -   Rows = folds
+V.model <- V.table[, c("CSEdistance", predictor_vars)]
 
-    -   Columns = permutation replicates
+# Rename predictors by removing "_mean" for later projections
+names(V.model) <- gsub("_mean$", "", names(V.model))
 
--   For each column of rsq_null_mat (i.e., one permutation replicate):
+# Predict on full data
+pred_all <- predict(rf_model_raw, newdata = V.model[,-1])
+obs_all <- V.model[,1]
+# Plot predicted vs observed
+ggplot(data.frame(obs = obs_all, pred = pred_all), aes(x = obs, y = pred)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  coord_equal() +
+  xlim(0, 1) +
+  ylim(0, 1) +
+  theme_minimal() +
+  labs(x = "Observed CSE", y = "(No Model Projection) \n Predicted CSE")
+```
+  
+# 7. Variable importance plot  
+## IncNodePurity:
+```{r variable-importance}
 
-    -   Compute a signed-rank statistic comparing rsq_obs to that column.
 
-    -   Compare your observed signed-rank stat (vs. the mean of permuted R²) to the distribution of stats from those permutation columns.
+# Load full model
+full_model <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+full_imp <- importance(full_model, type = 2) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  mutate(model = "full")
 
-    -   The empirical p-value is the fraction of permuted stats ≥ the observed stat → a one-sided test asking how often is the permuted result as strong or stronger than the real one?
+# Load LOPOCV models
+lopocv_imp <- map_df(1:67, function(fold_idx) {
+  rf_model <- readRDS(sprintf("%s/lopocv/rf_model_%02d.rds", results_dir, fold_idx))
+  imp <- importance(rf_model, type = 2)
+  data.frame(
+    variable = rownames(imp),
+    IncNodePurity = imp[,1],
+    model = paste0("fold_", fold_idx)
+  )
+}) %>%
+  mutate(variable = str_replace(variable, "_mean$", ""))
+
+# Combine
+all_imp <- bind_rows(
+  full_imp %>% rename(IncNodePurity = `IncNodePurity`),
+  lopocv_imp
+)
+
+# Define custom labels
+label_map <- c(
+  BIO1   = "Annual Mean Temperature (BIO1)",
+  BIO2   = "Mean Diurnal Temp Range (BIO2)",
+  BIO3   = "Isothermality (BIO3)",
+  BIO4   = "Temperature Seasonality (BIO4)",
+  BIO5   = "Max Temp of Warmest Month (BIO5)",
+  BIO6   = "Min Temp of Coldest Month (BIO6)",
+  BIO7   = "Temperature Annual Range (BIO7)",
+  BIO8S  = "Mean Temp of Wettest Season (BIO8S)",
+  BIO9S  = "Mean Temp of Driest Season (BIO9S)",
+  BIO10S = "Mean Temp of Warmest Season (BIO10S)",
+  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
+  BIO12  = "Annual Precipitation (BIO12)",
+  BIO13  = "Precipitation of Wettest Month (BIO13)",
+  BIO14  = "Precipitation of Driest Month (BIO14)",
+  BIO15  = "Precipitation Seasonality (BIO15)",
+  BIO16S = "Precipitation of Wettest Season (BIO16S)",
+  BIO17S = "Precipitation of Driest Season (BIO17S)",
+  BIO18S = "Precipitation of Warmest Season (BIO18S)",
+  BIO19S = "Precipitation of Coldest Season (BIO19S)",
+  slope  = "Slope",
+  alt    = "Altitude",
+  lakes  = "Lake Presence/Absence",
+  riv_3km= "River Kernel Density (3 km bandwidth)",
+  samp_20km = "Sampling Density (20 km bandwidth)",
+  pix_dist    = "Geographic Distance"
+)
+
+# Step 1: Get variable order based on full model
+full_order <- all_imp %>%
+  filter(model == "full") %>%
+  arrange(desc(IncNodePurity)) %>%
+  pull(variable)
+
+
+# Step 2: Reverse it to go from highest (top of plot) to lowest (bottom)
+all_imp$variable <- factor(all_imp$variable, levels = rev(full_order))
+
+# Step 3: Plot
+ggplot(all_imp, aes(x = variable, y = IncNodePurity)) +
+  geom_point(data = filter(all_imp, model != "full"),
+             aes(group = model), color = "grey70", alpha = 0.4, size = 2) +
+  geom_point(data = filter(all_imp, model == "full"),
+             color = "black", size = 3) +
+  coord_flip() +
+  scale_y_continuous(name = "IncNodePurity") +
+  scale_x_discrete(labels = label_map) +
+  labs(x = NULL, title = "Variable Importance in Genetic Connectivity Model") +
+  theme_minimal()
+```
+## Percent Improvement MSE
+```{r variable-imp-mse}
+# Load full model
+full_model <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+full_imp <- importance(full_model, type = 1) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  rename(IncMSE = `%IncMSE`) %>%
+  mutate(model = "full")
+
+# Load LOPOCV models
+lopocv_imp <- map_df(1:67, function(fold_idx) {
+  rf_model <- readRDS(sprintf("%s/lopocv/rf_model_%02d.rds", results_dir, fold_idx))
+  imp <- importance(rf_model, type = 1)
+  data.frame(
+    variable = rownames(imp),
+    IncMSE = imp[,1],
+    model = paste0("fold_", fold_idx)
+  )
+}) %>%
+  mutate(variable = str_replace(variable, "_mean$", ""))
+
+# Combine
+all_imp <- bind_rows(full_imp, lopocv_imp)
+
+# Define custom labels
+label_map <- c(
+  BIO1   = "Annual Mean Temperature (BIO1)",
+  BIO2   = "Mean Diurnal Temp Range (BIO2)",
+  BIO3   = "Isothermality (BIO3)",
+  BIO4   = "Temperature Seasonality (BIO4)",
+  BIO5   = "Max Temp of Warmest Month (BIO5)",
+  BIO6   = "Min Temp of Coldest Month (BIO6)",
+  BIO7   = "Temperature Annual Range (BIO7)",
+  BIO8S  = "Mean Temp of Wettest Season (BIO8S)",
+  BIO9S  = "Mean Temp of Driest Season (BIO9S)",
+  BIO10S = "Mean Temp of Warmest Season (BIO10S)",
+  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
+  BIO12  = "Annual Precipitation (BIO12)",
+  BIO13  = "Precipitation of Wettest Month (BIO13)",
+  BIO14  = "Precipitation of Driest Month (BIO14)",
+  BIO15  = "Precipitation Seasonality (BIO15)",
+  BIO16S = "Precipitation of Wettest Season (BIO16S)",
+  BIO17S = "Precipitation of Driest Season (BIO17S)",
+  BIO18S = "Precipitation of Warmest Season (BIO18S)",
+  BIO19S = "Precipitation of Coldest Season (BIO19S)",
+  slope  = "Slope",
+  alt    = "Altitude",
+  lakes  = "Lake Presence/Absence",
+  riv_3km= "River Kernel Density (3 km bandwidth)",
+  samp_20km = "Sampling Density (20 km bandwidth)",
+  pix_dist    = "Geographic Distance"
+)
+
+# Order by full model's %IncMSE (top to bottom)
+full_order <- all_imp %>%
+  filter(model == "full") %>%
+  arrange(desc(IncMSE)) %>%
+  pull(variable)
+
+all_imp$variable <- factor(all_imp$variable, levels = rev(full_order))
+
+# Plot
+#pdf("../figures/VarImpPlot.pdf",width =6, height=6)
+ggplot(all_imp, aes(x = variable, y = IncMSE)) +
+  geom_point(data = filter(all_imp, model != "full"),
+             aes(group = model), color = "grey70", alpha = 0.4, size = 2) +
+  geom_point(data = filter(all_imp, model == "full"),
+             color = "black", size = 3) +
+  coord_flip() +
+  scale_y_continuous(name = "%IncMSE") +
+  scale_x_discrete(labels = label_map) +
+  labs(x = NULL, title = "Variable Importance") +
+  theme_minimal()
+#dev.off()
+```
+
+## Abrev Percent Improvement MSE
+```{r variable-imp-mse}
+# Load full model
+full_model <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+full_imp <- importance(full_model, type = 1) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  rename(IncMSE = `%IncMSE`) %>%
+  mutate(model = "full")
+
+# Load LOPOCV models
+lopocv_imp <- map_df(1:67, function(fold_idx) {
+  rf_model <- readRDS(sprintf("%s/lopocv/rf_model_%02d.rds", results_dir, fold_idx))
+  imp <- importance(rf_model, type = 1)
+  data.frame(
+    variable = rownames(imp),
+    IncMSE = imp[,1],
+    model = paste0("fold_", fold_idx)
+  )
+}) %>%
+  mutate(variable = str_replace(variable, "_mean$", ""))
+
+# Combine
+all_imp <- bind_rows(full_imp, lopocv_imp)
+
+# Define custom labels
+label_map <- c(
+  BIO1   = "BIO1",
+  BIO2   = "BIO2",
+  BIO3   = "BIO3",
+  BIO4   = "BIO4",
+  BIO5   = "BIO5",
+  BIO6   = "BIO6",
+  BIO7   = "BIO7",
+  BIO8S  = "BIO8S",
+  BIO9S  = "BIO9S",
+  BIO10S = "BIO10S",
+  BIO11S = "BIO11S",
+  BIO12  = "BIO12",
+  BIO13  = "BIO13",
+  BIO14  = "BIO14",
+  BIO15  = "BIO15",
+  BIO16S = "BIO16S",
+  BIO17S = "BIO17S",
+  BIO18S = "BIO18S",
+  BIO19S = "BIO19S",
+  slope  = "Slope",
+  alt    = "Altitude",
+  lakes  = "Lakes",
+  riv_3km= "Rivers",
+  samp_20km = "Sampling",
+  pix_dist    = "Geo. Dist."
+)
+
+# Order by full model's %IncMSE (top to bottom)
+full_order <- all_imp %>%
+  filter(model == "full") %>%
+  arrange(desc(IncMSE)) %>%
+  pull(variable)
+
+all_imp$variable <- factor(all_imp$variable, levels = rev(full_order))
+
+# Plot
+#pdf("../figures/VarImpPlot_abrev.pdf",width =3, height=6)
+ggplot(all_imp, aes(x = variable, y = IncMSE)) +
+  geom_point(data = filter(all_imp, model != "full"),
+             aes(group = model), color = "grey70", alpha = 0.4, size = 2) +
+  geom_point(data = filter(all_imp, model == "full"),
+             color = "black", size = 3) +
+  coord_flip() +
+  scale_y_continuous(name = "%IncMSE") +
+  scale_x_discrete(labels = label_map) +
+  labs(x = NULL, title = "Variable Importance") +
+  theme_minimal()
+#dev.off()
+```
