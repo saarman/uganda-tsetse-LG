@@ -30,6 +30,7 @@ library(randomForest)
 library(rnaturalearth)
 library(rnaturalearthdata)
 library(ggplot2)
+library(sp)
 
 # Define Paths to directories
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"

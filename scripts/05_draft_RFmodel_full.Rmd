@@ -446,7 +446,7 @@ plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 prediction_raster <- (predict(env, rf_final, type = "response")) * max_CSE
 
 # Write Prediction Raster to file
-writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE_unscaled_resistance.tif"), format = "GTiff", overwrite = TRUE)
+#writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE_unscaled_resistance.tif"), format = "GTiff", overwrite = TRUE)
 
 # Create base plot with viridis
 plot(prediction_raster,
@@ -525,7 +525,7 @@ plot(con,
      axes = FALSE, box = FALSE,
      legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
-plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 
 # Plot Habitat Suitability
 plot(sdm,
@@ -534,7 +534,7 @@ plot(sdm,
      axes = FALSE, box = FALSE,
      legend.args = list(text = "Suitability", side = 2, line = 2.5, cex = 0.8))
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
-plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 
 
 # Plot with custom colors
@@ -550,7 +550,7 @@ plot(con,
      axes = FALSE, box = FALSE,
      legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
-plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 
 # Plot Habitat Suitability with custom colors
 plot(sdm,
@@ -559,7 +559,7 @@ plot(sdm,
      axes = FALSE, box = FALSE,
      legend.args = list(text = "Suitability", side = 2, line = 2.5, cex = 0.8))
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
-plot(st_geometry(uganda_cropped), border = "black", lwd = .25, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
 ```
 
 # 6. Bivariate map
@@ -641,8 +641,8 @@ bivmap <- bivariate.map(con_r, sdm_r, colormatrix = col.matrix, nquantiles = 9)
 bivmap_terra <- rast(bivmap)  # convert from RasterLayer to SpatRaster
 
 # Write raster file
-writeRaster(bivmap, file.path(results_dir, "bivmap_suitability_connectivity.tif"),
-            filetype = "GTiff", overwrite = TRUE)
+#writeRaster(bivmap, file.path(results_dir, "bivmap_suitability_connectivity.tif"),
+           # filetype = "GTiff", overwrite = TRUE)
 
 ```
 ## Plot bivmap
@@ -681,10 +681,6 @@ envRCP <- stack(file.path(data_dir, "processed", "env_stack_RCP4_5.grd"))
 plot(envRCP[[20:25]])
 plot(env[[20:25]])
 
-# check names are correct
-names(envRCP)
-rownames(rf_final$importance)
-
 # make ABSOLUTELY CERTAIN all layers I want to stay the same DO stay the same
 #envRCP$alt <- env$alt
 #envRCP$slope <- env$slope
@@ -701,12 +697,10 @@ prediction_RCP4_5 <- predict(envRCP, rf_final, type = "response")
 prediction_raster <- predict(env, rf_final, type = "response")
 delta <- prediction_RCP4_5 - prediction_raster
 
-
 plot(stack(prediction_RCP4_5, prediction_raster,delta))
 
-
 # Write Prediction Raster to file
-writeRaster(prediction_RCP4_5, file.path(results_dir,"fullRF_CSE_resistance_RCP4_5.tif"), format = "GTiff", overwrite = TRUE)
+# writeRaster(prediction_RCP4_5, file.path(results_dir,"fullRF_CSE_resistance_RCP4_5.tif"), format = "GTiff", overwrite = TRUE)
 ```
 ## Plot forecast
 ```{r plot-projection, warning=FALSE}
@@ -905,19 +899,82 @@ plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
 
 # 9. Figures for paper  
 
-Connectivity: 
+## lakes and Uganda
+```{r background-map, warnings=FALSE}
+# Load env stack with named layers
+ref_raster <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+lakes <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
+lakes <- st_transform(lakes, crs = st_crs(ref_raster))  # match CRS 
+lakes <- st_make_valid(lakes) # fix geometries
+r_ext <- st_as_sfc(st_bbox(ref_raster)) # extent
+st_crs(r_ext) <- st_crs(ref_raster) # match CRS
+lakes <- st_intersection(lakes, r_ext) # clip to extent
+uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", returnclass = "sf")
+uganda <- st_intersection(uganda, r_ext) # clip to extent
+
+# Convert lakes and uganda to sf if needed
+if (!inherits(lakes, "sf")) lakes <- st_as_sf(lakes)
+if (!inherits(uganda, "sf")) uganda <- st_as_sf(uganda)
+
+# Reproject lakes and uganda to match raster CRS
+if (st_crs(lakes) != crs(ref_raster)) lakes <- st_transform(lakes, crs(ref_raster))
+if (st_crs(uganda) != crs(ref_raster)) uganda <- st_transform(uganda, crs(ref_raster))
+
+# Convert sf to SpatVector for terra mask() and crop()
+lakes_v <- vect(lakes)
+uganda_v <- vect(uganda)
+
+```
+## con and sdm
+```{r con-sdm, warnings=FALSE}
+# Load raster layers
+con_raster <- rast(file.path(results_dir, "fullRF_CSE_resistance.tif"))
+fao <- rast(file.path(data_dir, "FAO_fuscipes_2001.tif"))
+update <- rast(file.path(data_dir, "SDM_2018update.tif"))
+
+# Match extent and resolution first
+fao_crop <- crop(fao, update)
+update_crop <- crop(update, fao_crop)
+fao_resamp <- resample(fao_crop, update_crop)  # if needed to match resolution
+
+# Combine
+sdm_raw <- max(fao_resamp, update_crop, na.rm = TRUE)
+
+# Crop to overlapping extent
+sdm <- crop(sdm_raw, con_raster)
+con <- crop(con_raster, sdm)
+
+# Mask low-suitability areas
+sdm[sdm <= 0.05] <- NA
+
+
+# Rescale to 0–1
+sdm_min <- global(sdm, "min", na.rm = TRUE)$min
+sdm_max <- global(sdm, "max", na.rm = TRUE)$max
+sdm <- (sdm - sdm_min) / (sdm_max - sdm_min)
+
+# Mask to common suitable area
+con <- mask(con, sdm)
+
+# Rescale inverse of CSE to 0-1
+con_min <- global(con, "min", na.rm = TRUE)$min
+con_max <- global(con, "max", na.rm = TRUE)$max
+con <- 1 - ((con - con_min) / (con_max - con_min))
+```
+
+### Colors
+Connectivity colors from bivmap
 low = #d6ce7c, "DarkKhaki", rgba(206, 200, 146, 1)
 high = #924532, "Sienna", rgba(146, 69, 50, 1)
 
-Suitability:
+Suitability colors from bivmap
 low = #8db4c9, "LightSteelBlue", rgba(141, 180, 201, 1)
 high = #55306a, "DarkSlateBlue", rgba(85, 48, 106, 1)
 
-## 9a. Connectivity and Suitability bivmap companion maps with custom colors
+## 9a. Connectivity and Suitability companion maps with custom colors
 ```{r figures, warning=FALSE}
 
 # Plot with custom colors
-
 # Custom palette #1 based on Bishop et al.
 connectivity_colors <- colorRampPalette(c("#c5c3a7","#ffe60c","#c79620", "#934334","#802839", "#6f0f40"))(100) #"#d6ce7c"
 suitability_colors  <- colorRampPalette(c("lightgray", "#7fabb9","#3c94c8","#595379","#54306a"))(100)  #"#617189"
@@ -961,8 +1018,6 @@ plot(st_geometry(uganda_cropped), border = "black", lwd = 1, add = TRUE)
 ## 9b. Env change --- Forecasted changes
 
 ```{r env-tiles, warning=FALSE}
-
-
 # Create the difference layers
 diff_list <- list(
   envRCP$BIO1 - env$BIO1,
@@ -1012,19 +1067,6 @@ diff_stack <- do.call(c, diff_list)
 
 # Reference raster for extent, resolution, and CRS
 ref_raster <- con
-
-# Convert lakes and uganda to sf if needed
-if (!inherits(lakes, "sf")) lakes <- st_as_sf(lakes)
-if (!inherits(uganda, "sf")) uganda <- st_as_sf(uganda)
-
-# Reproject lakes and uganda to match raster CRS
-if (st_crs(lakes) != crs(ref_raster)) lakes <- st_transform(lakes, crs(ref_raster))
-if (st_crs(uganda) != crs(ref_raster)) uganda <- st_transform(uganda, crs(ref_raster))
-
-# Convert sf to SpatVector for terra mask() and crop()
-lakes_v <- vect(lakes)
-uganda_v <- vect(uganda)
-
 
 #pdf("Env_change_panels.pdf", width = 7, height = 7) # Optional: save to PDF
 #par(mfrow = c(2, 2), mar = c(4, 2, 2, 3))  # More space for legend
@@ -1081,65 +1123,209 @@ for (i in 1:nlyr(diff_stack)) {
 #dev.off()
 
 ```
-## 9c. Env current
-
+## 9c. Current raw conditions
 ```{r plot-raw-env}
-# Convert env to SpatRaster for terra functions
-raw_stack <- terra::rast(env)
+# Create the difference layers
+env_list <- list(
+  env$BIO1 - envRCP$BIO1 + envRCP$BIO1,
+  env$BIO2 - envRCP$BIO2 + envRCP$BIO2,
+  env$BIO3 - envRCP$BIO3 + envRCP$BIO3,
+  env$BIO4 - envRCP$BIO4 + envRCP$BIO4,
+  env$BIO5 - envRCP$BIO5 + envRCP$BIO5,
+  env$BIO6 - envRCP$BIO6 + envRCP$BIO6,
+  env$BIO7 - envRCP$BIO7 + envRCP$BIO7,
+  env$BIO8S - envRCP$BIO8S + envRCP$BIO8S,
+  env$BIO9S - envRCP$BIO9S + envRCP$BIO9S,
+  env$BIO10S - envRCP$BIO10S + envRCP$BIO10S,
+  env$BIO11S - envRCP$BIO11S + envRCP$BIO11S,
+  env$BIO12 - envRCP$BIO12 + envRCP$BIO12,
+  env$BIO13 - envRCP$BIO13 + envRCP$BIO13,
+  env$BIO14 - envRCP$BIO14 + envRCP$BIO14,
+  env$BIO15 - envRCP$BIO15 + envRCP$BIO15,
+  env$BIO16S - envRCP$BIO16S + envRCP$BIO16S,
+  env$BIO17S - envRCP$BIO17S + envRCP$BIO17S,
+  env$BIO18S - envRCP$BIO18S + envRCP$BIO18S,
+  env$BIO19S - envRCP$BIO19S + envRCP$BIO19S,
+  env$slope - envRCP$slope + envRCP$slope,
+  env$alt - envRCP$alt + envRCP$alt,
+  env$lakes - envRCP$lakes + envRCP$lakes,
+  env$riv_3km - envRCP$riv_3km + envRCP$riv_3km, 
+  env$samp_20km - envRCP$samp_20km + envRCP$samp_20km,      
+  env$pix_dist - envRCP$pix_dist + envRCP$pix_dist
+)
 
-for (nm in names(raw_stack)) {
-  r <- raw_stack[[nm]]
-  title <- nm
+# Variable names
+layer_names <- c(
+  "BIO1","BIO2","BIO3","BIO4","BIO5","BIO6","BIO7",
+  "BIO8S","BIO9S","BIO10S","BIO11S","BIO12","BIO13","BIO14",
+  "BIO15","BIO16S","BIO17S","BIO18S","BIO19S",
+  "slope","alt","lakes","riv_3km","samp_20km","pix_dist"
+)
 
-  # Crop/mask to reference
-  r <- terra::crop(r, ref_raster)
-  r <- terra::mask(r, ref_raster)
+# Convert and assign names individually
+env_list <- lapply(seq_along(env_list), function(i) {
+  r <- terra::rast(env_list[[i]])
+  names(r) <- layer_names[i]
+  return(r)
+})
 
-  # Range and mean
-  zr   <- terra::global(r, fun = range, na.rm = TRUE, names = FALSE)
-  zmin <- zr[1, 1]
-  zmax <- zr[1, 2]
-  zmu  <- as.numeric(terra::global(r, fun = "mean", na.rm = TRUE))
+# Stack into a multi-layer SpatRaster
+env_stack <- do.call(c, env_list)
 
-  n <- 100
+# Reference raster for extent, resolution, and CRS
+ref_raster <- con
 
-  if (is.na(zmin) || is.na(zmax) || zmin == zmax) {
-    cols <- rep("white", n)
+#pdf("Env_change_panels.pdf", width = 7, height = 7) # Optional: save to PDF
+#par(mfrow = c(2, 2), mar = c(4, 2, 2, 3))  # More space for legend
+
+for (i in 1:nlyr(env_stack)) {
+  r <- diff_stack[[i]]
+  title <- names(r)
+
+  # Crop and mask to reference raster
+  r <- crop(r, ref_raster)
+  r <- mask(r, ref_raster)  # removes extra NA/edge artifacts
+
+  # Get masked values and compute mean-centered limits
+  r_vals <- values(r)
+  r_vals <- r_vals[!is.na(r_vals)]
+
+  if (length(r_vals) == 0) {
+    cols <- rep("white", 100)
     zlim <- c(0, 0)
   } else {
-    below <- max(0, zmu - zmin)
-    above <- max(0, zmax - zmu)
-    total <- below + above
-    if (total == 0) {
-      zmu <- (zmin + zmax) / 2
-      below <- zmu - zmin
-      above <- zmax - zmu
-      total <- below + above
-    }
-    n_neg <- max(1, round(n * below / total))
-    n_pos <- max(1, n - n_neg)
+    r_mean <- mean(r_vals)
+    r_range <- range(r_vals)
+    zmax <- max(abs(r_range[2] - r_mean), abs(r_range[1] - r_mean))
+    zlim <- c(r_mean - zmax, r_mean + zmax)
 
-    # blue (below mean) → white → warm (above mean)
-    neg_col <- colorRampPalette(c("blue4", "deepskyblue3", "#8db4c9", "white"))(n_neg)
-    pos_col <- colorRampPalette(c("white", "gold", "darkorange", "#924532"))(n_pos)
-
-    cols <- c(neg_col, pos_col[-1])
-    zlim <- c(zmin, zmax)
+    # Define diverging palette centered at mean
+    n <- 100
+    n_half <- floor(n / 2)
+    neg_col <- colorRampPalette(c("blue4", "deepskyblue3", "#8db4c9", "white"))(n_half + 1)
+    pos_col <- colorRampPalette(c("white", "gold", "darkorange", "#924532"))(n_half + 1)
+    cols <- c(neg_col, pos_col[-1])  # remove duplicate white
   }
 
+  # Plot raster
   plot(r,
        col = cols,
        zlim = zlim,
        main = title,
        axes = FALSE, box = FALSE,
-       legend.args = list(text = "Value", side = 1, line = 2.5, cex = 0.8))
+       legend.args = list(side = 1, line = 2.5, cex = 0.8))
 
-  # Overlays (assumes lakes_v and uganda_v already created)
-  plot(lakes_v,  col = "black", border = NA, add = TRUE)
+  # Overlay lakes and uganda outline
+  plot(lakes_v, col = "black", border = NA, add = TRUE)
   plot(uganda_v, border = "black", lwd = 0.25, add = TRUE)
 }
 
 
+#dev.off()
+
 ```
-# I'm thinking now I want to make similar plots that show the Pearson's r in a sliding window, of the current/future/direction-of-change of variable versus full model.
+
+## 9d. Forecast conditions
+```{r plot-forecast-env}
+# Create the difference layers
+env_list <- list(
+  envRCP$BIO1 - env$BIO1 + env$BIO1,
+  envRCP$BIO2 - env$BIO2 + env$BIO2,
+  envRCP$BIO3 - env$BIO3 + env$BIO3,
+  envRCP$BIO4 - env$BIO4 + env$BIO4,
+  envRCP$BIO5 - env$BIO5 + env$BIO5,
+  envRCP$BIO6 - env$BIO6 + env$BIO6,
+  envRCP$BIO7 - env$BIO7 + env$BIO7,
+  envRCP$BIO8S - env$BIO8S + env$BIO8S,
+  envRCP$BIO9S - env$BIO9S + env$BIO9S,
+  envRCP$BIO10S - env$BIO10S + env$BIO10S,
+  envRCP$BIO11S - env$BIO11S + env$BIO11S,
+  envRCP$BIO12 - env$BIO12 + env$BIO12,
+  envRCP$BIO13 - env$BIO13 + env$BIO13,
+  envRCP$BIO14 - env$BIO14 + env$BIO14,
+  envRCP$BIO15 - env$BIO15 + env$BIO15,
+  envRCP$BIO16S - env$BIO16S + env$BIO16S,
+  envRCP$BIO17S - env$BIO17S + env$BIO17S,
+  envRCP$BIO18S - env$BIO18S + env$BIO18S,
+  envRCP$BIO19S - env$BIO19S + env$BIO19S,
+  envRCP$slope - env$slope + env$slope,
+  envRCP$alt - env$alt + env$alt,
+  envRCP$lakes - env$lakes + env$lakes,
+  envRCP$riv_3km - env$riv_3km + env$riv_3km, 
+  envRCP$samp_20km - env$samp_20km + env$samp_20km,      
+  envRCP$pix_dist - env$pix_dist + env$pix_dist
+)
+
+# Variable names
+layer_names <- c(
+  "RCP4.5 BIO1","RCP4.5 BIO2","RCP4.5 BIO3","RCP4.5 BIO4","RCP4.5 BIO5","RCP4.5 BIO6","RCP4.5 BIO7",
+  "BIO8S","RCP4.5 BIO9S","RCP4.5 BIO10S","RCP4.5 BIO11S","RCP4.5 BIO12","RCP4.5 BIO13","RCP4.5 BIO14",
+  "RCP4.5 BIO15","BIO16S","RCP4.5 BIO17S","RCP4.5 BIO18S","RCP4.5 BIO19S",
+  "slope","alt","lakes","riv_3km","samp_20km","pix_dist"
+)
+
+# Convert and assign names individually
+env_list <- lapply(seq_along(env_list), function(i) {
+  r <- terra::rast(env_list[[i]])
+  names(r) <- layer_names[i]
+  return(r)
+})
+
+# Stack into a multi-layer SpatRaster
+env_stack <- do.call(c, env_list)
+
+# Reference raster for extent, resolution, and CRS
+ref_raster <- con
+
+#pdf("Env_change_panels.pdf", width = 7, height = 7) # Optional: save to PDF
+#par(mfrow = c(2, 2), mar = c(4, 2, 2, 3))  # More space for legend
+
+for (i in 1:nlyr(env_stack)) {
+  r <- diff_stack[[i]]
+  title <- names(r)
+
+  # Crop and mask to reference raster
+  r <- crop(r, ref_raster)
+  r <- mask(r, ref_raster)  # removes extra NA/edge artifacts
+
+  # Get masked values and compute mean-centered limits
+  r_vals <- values(r)
+  r_vals <- r_vals[!is.na(r_vals)]
+
+  if (length(r_vals) == 0) {
+    cols <- rep("white", 100)
+    zlim <- c(0, 0)
+  } else {
+    r_mean <- mean(r_vals)
+    r_range <- range(r_vals)
+    zmax <- max(abs(r_range[2] - r_mean), abs(r_range[1] - r_mean))
+    zlim <- c(r_mean - zmax, r_mean + zmax)
+
+    # Define diverging palette centered at mean
+    n <- 100
+    n_half <- floor(n / 2)
+    neg_col <- colorRampPalette(c("blue4", "deepskyblue3", "#8db4c9", "white"))(n_half + 1)
+    pos_col <- colorRampPalette(c("white", "gold", "darkorange", "#924532"))(n_half + 1)
+    cols <- c(neg_col, pos_col[-1])  # remove duplicate white
+  }
+
+  # Plot raster
+  plot(r,
+       col = cols,
+       zlim = zlim,
+       main = title,
+       axes = FALSE, box = FALSE,
+       legend.args = list(side = 1, line = 2.5, cex = 0.8))
+
+  # Overlay lakes and uganda outline
+  plot(lakes_v, col = "black", border = NA, add = TRUE)
+  plot(uganda_v, border = "black", lwd = 0.25, add = TRUE)
+}
+
+
+#dev.off()
+
+```
+
+### I'm thinking now I want to make similar plots that show the Pearson's r in a sliding window, of the current/future/direction-of-change of variable versus full model.
 

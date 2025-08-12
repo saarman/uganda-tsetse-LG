@@ -1,0 +1,462 @@
+---
+title: "RF model of IBD residuals – Bivmap"
+author: "Norah Saarman"
+date: "2025-06-17"
+output:
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+RStudio Configuration:  
+- **R version:** R 4.4.0 (Geospatial packages)  
+- **Number of cores:** 4 (up to 32 available)   
+- **Account:** saarman-np  
+- **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
+- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)    
+# Setup
+```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+# load only required packages
+library(randomForest)
+library(doParallel)
+library(raster)
+library(sf)
+library(viridis)
+library(dplyr)
+library(terra)
+library(sf)
+library(classInt)
+library(raster)
+library(RColorBrewer)
+
+# base directories
+data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
+input_dir <- "../input"
+results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results"
+
+# read the combined CSE + coords table + pix_dist + Env variables
+V.table <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths_residuals.csv"),
+                    header = TRUE)
+
+# define coordinate reference system
+crs_geo <- 4326     # EPSG code for WGS84
+
+# simple mode helper
+get_mode <- function(x) {
+  ux <- unique(x[!is.na(x)])
+  ux[ which.max(tabulate(match(x, ux))) ]
+}
+
+# setup running in parallel
+cl <- makeCluster(4)
+registerDoParallel(cl)
+clusterExport(cl, "get_mode")
+```
+
+# 1. Prepare the data
+```{r prep, warning=FALSE}
+# Assign input, checking for any rows with NA
+sum(!complete.cases(V.table))  # should return 0
+rf_data <- na.omit(V.table)
+
+# Confirm that resid_ibd is numeric
+rf_data$resid_ibd <- as.numeric(rf_data$resid_ibd)
+```
+
+# 2. Bivariate map
+## Scale 0-1, habitat suitability and inverse of CSE
+```{r scale-maps, warning=FALSE}
+# Load raster layers
+con_raster <- rast(file.path(results_dir, "fullRF_residuals.tif"))
+fao <- rast(file.path(data_dir, "FAO_fuscipes_2001.tif"))
+update <- rast(file.path(data_dir, "SDM_2018update.tif"))
+
+# Match extent and resolution first
+fao_crop <- crop(fao, update)
+update_crop <- crop(update, fao_crop)
+fao_resamp <- resample(fao_crop, update_crop)  # if needed to match resolution
+
+# Combine
+sdm_raw <- max(fao_resamp, update_crop, na.rm = TRUE)
+
+# Crop to overlapping extent
+sdm <- crop(sdm_raw, con_raster)
+con <- crop(con_raster, sdm)
+
+# Mask low-suitability areas
+sdm[sdm <= 0.05] <- NA
+
+
+# Rescale to 0–1
+sdm_min <- global(sdm, "min", na.rm = TRUE)$min
+sdm_max <- global(sdm, "max", na.rm = TRUE)$max
+sdm <- (sdm - sdm_min) / (sdm_max - sdm_min)
+
+# Mask to common suitable area
+con <- mask(con, sdm)
+
+# Rescale inverse of residuals to 0-1
+con_min <- global(con, "min", na.rm = TRUE)$min
+con_max <- global(con, "max", na.rm = TRUE)$max
+con <- 1 - ((con - con_min) / (con_max - con_min))
+
+# Convert back to raster for compatibility with bivariate.map function
+sdm_r <- raster(sdm)
+con_r <- raster(con)
+
+# Plot Genetic Connectivity (inverse residuals)
+plot(con,
+     col = rev(viridis::plasma(100)),  # high connectivity = dark
+     main = "Genetic Connectivity (inverse residuals)",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
+
+# Plot Habitat Suitability
+plot(sdm,
+     col = viridis::viridis(100),  # high suitability = dark
+     main = "Habitat Suitability",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Suitability", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
+
+
+# Plot with custom colors
+
+# Custom palettes based on Bishop et al.
+connectivity_colors <- colorRampPalette(c("#FFFF00", "#FFA500", "#FF4500", "#700E40", "#2E003E"))(100)
+suitability_colors  <- colorRampPalette(c("white", "lightblue", "blue4"))(100)     # white → light blue → dark blue
+
+# Plot Genetic Connectivity (inverse residuals) with custom colors
+plot(con,
+     col = connectivity_colors,
+     main = "Genetic Connectivity (inverse residuals)",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
+
+# Plot Habitat Suitability with custom colors
+plot(sdm,
+     col = suitability_colors,
+     main = "Habitat Suitability",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Suitability", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
+```
+
+## Define and run functions
+```{r bivmap-functions, warning=FALSE}
+# Define color matrix function
+colmat <- function(nquantiles = 10, 
+                   upperleft = rgb(0,150,235, maxColorValue=255), 
+                   upperright = "#700E40", 
+                   bottomleft = "grey", 
+                   bottomright = rgb(255,230,15, maxColorValue=255), 
+                   xlab = "x label", 
+                   ylab = "y label") {
+  my.data <- seq(0, 1, .01)
+  my.class <- classIntervals(my.data, n = nquantiles, style = "quantile")
+  my.pal.1 <- findColours(my.class, c(upperleft, bottomleft))
+  my.pal.2 <- findColours(my.class, c(upperright, bottomright))
+  col.matrix <- matrix(nrow = 101, ncol = 101, NA)
+  for (i in 1:101) {
+    my.col <- c(paste(my.pal.1[i]), paste(my.pal.2[i]))
+    col.matrix[102 - i, ] <- findColours(my.class, my.col)
+  }
+  plot(c(1,1), pch = 19, col = my.pal.1, cex = 0.5, xlim = c(0,1), ylim = c(0,1),
+       frame.plot = FALSE, xlab = xlab, ylab = ylab, cex.lab = 1.8)
+  for (i in 1:101) {
+    col.temp <- col.matrix[i - 1, ]
+    points(my.data, rep((i - 1)/100, 101), pch = 15, col = col.temp, cex = 1)
+  }
+  seqs <- seq(0, 100, (100 / nquantiles))
+  seqs[1] <- 1
+  col.matrix <- col.matrix[c(seqs), c(seqs)]
+}
+
+# Define bivmap function
+bivariate.map <- function(rasterx, rastery, colormatrix = col.matrix, nquantiles = 10) {
+  # Quantiles for raster x
+  quanmean <- getValues(rasterx)
+  temp <- data.frame(quanmean, quantile = rep(NA, length(quanmean)))
+  brks <- with(temp, unique(quantile(quanmean, na.rm = TRUE, probs = seq(0, 1, 1 / nquantiles))))
+  r1 <- within(temp, quantile <- cut(quanmean, breaks = brks, labels = 2:length(brks), include.lowest = TRUE))
+  quantr <- data.frame(r1[,2]) 
+
+  # Quantiles for raster y
+  quanvar <- getValues(rastery)
+  temp <- data.frame(quanvar, quantile = rep(NA, length(quanvar)))
+  brks <- with(temp, unique(quantile(quanvar, na.rm = TRUE, probs = seq(0, 1, 1 / nquantiles))))
+  r2 <- within(temp, quantile <- cut(quanvar, breaks = brks, labels = 2:length(brks), include.lowest = TRUE))
+  quantr2 <- data.frame(r2[,2])
+
+  # Color assignment
+  as.numeric.factor <- function(x) as.numeric(levels(x))[x]
+  col.matrix2 <- colormatrix
+  cn <- unique(colormatrix)
+  for (i in 1:length(col.matrix2)) {
+    col.matrix2[i] <- ifelse(is.na(col.matrix2[i]), 1, which(col.matrix2[i] == cn)[1])
+  }
+
+  cols <- numeric(length(quantr[,1]))
+  for (i in 1:length(quantr[,1])) {
+    a <- as.numeric.factor(quantr[i,1])
+    b <- as.numeric.factor(quantr2[i,1])
+    cols[i] <- as.numeric(col.matrix2[b, a])
+  }
+
+  r <- rasterx
+  r[1:length(r)] <- cols
+  return(r)
+}
+
+# Check how many quantiles are available
+length(unique(quantile(getValues(con_r), probs = seq(0, 1, 0.1), na.rm = TRUE)))
+length(unique(quantile(getValues(sdm_r), probs = seq(0, 1, 0.1), na.rm = TRUE)))
+
+# Create color matrix
+col.matrix <- colmat(nquantiles = 9, xlab = "Genetic Connectivity", ylab = "Habitat Suitability")
+
+# Create bivariate map
+bivmap <- bivariate.map(con_r, sdm_r, colormatrix = col.matrix, nquantiles = 9)
+bivmap_terra <- rast(bivmap)  # convert from RasterLayer to SpatRaster
+
+# Write raster file
+#writeRaster(bivmap, file.path(results_dir, "bivmap_suitability_connectivity.tif"),
+           # filetype = "GTiff", overwrite = TRUE)
+
+```
+## Plot bivmap
+```{r plot-bivmap, warning=FALSE}
+# Load shape files with sf
+lakes   <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
+uganda  <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf", continent = "Africa")
+library(terra)
+
+bivmap_terra <- rast(bivmap)  # convert from RasterLayer to SpatRaster
+uganda_cropped <- st_crop(uganda, bivmap_terra)
+
+# Plot
+#pdf("../figures/bivmap.pdf", width = 14, height = 10)
+plot(bivmap,
+     col = as.vector(col.matrix),
+     legend = FALSE,
+     axes = FALSE,
+     box = FALSE,
+     main = "Habitat Suitability vs Genetic Connectivity")
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+#dev.off()
+```
+
+# 3. Forecast projection 
+
+## Build forecast projection: Predict across raster
+```{r predict-on-raster, warning=FALSE}
+# Load rdf of final model
+rf_final <- readRDS(file.path(results_dir, "rf_residuals.rds"))
+
+# Load env stack with named layers
+envRCP <- stack(file.path(data_dir, "processed", "env_stack_RCP4_5.grd"))
+
+plot(envRCP[[20:25]])
+plot(env[[20:25]])
+
+# make ABSOLUTELY CERTAIN all layers I want to stay the same DO stay the same
+#envRCP$alt <- env$alt
+#envRCP$slope <- env$slope
+#envRCP$riv_3km <- env$riv_3km
+#envRCP$samp_20km <- env$samp_20km
+#envRCP$lakes <- env$lakes
+#envRCP$pix_dist <- env$pix_dist
+
+# predict with model
+prediction_RCP4_5 <- predict(envRCP, rf_final, type = "response")
+prediction_raster <- predict(env, rf_final, type = "response")
+delta <- prediction_RCP4_5 - prediction_raster
+
+plot(stack(prediction_RCP4_5, prediction_raster,delta))
+
+# Write Prediction Raster to file
+writeRaster(prediction_RCP4_5, file.path(results_dir,"fullRF_residuals_RCP4_5.tif"), format = "GTiff", overwrite = TRUE)
+```
+## Plot forecast
+```{r plot-projection, warning=FALSE}
+# Create base plot with viridis
+plot(prediction_RCP4_5,
+     col = viridis::magma(100),
+     main = "Forecast residuals",
+     axes = FALSE,
+     box = FALSE,
+     #zlim = c(.15,.45),  # CSE limits
+     legend.args = list(text = "Predicted residuals", side = 3, line = 1, cex = 1))
+
+# Overlay lakes in dark gray
+lakes <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
+lakes <- st_transform(lakes, crs = st_crs(prediction_raster))  # match CRS 
+lakes <- st_make_valid(lakes) # fix geometries
+r_ext <- st_as_sfc(st_bbox(prediction_raster)) # extent
+st_crs(r_ext) <- st_crs(prediction_raster) # match CRS
+lakes <- st_intersection(lakes, r_ext) # clip to extent
+plot(st_geometry(lakes), col = "gray20", border = NA, add = TRUE)
+
+# Overlay country outline
+uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", returnclass = "sf")
+uganda <- st_intersection(uganda, r_ext) # clip to extent
+plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
+```
+
+## Scale forecast
+```{r scale-forecast, warning=FALSE}
+
+# Load raster layers
+con_raster_forecast <- rast(file.path(results_dir, "fullRF_residuals_RCP4_5.tif"))
+
+# Crop to overlapping extent
+con_forecast<- crop(con_raster_forecast, sdm)
+
+# Mask to common suitable area
+con_forecast <- mask(con_forecast,sdm)
+
+# Rescale inverse of CSE to 0-1
+forecast_min <- global(con_forecast, "min", na.rm = TRUE)$min
+forecast_max <- global(con_forecast, "max", na.rm = TRUE)$max
+con_forecast <- 1 - ((con_forecast - forecast_min) / (forecast_max - forecast_min))
+```
+
+## Plot scaled forecast of residuals 
+```{r plot-scaled-forecast, warning=FALSE}
+uganda_cropped <- st_crop(uganda, con_forecast)
+
+# Plot Forecast of Genetic Connectivity (inverse residuals)
+plot(con_forecast,
+     col = rev(viridis::plasma(100)),  # high connectivity = dark
+     main = "Genetic Connectivity (inverse residuals)",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 0.25, add = TRUE)
+```
+
+# 4. Companion Figures of GenCon and SDM 
+
+## Lakes and Uganda
+```{r background-map, warnings=FALSE}
+# Load env stack with named layers
+ref_raster <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+lakes <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
+lakes <- st_transform(lakes, crs = st_crs(ref_raster))  # match CRS 
+lakes <- st_make_valid(lakes) # fix geometries
+r_ext <- st_as_sfc(st_bbox(ref_raster)) # extent
+st_crs(r_ext) <- st_crs(ref_raster) # match CRS
+lakes <- st_intersection(lakes, r_ext) # clip to extent
+uganda <- rnaturalearth::ne_countries(continent = "Africa", scale = "medium", returnclass = "sf")
+uganda <- st_intersection(uganda, r_ext) # clip to extent
+
+# Convert lakes and uganda to sf if needed
+if (!inherits(lakes, "sf")) lakes <- st_as_sf(lakes)
+if (!inherits(uganda, "sf")) uganda <- st_as_sf(uganda)
+
+# Reproject lakes and uganda to match raster CRS
+if (st_crs(lakes) != crs(ref_raster)) lakes <- st_transform(lakes, crs(ref_raster))
+if (st_crs(uganda) != crs(ref_raster)) uganda <- st_transform(uganda, crs(ref_raster))
+
+# Convert sf to SpatVector for terra mask() and crop()
+lakes_v <- vect(lakes)
+uganda_v <- vect(uganda)
+
+```
+## Colors
+Connectivity colors from bivmap
+low = #d6ce7c, "DarkKhaki", rgba(206, 200, 146, 1)
+high = #924532, "Sienna", rgba(146, 69, 50, 1)
+
+Suitability colors from bivmap
+low = #8db4c9, "LightSteelBlue", rgba(141, 180, 201, 1)
+high = #55306a, "DarkSlateBlue", rgba(85, 48, 106, 1)
+
+## Connectivity and Suitability companion maps with custom colors
+```{r figures, warning=FALSE}
+# Load raster layers
+con_raster <- rast(file.path(results_dir, "fullRF_residuals.tif"))
+fao <- rast(file.path(data_dir, "FAO_fuscipes_2001.tif"))
+update <- rast(file.path(data_dir, "SDM_2018update.tif"))
+
+# Match extent and resolution first
+fao_crop <- crop(fao, update)
+update_crop <- crop(update, fao_crop)
+fao_resamp <- resample(fao_crop, update_crop)  # if needed to match resolution
+
+# Combine
+sdm_raw <- max(fao_resamp, update_crop, na.rm = TRUE)
+
+# Crop to overlapping extent
+sdm <- crop(sdm_raw, con_raster)
+con <- crop(con_raster, sdm)
+
+# Mask low-suitability areas
+sdm[sdm <= 0.05] <- NA
+
+
+# Rescale to 0–1
+sdm_min <- global(sdm, "min", na.rm = TRUE)$min
+sdm_max <- global(sdm, "max", na.rm = TRUE)$max
+sdm <- (sdm - sdm_min) / (sdm_max - sdm_min)
+
+# Mask to common suitable area
+con <- mask(con, sdm)
+
+# Rescale inverse of CSE to 0-1
+con_min <- global(con, "min", na.rm = TRUE)$min
+con_max <- global(con, "max", na.rm = TRUE)$max
+con <- 1 - ((con - con_min) / (con_max - con_min))
+
+# Plot with custom colors
+# Custom palette #1 based on Bishop et al.
+connectivity_colors <- colorRampPalette(c("#c5c3a7","#ffe60c","#c79620", "#934334","#802839", "#6f0f40"))(100) #"#d6ce7c"
+suitability_colors  <- colorRampPalette(c("lightgray", "#7fabb9","#3c94c8","#595379","#54306a"))(100)  #"#617189"
+
+
+# Plot lines of Genetic Connectivity (inverse residuals with custom colors)
+lines_sf <- st_read(file.path(data_dir,"processed","LC_paths.shp"), quiet=TRUE)
+line_colors <- connectivity_colors
+con_vals <- 1 - ((lines_sf$CSE - con_min) / (con_max - con_min))
+con_cols <- line_colors[cut(con_vals, breaks = seq(0, 1, length.out = 101), include.lowest = TRUE)]
+plot(con, col = connectivity_colors,
+     axes = FALSE, box = FALSE,
+     zlim = c(0,1),
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(con, col = "white",
+     axes = FALSE, box = FALSE, legend = FALSE, add = TRUE)
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(lines_sf), col = con_cols, lwd = 0.6, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 1, add = TRUE)
+
+
+# Plot Genetic Connectivity (inverse residuals) with custom colors
+plot(con,
+     col = connectivity_colors,
+     #main = "Genetic Connectivity (inverse residuals)",
+     axes = FALSE, box = FALSE,
+     zlim = c(0,1),
+     legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 1, add = TRUE)
+
+# Plot Habitat Suitability with custom colors
+plot(sdm,
+     col = suitability_colors,
+     #main = "Habitat Suitability",
+     axes = FALSE, box = FALSE,
+     legend.args = list(text = "Suitability", side = 2, line = 2.5, cex = 0.8))
+plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+plot(st_geometry(uganda_cropped), border = "black", lwd = 1, add = TRUE)
+```
+
+
