@@ -40,12 +40,22 @@ results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/
 output_dir <- file.path(results_dir, "lopocv")
 #dir.create(output_dir, showWarnings = FALSE)
 scratch_dir <- "/scratch/general/vast/u6036559"
+
+# Load data
+V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
+
+# Filter out western outlier "50-KB" 
+V.table_full <- V.table_full %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB")
+
 ```
   
 # 1. Load data and create Folds
 
 ```{r, fold-files}
-# Load data
+
+
+# Load data specific to residuals
 V.table <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths_residuals.csv"),header=TRUE)
 
 # Create unique ID after filtering
@@ -264,7 +274,7 @@ site_clusters <- indinfo %>%
   distinct()
 
 # Build site metadata from V.table and join with subclusters and metrics
-site_metadata <- V.table %>%
+site_metadata <- V.table_full %>%
   dplyr::select(Site = Var1, Latitude = lat1, Longitude = long1) %>%
   distinct() %>%
   left_join(site_clusters, by = "Site") %>%
