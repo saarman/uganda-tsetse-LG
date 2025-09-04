@@ -108,7 +108,7 @@ mean_vars   <- grep("_mean$", names(rf_data), value = TRUE)
 median_vars <- grep("_median$", names(rf_data), value = TRUE)
 mode_vars   <- grep("_mode$", names(rf_data), value = TRUE)
 ```
-
+  
 # 2. Build full Random Forest model 
 ```{r rf-full, warning=FALSE}
 # Build full RF model
@@ -125,9 +125,9 @@ print(rf_full)
 importance(rf_full)
 
 ```
-
+    
 # 3. Mean-only pruning
-
+  
 ## Compare mean versus median versus mode:
 ```{r mean-v-median-v-mode, warning=FALSE}
 # Extract groups of variables by suffix
@@ -151,7 +151,7 @@ c(mean = rf_mean$rsq[500] * 100,
 ```
 
 Including mean of env variable along least cost paths performs the best, adding median and mode does not greatly improve the model and increases risks of over fitting...
-
+    
 ## PCA of mean env predictor variables, patterns of autocorrelation?
 
 ```{r}
@@ -205,8 +205,8 @@ fviz_pca_var(pca_res,
              repel = TRUE
 )
 ```
+    
 ## (Optional) Prune more variables after narrowing to mean only?
-
 
 ```{r prune-mean, warning=FALSE, eval=FALSE}
 # Plot variable importance
@@ -246,11 +246,11 @@ sapply(prune_results, function(mod) {
 OOB MSE decreases quickly early on, with minimal gains beyond the top ~18 predictors.
 
 However, there are not too many more than 18 total, and many of the env variables have similar node purity, so given the special nature of the top 2 (geo dist and sampling density), I will leave all mean env variables.
-
+  
 ## (Optional) Scaling CSE
 
 Note: I did also try scaling CSE before runnning RF as a different idea, but performance of the full model did not improve, so no need to scale CSE before modeling.
-
+  
 
 # 4. Final full model - (Tune random forest with mean variables)
 ```{r tune, warning=FALSE}
@@ -313,7 +313,7 @@ rf_final <- rf_mean_full_tuned
 ```
 FYI: Later, to load the model back into R:
 `rf_mean_full_tuned <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))`
-
+    
 ## (Optional) Compare full and full tuned models (mean-only predictors)
 ```{r compare, eval=FALSE,warning=FALSE}
 
@@ -351,7 +351,7 @@ varImpPlot(rf_mean_full_tuned, main = "Tuned Full Model Importance",cex = 0.6, p
 The tuned model performs slightly better, but the gain may not be meaningful... however, it does confirm that the model is stable and that the mean-only predictors carry strong signal.
 
 Top 18 mean-based predictors retain nearly all the explanatory power of the original full model with 42 predictors.
-
+     
 # 5. IBD-residuals model (with residuals as response, drop pix_dist for predictor) - for projected map
 ```{r residuals, warning=FALSE}
 # Load data
@@ -422,8 +422,8 @@ rf_residuals$importance
 ```
 FYI: Later, to load the model back into R:
 `rf_residuals <- readRDS(file.path(results_dir, "rf_residuals.rds"))`
-
-# 6. Project from IBD-residuals model 
+  
+# 6. Project from IBD-residuals model   
 ## Build Projection
 ```{r projection, warning=FALSE}
 # Load env stack with named layers
@@ -462,9 +462,9 @@ uganda <- st_intersection(uganda, r_ext) # clip to extent
 plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```
 
-
+  
 # 7. Scale residuals and SDM
-
+    
 ## Scale 0-1, habitat suitability and inverse of predicted residuals
 ```{r bivmap-scale, warning=FALSE}
 
@@ -506,7 +506,7 @@ con <- 1 - ((con - con_min) / (con_max - con_min))
 sdm_r <- raster(sdm)
 con_r <- raster(con)
 ```
-
+  
 ## Plot scaled residuals and SDM
 ```{r plot-sdm-con, warning=FALSE}
 # Plot Genetic Connectivity (inverse residuals)
