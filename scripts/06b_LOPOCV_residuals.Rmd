@@ -765,7 +765,7 @@ ggplot(all_imp, aes(x = variable, y = IncNodePurity)) +
   coord_flip() +
   scale_y_continuous(name = "IncNodePurity") +
   scale_x_discrete(labels = label_map) +
-  labs(x = NULL, title = "Variable Importance in Genetic Connectivity Model") +
+  labs(x = NULL, title = "Variable Importance") +
   theme_minimal()
 ```
 ## Percent Improvement MSE
@@ -829,7 +829,7 @@ full_order <- all_imp %>%
 all_imp$variable <- factor(all_imp$variable, levels = rev(full_order))
 
 # Plot
-#pdf("../figures/VarImpPlot.pdf",width =6, height=6)
+# pdf("../figures/VarImpPlot_residModel.pdf",width =6, height=6)
 ggplot(all_imp, aes(x = variable, y = IncMSE)) +
   geom_point(data = filter(all_imp, model != "full"),
              aes(group = model), color = "grey70", alpha = 0.4, size = 2) +
@@ -840,7 +840,7 @@ ggplot(all_imp, aes(x = variable, y = IncMSE)) +
   scale_x_discrete(labels = label_map) +
   labs(x = NULL, title = "Variable Importance") +
   theme_minimal()
-#dev.off()
+dev.off()
 ```
 
 ## Abrev Percent Improvement MSE
