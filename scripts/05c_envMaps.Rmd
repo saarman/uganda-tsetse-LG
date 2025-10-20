@@ -1017,6 +1017,41 @@ plot(st_geometry(uganda_cropped), border = "black", lwd = 1, add = TRUE)
 ```
 ## 9b. Env change --- Forecasted changes
 
+### Compare distributions of training vs forecasted 
+```{r change, warning = FALSE}
+# Build data frame for plotting
+plot_df <- data.frame(
+  var = c(env$BIO3[], envRCP$BIO3[]),
+  Source = c(rep("Observed", length(env$BIO3[])),
+           rep("Forecasted", length(envRCP$BIO3[])))
+)
+
+# Plot density comparison
+ggplot(plot_df, aes(x = var, fill = Source)) +
+  geom_density(alpha = 0.5, color = NA) +
+  scale_fill_manual(values = c("Observed" = "#e66101", "Forecasted" = "#4e342e")) +
+  theme_minimal() +
+  labs(title = "Observed (Training) vs Forecasted",
+       x = "Isothermality",
+       y = "Density")
+
+
+# Build data frame for plotting
+plot_df <- data.frame(
+  var = c(env$BIO13[], envRCP$BIO13[]),
+  Source = c(rep("Observed", length(env$BIO13[])),
+           rep("Forecasted", length(envRCP$BIO13[])))
+)
+# Plot density comparison
+ggplot(plot_df, aes(x = var, fill = Source)) +
+  geom_density(alpha = 0.5, color = NA) +
+  scale_fill_manual(values = c("Observed" = "#1f78b4", "Forecasted" = "#2c3e50")) +
+  theme_minimal() +
+  labs(title = "Observed (Training) vs Forecasted",
+       x = "Precipitation",
+       y = "Density")
+```
+
 ```{r env-tiles, warning=FALSE}
 # Create the difference layers
 diff_list <- list(

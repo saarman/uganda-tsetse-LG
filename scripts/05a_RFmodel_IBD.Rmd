@@ -103,6 +103,7 @@ rf_data <- rf_data[, c("CSEdistance", predictor_vars)]
 g <- lm(rf_data$CSEdistance~rf_data$pix_dist)
 plot(rf_data$pix_dist, rf_data$CSEdistance)
 abline(g)
+
 # Extract groups of variables by suffix
 mean_vars   <- grep("_mean$", names(rf_data), value = TRUE)
 median_vars <- grep("_median$", names(rf_data), value = TRUE)
@@ -110,7 +111,9 @@ mode_vars   <- grep("_mode$", names(rf_data), value = TRUE)
 ```
   
 # 2. Build full Random Forest model 
-```{r rf-full, warning=FALSE}
+
+Note: Marked eval = FALSE to avoid re-running on knit
+```{r rf-full, warning=FALSE, eval = FALSE}
 # Build full RF model
 set.seed(1234)  # ensures reproducibility
 rf_full <- randomForest(
@@ -125,11 +128,12 @@ print(rf_full)
 importance(rf_full)
 
 ```
-    
 # 3. Mean-only pruning
   
-## Compare mean versus median versus mode:
-```{r mean-v-median-v-mode, warning=FALSE}
+## Compare mean versus median versus mode:  
+
+Note: Marked eval = FALSE to avoid re-running on knit
+```{r mean-v-median-v-mode, warning=FALSE, eval = FALSE}
 # Extract groups of variables by suffix
 mean_vars   <- grep("_mean$", names(rf_data), value = TRUE)
 median_vars <- grep("_median$", names(rf_data), value = TRUE)
@@ -253,7 +257,9 @@ Note: I did also try scaling CSE before runnning RF as a different idea, but per
   
 
 # 4. Final full model - (Tune random forest with mean variables)
-```{r tune, warning=FALSE}
+
+Note: eval = FALSE to avoid re-running on knit
+```{r tune, warning=FALSE, eval = FALSE}
 # Load data
 V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
 
@@ -313,9 +319,20 @@ rf_final <- rf_mean_full_tuned
 ```
 FYI: Later, to load the model back into R:
 `rf_mean_full_tuned <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))`
-    
+ 
+ ### Load full model from file
+```{r}
+rf_full <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+
+print(rf_full)
+
+importance(rf_full)
+```
+
 ## (Optional) Compare full and full tuned models (mean-only predictors)
-```{r compare, eval=FALSE,warning=FALSE}
+
+Note: eval = FALSE to avoid re-running on knit
+```{r compare, eval=FALSE, warning=FALSE}
 
 # Build full RF model
 set.seed(10981234)  # ensures reproducibility
@@ -352,9 +369,12 @@ The tuned model performs slightly better, but the gain may not be meaningful... 
 
 Top 18 mean-based predictors retain nearly all the explanatory power of the original full model with 42 predictors.
      
-# 5. IBD-residuals model (with residuals as response, drop pix_dist for predictor) - for projected map
-```{r residuals, warning=FALSE}
-# Load data
+# 5. IBD regression and IBD-residuals rf model (with residuals as response, drop pix_dist for predictor) - for projected map
+
+## IBD regression
+
+```{r residuals, warning=FALSE }
+# Load raw data
 V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
 
 # estimate mean sampling density
@@ -385,17 +405,45 @@ predictor_vars <- c("BIO1_mean","BIO2_mean","BIO3_mean","BIO4_mean", "BIO5_mean"
 lm_ibd <- lm(CSEdistance ~ pix_dist, data = V.table)
 summary(lm_ibd)
 
-# Add residuals
+# Add residuals to predictors table (V.table)
 V.table$resid_ibd <- resid(lm_ibd)
 
 # Filter and SAVE modeling-relevant columns of V.table
 rf_mean_data <- V.table[, c("resid_ibd", predictor_vars)]
 V.table_resid <- V.table[, c("Var1","Var2","resid_ibd", predictor_vars)]
-write.csv(V.table_resid,file.path(input_dir, "Gff_cse_envCostPaths_residuals.csv"))
+
+# Write to file including residuals.
+#write.csv(V.table_resid,file.path(input_dir, "Gff_cse_envCostPaths_residuals.csv"))
 
 # Rename predictors by removing "_mean" for later projections
 names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
 
+# Plot IBD linear model, CSE vs km, CSE vs log10(km)
+colors <- c("north" = "#1f78b4", "south" = "#e66101")
+
+plot(V.table$pix_dist, V.table$CSEdistance, pch = 19)
+
+# raw geo dist
+
+lm_ibd <- lm(CSEdistance ~ pix_dist, data = V.table)
+summary(lm_ibd)
+
+plot(V.table$pix_dist, V.table$CSEdistance, col = colors[ V.table$Pop1_cluster],pch = 19, xlab = "Geo. distance (km)", ylab = "Gen. distance (CSE)")
+abline(lm_ibd)
+
+# log10 geo dist
+
+lm_ibd_log <- lm(CSEdistance ~ log10(pix_dist), data = V.table)
+summary(lm_ibd_log)
+
+plot(log10(V.table$pix_dist), V.table$CSEdistance, col = colors[ V.table$Pop1_cluster],pch = 19, xlab = "Log10 Geo. distance (km)", ylab = "Gen. distance (CSE)")
+abline(lm_ibd_log)
+
+```
+
+## Full random forest model with IBD residuals
+Note: Marked eval = FALSE to avoid re-running on knit
+```{r rf full residuals, eval = FALSE}
 # Tune mtry (number of variables tried at each split)
 set.seed(92834567)
 rf_resid_tuned <- tuneRF(
@@ -420,9 +468,13 @@ saveRDS(rf_resid_tuned, file = file.path(results_dir, "rf_residuals.rds"))
 rf_residuals <- rf_resid_tuned
 rf_residuals$importance
 ```
-FYI: Later, to load the model back into R:
-`rf_residuals <- readRDS(file.path(results_dir, "rf_residuals.rds"))`
-  
+
+## Load saved residuals model
+```{r}
+rf_residuals <- readRDS(file.path(results_dir, "rf_residuals.rds"))
+print(rf_residuals)
+```
+
 # 6. Project from IBD-residuals model   
 ## Build Projection
 ```{r projection, warning=FALSE}
@@ -431,6 +483,7 @@ env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
 # Load rdf of final model
 rf_residuals <- readRDS(file.path(results_dir, "rf_residuals.rds"))
+rf_residuals
 prediction_raster <- predict(env, rf_residuals, type = "response")
 
 # Write Prediction Raster to file
