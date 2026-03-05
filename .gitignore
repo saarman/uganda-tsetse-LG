@@ -48,13 +48,6 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-# Ignore data and output folders (except their README.md files)
-data/*
-!data/README.md
-
-results/*
-!results/README.md
-
 # Ignore large figures
 figures/fignore*
 
