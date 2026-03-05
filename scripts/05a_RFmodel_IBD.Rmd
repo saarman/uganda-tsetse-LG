@@ -417,28 +417,24 @@ V.table_resid <- V.table[, c("Var1","Var2","resid_ibd", predictor_vars)]
 
 # Rename predictors by removing "_mean" for later projections
 names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
+```
 
-# Plot IBD linear model, CSE vs km, CSE vs log10(km)
+### Plot IBD linear model, CSE vs km, CSE vs log10(km)
+```{r}
+# colors
 colors <- c("north" = "#1f78b4", "south" = "#e66101")
 
-plot(V.table$pix_dist, V.table$CSEdistance, pch = 19)
-
 # raw geo dist
-
 lm_ibd <- lm(CSEdistance ~ pix_dist, data = V.table)
 summary(lm_ibd)
-
 plot(V.table$pix_dist, V.table$CSEdistance, col = colors[ V.table$Pop1_cluster],pch = 19, xlab = "Geo. distance (km)", ylab = "Gen. distance (CSE)")
 abline(lm_ibd)
 
 # log10 geo dist
-
 lm_ibd_log <- lm(CSEdistance ~ log10(pix_dist), data = V.table)
 summary(lm_ibd_log)
-
 plot(log10(V.table$pix_dist), V.table$CSEdistance, col = colors[ V.table$Pop1_cluster],pch = 19, xlab = "Log10 Geo. distance (km)", ylab = "Gen. distance (CSE)")
 abline(lm_ibd_log)
-
 ```
 
 ## Full random forest model with IBD residuals
@@ -469,7 +465,7 @@ rf_residuals <- rf_resid_tuned
 rf_residuals$importance
 ```
 
-## Load saved residuals model
+### Load saved residuals model
 ```{r}
 rf_residuals <- readRDS(file.path(results_dir, "rf_residuals.rds"))
 print(rf_residuals)

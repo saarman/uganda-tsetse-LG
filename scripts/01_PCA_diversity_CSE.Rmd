@@ -435,6 +435,23 @@ summary_df <- Reduce(function(x, y) {
 print(summary_df)
 ```
 # Cavalli-Sforza and Edwards' Distance (CSE) 
+
+Pairwise for all sites
+```{r all}
+# Subset genind and metadata for all sites
+meta_sub <- Gff_rf[Gff_rf$K2 %in% c("north", "south"), ]
+gen_sub <- Gff.genind_rf[pop(Gff.genind_rf) %in% meta_sub$SiteCode]
+
+# Convert to genpop (aggregates by population)
+genpop_sub <- genind2genpop(gen_sub)
+
+# Compute Cavalli-Sforza and Edwards’ distance
+cse_dist <- dist.genpop(genpop_sub, method = 2)  # method = 2 (CSE distance
+
+# Display as a matrix
+cse_all <- as.matrix(cse_dist)
+```
+
 Pairwise within cluster "north"
 ```{r north}
 # Subset genind and metadata
@@ -469,9 +486,51 @@ cse_south <- as.matrix(cse_dist)
   
 Combine CSE output into a single dataframe for downstream analysis:  
 ```{r cse}
+
 # Create a metadata data frame for coordinates and cluster
 meta_coords <- unique(Gff_rf[, c("SiteCode", "SiteLat", "SiteLong", "K2")])
 names(meta_coords) <- c("SiteCode", "lat", "long", "cluster")
+
+# Process the "all" CSE matrix
+all_df <- as.data.frame(as.table(cse_all), stringsAsFactors = FALSE)
+names(all_df) <- c("Var1", "Var2", "CSEdistance")
+
+# Keep only one triangle (Var1 < Var2 alphabetically)
+all_df <- subset(all_df, Var1 < Var2)
+
+# Merge to get lat1, long1, and Pop1_cluster
+all_df <- merge(
+  all_df,
+  meta_coords,
+  by.x = "Var1",
+  by.y = "SiteCode",
+  all.x = TRUE,
+  suffixes = c("", ".ignore")
+)
+names(all_df)[names(all_df) == "lat"]       <- "lat1"
+names(all_df)[names(all_df) == "long"]      <- "long1"
+names(all_df)[names(all_df) == "cluster"]   <- "Pop1_cluster"
+
+# Merge to get lat2, long2, and Pop2_cluster
+all_df <- merge(
+  all_df,
+  meta_coords,
+  by.x = "Var2",
+  by.y = "SiteCode",
+  all.x = TRUE,
+  suffixes = c("", ".ignore")
+)
+names(all_df)[names(all_df) == "lat"]       <- "lat2"
+names(all_df)[names(all_df) == "long"]      <- "long2"
+names(all_df)[names(all_df) == "cluster"]   <- "Pop2_cluster"
+# Select and order columns
+all_df <- all_df[, c(
+  "Var1", "Var2", "CSEdistance",
+  "lat1", "long1", "lat2", "long2",
+  "Pop1_cluster", "Pop2_cluster"
+)]
+
+cse_all <- all_df
 
 # Process the "north" CSE matrix
 north_df <- as.data.frame(as.table(cse_north), stringsAsFactors = FALSE)
@@ -512,6 +571,8 @@ north_df <- north_df[, c(
   "Pop1_cluster", "Pop2_cluster"
 )]
 
+cse_north <- north_df
+
 # Process the "south" CSE matrix (analogous steps)
 south_df <- as.data.frame(as.table(cse_south), stringsAsFactors = FALSE)
 names(south_df) <- c("Var1", "Var2", "CSEdistance")
@@ -543,6 +604,9 @@ south_df <- south_df[, c(
   "lat1", "long1", "lat2", "long2",
   "Pop1_cluster", "Pop2_cluster"
 )]
+
+cse_south <- south_df
+
 # Combine "north" and "south" results
 cse_combined <- rbind(north_df, south_df)
 
@@ -552,6 +616,7 @@ cse_combined <- rbind(north_df, south_df)
 # View the first few rows
 head(cse_combined)
 ```
+
 Create density plots of CSEdistance for each cluster  
 ```{r density}
 # Capitalize or rename cluster labels (“Northern”/“Southern”)
@@ -650,7 +715,17 @@ cse_figure
 
 # Isolation by Distance & Mantel tests  
 ```{r ibd}
-cse_combined <- read.csv("../input/Gff_11loci_67sites_cse.csv")
+# Estimate km distance
+cse_all <- cse_all %>%
+  mutate(
+    geo_km = distHaversine(
+      cbind(long1, lat1),
+      cbind(long2, lat2)
+    ) / 1000
+  )
+
+# Estimate km distance for north/south
+#cse_combined <- read.csv("../input/Gff_11loci_67sites_cse.csv")
 
 cse_combined <- cse_combined %>%
   mutate(
@@ -749,15 +824,6 @@ ibd_figure
 ```
 # Isolation by Distance & Mantel tests for scaled CSE
 ```{r ibd-scaled}
-cse_combined <- read.csv("../input/Gff_11loci_67sites_cse.csv")
-
-cse_combined <- cse_combined %>%
-  mutate(
-    geo_km = distHaversine(
-      cbind(long1, lat1),
-      cbind(long2, lat2)
-    ) / 1000
-  )
 
 max_CSE <- max(cse_combined$CSEdistance, na.rm = TRUE)
 cse_combined$CSE_scaled <- cse_combined$CSEdistance / max_CSE
@@ -885,3 +951,77 @@ plot(mc_n, main = "Northern correlogram", xlab = "Distance class midpoint (km)",
 plot(mc_s, main = "Southern correlogram", xlab = "Distance class midpoint (km)", ylab = "Mantel’s r", font.main = 2)
 #dev.off() 
 ```
+# Plot IBD for presentations, CSE vs km, CSE vs log10(km)
+
+All pairs, including pairs between clusters, and also within clusters
+```{r ibd all}
+# colors
+colors <- c("north" = "#1f78b4", "south" = "#e66101")
+colors <- c("all" = "grey", "north" = "#8d55ad", "south" = "#e66101")
+
+# raw geo distance
+lm_ibd_all <- lm(cse_all$CSEdistance ~ cse_all$geo_km)
+summary(lm_ibd_all)
+plot(cse_all$geo_km, cse_all$CSEdistance, col = "grey",pch = 19, xlab = "Geo. distance (km)", ylab = "Gen. distance (CSE)")
+abline(lm_ibd_all)
+
+# north
+lm_ibd_n <- lm(cse_north$CSEdistance ~ cse_north$geo_km)
+summary(lm_ibd_n)
+plot(cse_north$geo_km, cse_north$CSEdistance, col = "#8d55ad",pch = 19, xlab = "Geo. distance (km)", ylab = "Gen. distance (CSE)", add = TRUE)
+abline(lm_ibd_n, lt = 2)
+
+# south
+lm_ibd_s <- lm(cse_south$CSEdistance ~ cse_south$geo_km)
+summary(lm_ibd_s)
+plot(cse_south$geo_km, cse_south$CSEdistance, col = "#e66101",pch = 19, xlab = "Geo. distance (km)", ylab = "Gen. distance (CSE)", add = TRUE)
+abline(lm_ibd_s, lt = 3)
+
+# Plot them all together
+plot(c(cse_all$geo_km,cse_north$geo_km, cse_south$geo_km), c(cse_all$CSEdistance, cse_north$CSEdistance, cse_south$CSEdistance), col = c(rep("grey",length(cse_all$geo_km)),rep("#8d55ad",length(cse_north$geo_km)), rep("#e66101",length(cse_south$geo_km))),pch = 19, xlab = "Geo. distance (km)", ylab = "Gen. distance (CSE)")
+abline(lm_ibd_all)
+abline(lm_ibd_n, lt = 2)
+abline(lm_ibd_s, lt = 3)
+```
+
+```{r }
+library(ggplot2)
+
+# consistent palette
+cols <- c(all = "grey70", north = "#8d55ad", south = "#e66101")
+cols2 <- c(all = "grey40", north = "#482068", south = "#5f290f")
+lts  <- c(all = "solid", north = "solid", south = "solid")
+
+p <- ggplot() +
+  # points
+  geom_point(data = cse_all,   aes(x = geo_km, y = CSEdistance, color = "all"),   alpha = 0.6) +
+  geom_point(data = cse_north, aes(x = geo_km, y = CSEdistance, color = "north"), alpha = 0.6) +
+  geom_point(data = cse_south, aes(x = geo_km, y = CSEdistance, color = "south"), alpha = 0.6) +
+  # regression lines
+  geom_smooth(data = cse_all,   aes(x = geo_km, y = CSEdistance, linetype = "all"),   method = "lm", se = FALSE, color = cols["all"]) +
+  geom_smooth(data = cse_north, aes(x = geo_km, y = CSEdistance, linetype = "north"), method = "lm", se = FALSE, color = cols["north"]) +
+  geom_smooth(data = cse_south, aes(x = geo_km, y = CSEdistance, linetype = "south"), method = "lm", se = FALSE, color = cols["south"]) +
+  # unified legend (same "name" merges legends)
+  scale_color_manual(name = "Group", values = cols, breaks = names(cols)) +
+  scale_linetype_manual(name = "Group", values = lts,  breaks = names(lts)) +
+  guides(
+    color    = guide_legend(order = 1, override.aes = list(alpha = 1, size = 3)),
+    linetype = guide_legend(order = 1)
+  ) +
+  labs(
+    title = "Isolation by Distance (CSE vs. geographic distance)",
+    x = "Geographic distance (km)",
+    y = "Genetic distance (CSE)"
+  ) +
+  theme_classic() +
+  theme(legend.position = "right")
+
+#pdf("../figures/IBD-all-n-s.pdf", width = 6.5, height = 5)
+png("../figures/IBD-all-n-s.png", width = 650, height = 500, bg = "transparent")
+p
+dev.off()
+```
+
+
+
+

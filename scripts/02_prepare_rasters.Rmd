@@ -37,6 +37,9 @@ crs_geo <- 4326     # EPSG code for WGS84
 
 # Read template raster for extent and projection
 pixels_raster <- raster(file.path(data_dir, "raw/slope_1KMmedian_MERIT_UgandaClip.tif"))
+
+ext(pixels_raster)
+#SpatExtent : 28.5999999999928, 35.3999999999925, -1.49999999999701, 4.73333333333611 (xmin, xmax, ymin, ymax)
 ```
 # Inputs
   - `../input/Gff_11loci_68sites_cse.csv` (CSV with pairwise CSE distances and coordinates (long1, lat1, long2, lat2))
