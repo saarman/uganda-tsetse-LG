@@ -18,7 +18,7 @@ This document explains how to:
    - **Number of cores:** 4 (up to 32 available)  
    - **Wall time (hours):** 100 (max 336 per allocation; choose at least 24)  
    - **Account:** saarman-np  
-   - **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
+   - **Partition:** saarman-np (shared is now default)  
    - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)
 
 3. Start the session. Once running, click “Connect to RStudio” to open.
@@ -36,7 +36,7 @@ To allocate resources for an interactive shell job, run the following in a termi
            --ntasks=1 \
            --mem=100G \
            --account=saarman-np \
-           --partition=saarman-shared-np
+           --partition=saarman-np
 
 Once the node is allocated, launch an interactive R session by typing:
 
@@ -51,7 +51,7 @@ Create an SBATCH script (for example, save as scripts/run_analysis.sbatch) with 
     #!/bin/bash
     #SBATCH --job-name=uganda_analysis
     #SBATCH --account=saarman-np
-    #SBATCH --partition=saarman-shared-np
+    #SBATCH --partition=saarman-np
     #SBATCH --time=24:00:00
     #SBATCH --ntasks=1
     #SBATCH --mem=100G
