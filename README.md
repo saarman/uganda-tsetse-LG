@@ -50,6 +50,6 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
 ## Citation & License
 
 If you use these scripts or refer to our data, please cite:  
-> Saarman NP et al. (2025) “Landscape genetics of *Glossina fuscipes fuscipes* in Uganda,” In prepartion for publication in *Insects: Spatial Population Genetics in Insects*, [URL:https://www.mdpi.com/journal/insects/special_issues/C9FL984799](https://www.mdpi.com/journal/insects/special_issues/C9FL984799).
+> Saarman NP et al. (2026) “Environmental drivers of genetic connectivity in riverine tsetse (*Glossina fuscipes fuscipes*) reveal reinvasion pathways relevant to vector control” In prepartion for publication in *Evolutionary Applications*.
 
 Licensed under MIT. See `LICENSE` for full terms.
