@@ -65,17 +65,20 @@ library(ggplot2)
 ```
 
 # Set directories
-```{r results_dir}
-run1 <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/EEMS_results/run1"
+```{r set_dir}
+
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
 input_dir <- "../input"
 results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results"
+
+run1 <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/EEMS_results/run1"
+run2 <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/EEMS_results/run2"
+run3 <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/EEMS_results/run3"
 ```
 
 # Make plots of the standard surfaces
 
-Plot: (i) posterior mean migration surface, (ii) posterior mean diversity surface, (iii) residuals surface, plus the observed deme points.
-
+## set up colors
 ```{r plot_setup}
 # Load shape files with sf
 lakes   <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
@@ -89,23 +92,99 @@ uganda_sf <- st_transform(uganda, 4326)
 connectivity_colors <- (colorRampPalette(c("#c5c3a7","#ffe60c","#c79620", "#934334","#802839", "#6f0f40"))(100)) #"#d6ce7c"
 suitability_colors  <- colorRampPalette(c("lightgray", "#7fabb9","#3c94c8","#595379","#54306a"))(100)  #"#617189"
 
-# Raw m and q matrix
-m <- as.matrix(read.table(paste0(run1, "/mcmcmrates.txt"), sep = "\t"))
-q <- as.matrix(read.table(paste0(run1, "/mcmcqrates.txt"), sep = "\t"))
+```
 
-# Make plots with automated functions
-plots1 <- make_eems_plots(
+## reemsplots2 package plots with automated functions
+```{r reemsplots2}
+library(reemsplots2)
+
+# Make plots with automated functions colors = connectivity
+plots1m <- make_eems_plots(
   mcmcpath   = run1,
   longlat    = TRUE,
   eems_colors = connectivity_colors,
   add_outline = TRUE,
   add_demes   = TRUE
 )
+plots2m <- make_eems_plots(
+  mcmcpath   = run2,
+  longlat    = TRUE,
+  eems_colors = connectivity_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
+plots3m <- make_eems_plots(
+  mcmcpath   = run3,
+  longlat    = TRUE,
+  eems_colors = connectivity_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
+
+# Make plots with automated functions colors = suitability
+plots1q <- make_eems_plots(
+  mcmcpath   = run1,
+  longlat    = TRUE,
+  eems_colors = suitability_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
+plots2q <- make_eems_plots(
+  mcmcpath   = run2,
+  longlat    = TRUE,
+  eems_colors = suitability_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
+plots3q <- make_eems_plots(
+  mcmcpath   = run3,
+  longlat    = TRUE,
+  eems_colors = suitability_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
 ```
 
-```{r eems_plots, fig.width=7, fig.height=10}
-plots1$mrates01 +
+## (i) posterior mean migration surface
+```{r migration, fig.width=7, fig.height=10}
+plots1m$mrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+
+plots2m$mrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+
+plots3m$mrates01 +
   geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
   geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
 ```
 
+## (ii) posterior mean diversity surface
+```{r diversity, fig.width=7, fig.height=10}
+plots1q$qrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+
+plots2q$qrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+
+plots3q$qrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+```
+
+## (iii) fitted versus observed distance between demes
+```{r distance, fig.width=7, fig.height=7}
+plots1q$rdist01
+plots2q$rdist01
+plots3q$rdist01
+```
+
+## (iv) log posterior MCMC chain convergence
+```{r mcmc, fig.width=7, fig.height=7}
+plots1q$pilogl01
+plots2q$pilogl01
+plots3q$pilogl01
+```

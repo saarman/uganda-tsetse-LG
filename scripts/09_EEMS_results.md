@@ -10,6 +10,17 @@ Norah Saarman
 - [Set directories](#set-directories)
 - [Make plots of the standard
   surfaces](#make-plots-of-the-standard-surfaces)
+  - [set up colors](#set-up-colors)
+  - [reemsplots2 package plots with automated
+    functions](#reemsplots2-package-plots-with-automated-functions)
+  - [(i) posterior mean migration
+    surface](#i-posterior-mean-migration-surface)
+  - [(ii) posterior mean diversity
+    surface](#ii-posterior-mean-diversity-surface)
+  - [(iii) fitted versus observed distance between
+    demes](#iii-fitted-versus-observed-distance-between-demes)
+  - [(iv) log posterior MCMC chain
+    convergence](#iv-log-posterior-mcmc-chain-convergence)
 
 ## EEMS input:
 
@@ -130,17 +141,18 @@ library(ggplot2)
 # Set directories
 
 ``` r
-run1 <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/EEMS_results/run1"
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
 input_dir <- "../input"
 results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results"
+
+run1 <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/EEMS_results/run1"
+run2 <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/EEMS_results/run2"
+run3 <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/EEMS_results/run3"
 ```
 
 # Make plots of the standard surfaces
 
-Plot: (i) posterior mean migration surface, (ii) posterior mean
-diversity surface, (iii) residuals surface, plus the observed deme
-points.
+## set up colors
 
 ``` r
 # Load shape files with sf
@@ -154,13 +166,15 @@ uganda_sf <- st_transform(uganda, 4326)
 # Custom palette #1 based on Bishop et al.
 connectivity_colors <- (colorRampPalette(c("#c5c3a7","#ffe60c","#c79620", "#934334","#802839", "#6f0f40"))(100)) #"#d6ce7c"
 suitability_colors  <- colorRampPalette(c("lightgray", "#7fabb9","#3c94c8","#595379","#54306a"))(100)  #"#617189"
+```
 
-# Raw m and q matrix
-m <- as.matrix(read.table(paste0(run1, "/mcmcmrates.txt"), sep = "\t"))
-q <- as.matrix(read.table(paste0(run1, "/mcmcqrates.txt"), sep = "\t"))
+## reemsplots2 package plots with automated functions
 
-# Make plots with automated functions
-plots1 <- make_eems_plots(
+``` r
+library(reemsplots2)
+
+# Make plots with automated functions colors = connectivity
+plots1m <- make_eems_plots(
   mcmcpath   = run1,
   longlat    = TRUE,
   eems_colors = connectivity_colors,
@@ -206,7 +220,110 @@ plots1 <- make_eems_plots(
     ## Generate posterior probability trace. See plots$pilog01.
 
 ``` r
-plots1$mrates01 +
+plots2m <- make_eems_plots(
+  mcmcpath   = run2,
+  longlat    = TRUE,
+  eems_colors = connectivity_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
+```
+
+    ## Joining with `by = join_by(id)`
+    ## New names:
+    ## Generate effective migration surface (posterior mean of m rates). See
+    ## plots$mrates01 and plots$mrates02.
+    ## Generate effective diversity surface (posterior mean of q rates). See
+    ## plots$qrates01 and plots$qrates02.
+    ## Generate average dissimilarities within and between demes. See plots$rdist01,
+    ## plots$rdist02 and plots$rdist03.
+    ## Generate posterior probability trace. See plots$pilog01.
+
+``` r
+plots3m <- make_eems_plots(
+  mcmcpath   = run3,
+  longlat    = TRUE,
+  eems_colors = connectivity_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
+```
+
+    ## Joining with `by = join_by(id)`
+    ## New names:
+    ## Generate effective migration surface (posterior mean of m rates). See
+    ## plots$mrates01 and plots$mrates02.
+    ## Generate effective diversity surface (posterior mean of q rates). See
+    ## plots$qrates01 and plots$qrates02.
+    ## Generate average dissimilarities within and between demes. See plots$rdist01,
+    ## plots$rdist02 and plots$rdist03.
+    ## Generate posterior probability trace. See plots$pilog01.
+
+``` r
+# Make plots with automated functions colors = suitability
+plots1q <- make_eems_plots(
+  mcmcpath   = run1,
+  longlat    = TRUE,
+  eems_colors = suitability_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
+```
+
+    ## Joining with `by = join_by(id)`
+    ## New names:
+    ## Generate effective migration surface (posterior mean of m rates). See
+    ## plots$mrates01 and plots$mrates02.
+    ## Generate effective diversity surface (posterior mean of q rates). See
+    ## plots$qrates01 and plots$qrates02.
+    ## Generate average dissimilarities within and between demes. See plots$rdist01,
+    ## plots$rdist02 and plots$rdist03.
+    ## Generate posterior probability trace. See plots$pilog01.
+
+``` r
+plots2q <- make_eems_plots(
+  mcmcpath   = run2,
+  longlat    = TRUE,
+  eems_colors = suitability_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
+```
+
+    ## Joining with `by = join_by(id)`
+    ## New names:
+    ## Generate effective migration surface (posterior mean of m rates). See
+    ## plots$mrates01 and plots$mrates02.
+    ## Generate effective diversity surface (posterior mean of q rates). See
+    ## plots$qrates01 and plots$qrates02.
+    ## Generate average dissimilarities within and between demes. See plots$rdist01,
+    ## plots$rdist02 and plots$rdist03.
+    ## Generate posterior probability trace. See plots$pilog01.
+
+``` r
+plots3q <- make_eems_plots(
+  mcmcpath   = run3,
+  longlat    = TRUE,
+  eems_colors = suitability_colors,
+  add_outline = TRUE,
+  add_demes   = TRUE
+)
+```
+
+    ## Joining with `by = join_by(id)`
+    ## New names:
+    ## Generate effective migration surface (posterior mean of m rates). See
+    ## plots$mrates01 and plots$mrates02.
+    ## Generate effective diversity surface (posterior mean of q rates). See
+    ## plots$qrates01 and plots$qrates02.
+    ## Generate average dissimilarities within and between demes. See plots$rdist01,
+    ## plots$rdist02 and plots$rdist03.
+    ## Generate posterior probability trace. See plots$pilog01.
+
+## (i) posterior mean migration surface
+
+``` r
+plots1m$mrates01 +
   geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
   geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
 ```
@@ -223,7 +340,119 @@ plots1$mrates01 +
     ## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
     ## generated.
 
-    ## Warning: Removed 1028 rows containing missing values or values outside the scale range
+    ## Warning: Removed 1042 rows containing missing values or values outside the scale range
     ## (`geom_tile()`).
 
-![](09_EEMS_results_files/figure-gfm/eems_plots-1.png)<!-- -->
+![](09_EEMS_results_files/figure-gfm/migration-1.png)<!-- -->
+
+``` r
+plots2m$mrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+```
+
+    ## Coordinate system already present. Adding new coordinate system, which will
+    ## replace the existing one.
+
+    ## Warning: Removed 1042 rows containing missing values or values outside the scale range
+    ## (`geom_tile()`).
+
+![](09_EEMS_results_files/figure-gfm/migration-2.png)<!-- -->
+
+``` r
+plots3m$mrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+```
+
+    ## Coordinate system already present. Adding new coordinate system, which will
+    ## replace the existing one.
+
+    ## Warning: Removed 1042 rows containing missing values or values outside the scale range
+    ## (`geom_tile()`).
+
+![](09_EEMS_results_files/figure-gfm/migration-3.png)<!-- -->
+
+## (ii) posterior mean diversity surface
+
+``` r
+plots1q$qrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+```
+
+    ## Coordinate system already present. Adding new coordinate system, which will
+    ## replace the existing one.
+
+    ## Warning: Removed 1042 rows containing missing values or values outside the scale range
+    ## (`geom_tile()`).
+
+![](09_EEMS_results_files/figure-gfm/diversity-1.png)<!-- -->
+
+``` r
+plots2q$qrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+```
+
+    ## Coordinate system already present. Adding new coordinate system, which will
+    ## replace the existing one.
+
+    ## Warning: Removed 1042 rows containing missing values or values outside the scale range
+    ## (`geom_tile()`).
+
+![](09_EEMS_results_files/figure-gfm/diversity-2.png)<!-- -->
+
+``` r
+plots3q$qrates01 +
+  geom_sf(data = lakes_sf, fill = "black", color = NA, inherit.aes = FALSE) +
+  geom_sf(data = uganda_sf, fill = NA, color = "black", linewidth = 0.25, inherit.aes = FALSE)
+```
+
+    ## Coordinate system already present. Adding new coordinate system, which will
+    ## replace the existing one.
+
+    ## Warning: Removed 1042 rows containing missing values or values outside the scale range
+    ## (`geom_tile()`).
+
+![](09_EEMS_results_files/figure-gfm/diversity-3.png)<!-- -->
+
+## (iii) fitted versus observed distance between demes
+
+``` r
+plots1q$rdist01
+```
+
+![](09_EEMS_results_files/figure-gfm/distance-1.png)<!-- -->
+
+``` r
+plots2q$rdist01
+```
+
+![](09_EEMS_results_files/figure-gfm/distance-2.png)<!-- -->
+
+``` r
+plots3q$rdist01
+```
+
+![](09_EEMS_results_files/figure-gfm/distance-3.png)<!-- -->
+
+## (iv) log posterior MCMC chain convergence
+
+``` r
+plots1q$pilogl01
+```
+
+![](09_EEMS_results_files/figure-gfm/mcmc-1.png)<!-- -->
+
+``` r
+plots2q$pilogl01
+```
+
+![](09_EEMS_results_files/figure-gfm/mcmc-2.png)<!-- -->
+
+``` r
+plots3q$pilogl01
+```
+
+![](09_EEMS_results_files/figure-gfm/mcmc-3.png)<!-- -->
