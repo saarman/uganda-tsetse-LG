@@ -268,14 +268,6 @@ envRCP <- stack(file.path(data_dir, "processed", "env_stack_RCP4_5.grd"))
 plot(envRCP[[20:25]])
 plot(env[[20:25]])
 
-# make ABSOLUTELY CERTAIN all layers I want to stay the same DO stay the same
-#envRCP$alt <- env$alt
-#envRCP$slope <- env$slope
-#envRCP$riv_3km <- env$riv_3km
-#envRCP$samp_20km <- env$samp_20km
-#envRCP$lakes <- env$lakes
-#envRCP$pix_dist <- env$pix_dist
-
 # predict with model
 prediction_RCP4_5 <- predict(envRCP, rf_final, type = "response")
 prediction_raster <- predict(env, rf_final, type = "response")

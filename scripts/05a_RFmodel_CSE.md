@@ -1,7 +1,7 @@
-RF model full – LC lakes paths
+5a. RF model full – raw CSE (LC lakes paths)
 ================
 Norah Saarman
-2025-06-17
+2026-03-09
 
 - [Inputs](#inputs)
 - [1. Prepare the data](#1-prepare-the-data)
@@ -11,22 +11,25 @@ Norah Saarman
     mode:](#compare-mean-versus-median-versus-mode)
   - [PCA of mean env predictor variables, patterns of
     autocorrelation?](#pca-of-mean-env-predictor-variables-patterns-of-autocorrelation)
+  - [(Optional) Prune more variables after narrowing to mean
+    only?](#optional-prune-more-variables-after-narrowing-to-mean-only)
   - [(Optional) Scaling CSE](#optional-scaling-cse)
 - [4. Final full model - (Tune random forest with mean
   variables)](#4-final-full-model---tune-random-forest-with-mean-variables)
   - [(Optional) Compare full and full tuned models (mean-only
     predictors)](#optional-compare-full-and-full-tuned-models-mean-only-predictors)
-- [5. IBD-residuals model (with residuals as response, drop pix_dist for
-  predictor) - for projected
-  map](#5-ibd-residuals-model-with-residuals-as-response-drop-pix_dist-for-predictor---for-projected-map)
-- [6. Project from IBD-residuals
-  model](#6-project-from-ibd-residuals-model)
+- [5. Project predicted values from full CSE
+  model](#5-project-predicted-values-from-full-cse-model)
   - [Build Projection](#build-projection)
-  - [Plot predicted IBD residuals](#plot-predicted-ibd-residuals)
-- [7. Scale residuals and SDM](#7-scale-residuals-and-sdm)
+  - [Plot predicted CSE](#plot-predicted-cse)
+- [6. Scale and plot predicted connectivity (CSE) and
+  SDM](#6-scale-and-plot-predicted-connectivity-cse-and-sdm)
   - [Scale 0-1, habitat suitability and inverse of predicted
-    residuals](#scale-0-1-habitat-suitability-and-inverse-of-predicted-residuals)
-  - [Plot scaled residuals and SDM](#plot-scaled-residuals-and-sdm)
+    connectivity
+    (CSE)](#scale-0-1-habitat-suitability-and-inverse-of-predicted-connectivity-cse)
+  - [Plot scaled predicted CSE and
+    SDM](#plot-scaled-predicted-cse-and-sdm)
+- [6. Variable importance plots](#6-variable-importance-plots)
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
@@ -134,7 +137,7 @@ plot(rf_data$pix_dist, rf_data$CSEdistance)
 abline(g)
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/prep-1.png)<!-- -->
+![](05a_RFmodel_CSE_files/figure-gfm/prep-1.png)<!-- -->
 
 ``` r
 # Extract groups of variables by suffix
@@ -144,6 +147,8 @@ mode_vars   <- grep("_mode$", names(rf_data), value = TRUE)
 ```
 
 # 2. Build full Random Forest model
+
+Note: Marked eval = FALSE to avoid re-running on knit
 
 ``` r
 # Build full RF model
@@ -156,100 +161,15 @@ rf_full <- randomForest(
 )
 
 print(rf_full)
-```
 
-    ## 
-    ## Call:
-    ##  randomForest(formula = CSEdistance ~ ., data = rf_data, importance = TRUE,      ntree = 500) 
-    ##                Type of random forest: regression
-    ##                      Number of trees: 500
-    ## No. of variables tried at each split: 24
-    ## 
-    ##           Mean of squared residuals: 0.001119129
-    ##                     % Var explained: 86.2
-
-``` r
 importance(rf_full)
 ```
-
-    ##                     %IncMSE IncNodePurity
-    ## pix_dist         58.3012131  3.0935298531
-    ## BIO1_mean         9.0020495  0.0301285131
-    ## BIO2_mean         6.4098370  0.0473834223
-    ## BIO3_mean        13.6026451  0.2721208278
-    ## BIO4_mean        10.2607730  0.0613038622
-    ## BIO5_mean        10.4818330  0.0291173353
-    ## BIO6_mean        11.8583425  0.1575919110
-    ## BIO7_mean        10.7247498  0.0484384046
-    ## BIO8S_mean        9.1198968  0.0389941449
-    ## BIO9S_mean        9.1545944  0.0757165381
-    ## BIO10S_mean      10.5581937  0.0348492182
-    ## BIO11S_mean      12.6650592  0.0999023193
-    ## BIO12_mean       10.2105738  0.0420781559
-    ## BIO13_mean       10.3447647  0.0557322008
-    ## BIO14_mean        8.6877132  0.1224180146
-    ## BIO15_mean        9.2166452  0.0942930637
-    ## BIO16S_mean       9.3860539  0.0266651745
-    ## BIO17S_mean       5.5162695  0.0419393147
-    ## BIO18S_mean       5.1426282  0.0318266777
-    ## BIO19S_mean       9.4523005  0.0313136617
-    ## alt_mean          9.6483998  0.0391622442
-    ## slope_mean       10.8249810  0.0391778902
-    ## riv_3km_mean     13.2872838  0.0527211941
-    ## samp_20km_mean   19.3440414  1.0712456972
-    ## lakes_mean        7.4531090  0.0780686943
-    ## BIO1_median       9.1525088  0.0410832893
-    ## BIO2_median       9.3369590  0.0473558188
-    ## BIO3_median      14.0929216  0.0892901654
-    ## BIO4_median      10.1173720  0.0507536064
-    ## BIO5_median       9.6663029  0.0497769331
-    ## BIO6_median      12.7588988  0.2462962100
-    ## BIO7_median      10.6655843  0.0495553419
-    ## BIO8S_median      9.9223161  0.0337600533
-    ## BIO9S_median      9.9244398  0.0804881296
-    ## BIO10S_median     9.5509941  0.0373292693
-    ## BIO11S_median    10.8215075  0.0844560970
-    ## BIO12_median     10.1568111  0.0327408721
-    ## BIO13_median     11.7315217  0.0719496005
-    ## BIO14_median      4.7695670  0.0209310192
-    ## BIO15_median     13.4686933  0.0706187410
-    ## BIO16S_median     8.9510772  0.0425605141
-    ## BIO17S_median    10.9025714  0.0276578250
-    ## BIO18S_median     7.7717184  0.0224679158
-    ## BIO19S_median     9.2931810  0.0334663036
-    ## alt_median       11.5067482  0.0603982245
-    ## slope_median     10.2245463  0.0471151689
-    ## riv_3km_median    7.1750996  0.0521492669
-    ## samp_20km_median 15.8059008  0.5984020935
-    ## lakes_median     -0.8027164  0.0002072142
-    ## BIO1_mode        11.2642008  0.0261941733
-    ## BIO2_mode        10.0272409  0.0582292777
-    ## BIO3_mode        13.2646204  0.0893638675
-    ## BIO4_mode        11.8018707  0.0319873963
-    ## BIO5_mode         8.5177924  0.0239607111
-    ## BIO6_mode         7.8889344  0.0905625124
-    ## BIO7_mode         9.7704289  0.0303038567
-    ## BIO8S_mode        7.5655875  0.0213594257
-    ## BIO9S_mode        9.0357805  0.0330665378
-    ## BIO10S_mode      12.3764817  0.0458989549
-    ## BIO11S_mode      10.8438312  0.0548054849
-    ## BIO12_mode        8.8893019  0.0300983290
-    ## BIO13_mode        9.4327509  0.0315015252
-    ## BIO14_mode        9.4888215  0.0268860615
-    ## BIO15_mode        9.1871791  0.1212897856
-    ## BIO16S_mode       8.6535206  0.0262811613
-    ## BIO17S_mode       7.9266488  0.0311551856
-    ## BIO18S_mode       8.6996598  0.0221932434
-    ## BIO19S_mode      10.2959906  0.0395754563
-    ## alt_mode          9.2601975  0.0278142951
-    ## slope_mode        8.3837670  0.0458055496
-    ## riv_3km_mode      7.3381090  0.0527243831
-    ## samp_20km_mode   11.6645843  0.2253255309
-    ## lakes_mode       -1.0010015  0.0000351668
 
 # 3. Mean-only pruning
 
 ## Compare mean versus median versus mode:
+
+Note: Marked eval = FALSE to avoid re-running on knit
 
 ``` r
 # Extract groups of variables by suffix
@@ -271,9 +191,6 @@ c(mean = rf_mean$rsq[500] * 100,
   median = rf_median$rsq[500] * 100,
   mode = rf_mode$rsq[500] * 100)
 ```
-
-    ##     mean   median     mode 
-    ## 85.52060 84.86890 84.51402
 
 Including mean of env variable along least cost paths performs the best,
 adding median and mode does not greatly improve the model and increases
@@ -319,7 +236,7 @@ ggplot(df_ve, aes(PC, Var)) +
   theme_classic()
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
+![](05a_RFmodel_CSE_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
 
 ``` r
 # PCA biplot with individuals (rows) and variables (arrows)
@@ -330,7 +247,7 @@ fviz_pca_biplot(pca_res,
 )
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/unnamed-chunk-1-2.png)<!-- -->
+![](05a_RFmodel_CSE_files/figure-gfm/unnamed-chunk-1-2.png)<!-- -->
 
 ``` r
 # PCA variables plot (correlation circle)
@@ -353,7 +270,7 @@ ggplot() +
   theme_classic()
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/unnamed-chunk-1-3.png)<!-- -->
+![](05a_RFmodel_CSE_files/figure-gfm/unnamed-chunk-1-3.png)<!-- -->
 
 ``` r
 fviz_pca_var(pca_res,
@@ -363,8 +280,9 @@ fviz_pca_var(pca_res,
 )
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/unnamed-chunk-1-4.png)<!-- --> \##
-(Optional) Prune more variables after narrowing to mean only?
+![](05a_RFmodel_CSE_files/figure-gfm/unnamed-chunk-1-4.png)<!-- -->
+
+## (Optional) Prune more variables after narrowing to mean only?
 
 ``` r
 # Plot variable importance
@@ -469,7 +387,11 @@ rf_mean_data <- V.table[, c("CSEdistance", predictor_vars)]
 
 # Rename predictors by removing "_mean" for later projections
 names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
+```
 
+Note: eval = FALSE to avoid re-running on knit
+
+``` r
 # Tune mtry (number of variables tried at each split)
 set.seed(92834567)
 rf_mean_full_tuned <- tuneRF(
@@ -483,19 +405,7 @@ rf_mean_full_tuned <- tuneRF(
   doBest = TRUE,             # return the model with lowest OOB error
   importance = TRUE
 )
-```
 
-    ## mtry = 8  OOB error = 0.001167869 
-    ## Searching left ...
-    ## mtry = 6     OOB error = 0.001165692 
-    ## 0.001864473 0.01 
-    ## Searching right ...
-    ## mtry = 12    OOB error = 0.001159827 
-    ## 0.006885999 0.01
-
-![](05a_RFmodel_full_files/figure-gfm/tune-1.png)<!-- -->
-
-``` r
 # Save the tuned random forest model to disk
 saveRDS(rf_mean_full_tuned, file = file.path(results_dir, "rf_mean_full_tuned.rds"))
 
@@ -506,7 +416,58 @@ rf_final <- rf_mean_full_tuned
 FYI: Later, to load the model back into R:
 `rf_mean_full_tuned <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))`
 
+\### Load full model from file
+
+``` r
+rf_full <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+
+print(rf_full)
+```
+
+    ## 
+    ## Call:
+    ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 12
+    ## 
+    ##           Mean of squared residuals: 0.001159808
+    ##                     % Var explained: 85.7
+
+``` r
+importance(rf_full)
+```
+
+    ##             %IncMSE IncNodePurity
+    ## BIO1      15.402725    0.08260644
+    ## BIO2      13.973900    0.13417148
+    ## BIO3      20.081142    0.49594070
+    ## BIO4      19.971111    0.14142361
+    ## BIO5      14.729129    0.09686819
+    ## BIO6      18.780347    0.28761449
+    ## BIO7      21.588124    0.12205648
+    ## BIO8S     17.780629    0.11071230
+    ## BIO9S     16.876518    0.16430456
+    ## BIO10S    18.009074    0.08892864
+    ## BIO11S    19.622665    0.18474855
+    ## BIO12     14.317559    0.08642528
+    ## BIO13     19.728394    0.16883174
+    ## BIO14     14.588808    0.26422377
+    ## BIO15     16.386966    0.18748348
+    ## BIO16S    16.439604    0.08259274
+    ## BIO17S    11.566631    0.11029099
+    ## BIO18S     7.346078    0.07294360
+    ## BIO19S    10.219341    0.09772391
+    ## slope     16.515957    0.10049135
+    ## alt       17.359818    0.10772336
+    ## lakes      9.130651    0.10792335
+    ## riv_3km   17.252330    0.12710960
+    ## samp_20km 23.662285    1.28875961
+    ## pix_dist  87.248679    4.07276605
+
 ## (Optional) Compare full and full tuned models (mean-only predictors)
+
+Note: eval = FALSE to avoid re-running on knit
 
 ``` r
 # Build full RF model
@@ -547,197 +508,7 @@ the mean-only predictors carry strong signal.
 Top 18 mean-based predictors retain nearly all the explanatory power of
 the original full model with 42 predictors.
 
-# 5. IBD-residuals model (with residuals as response, drop pix_dist for predictor) - for projected map
-
-``` r
-# Load data
-V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
-
-# estimate mean sampling density
-mean(V.table_full$samp_20km_mean, na.rm = TRUE)
-```
-
-    ## [1] 1.027064e-11
-
-``` r
-# Filter out western outlier "50-KB" 
-V.table <- V.table_full %>%
-  filter(Var1 != "50-KB", Var2 != "50-KB")
-
-# Create unique ID after filtering
-V.table$id <- paste(V.table$Var1, V.table$Var2, sep = "_")
-
-# Define site list
-sites <- sort(unique(c(V.table$Var1, V.table$Var2)))
-
-# How many rows of data for each?
-table(V.table$Pop1_cluster)
-```
-
-    ## 
-    ## north south 
-    ##   595   496
-
-``` r
-# How many unique sites?
-length(sites)
-```
-
-    ## [1] 67
-
-``` r
-# Choose predictors for RF model (adjust names if necessary)
-predictor_vars <- c("BIO1_mean","BIO2_mean","BIO3_mean","BIO4_mean", "BIO5_mean","BIO6_mean","BIO7_mean", "BIO8S_mean", "BIO9S_mean","BIO10S_mean", "BIO11S_mean","BIO12_mean", "BIO13_mean","BIO14_mean","BIO15_mean","BIO16S_mean","BIO17S_mean", "BIO18S_mean","BIO19S_mean","slope_mean","alt_mean", "lakes_mean","riv_3km_mean") 
-
-# ,"samp_20km_mean","pix_dist") # REMOVED
-
-# Fit IBD model
-lm_ibd <- lm(CSEdistance ~ pix_dist, data = V.table)
-summary(lm_ibd)
-```
-
-    ## 
-    ## Call:
-    ## lm(formula = CSEdistance ~ pix_dist, data = V.table)
-    ## 
-    ## Residuals:
-    ##       Min        1Q    Median        3Q       Max 
-    ## -0.170128 -0.038628 -0.001543  0.036318  0.183730 
-    ## 
-    ## Coefficients:
-    ##              Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept) 2.814e-01  3.255e-03   86.45   <2e-16 ***
-    ## pix_dist    4.746e-04  1.151e-05   41.22   <2e-16 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## Residual standard error: 0.05633 on 1089 degrees of freedom
-    ## Multiple R-squared:  0.6094, Adjusted R-squared:  0.609 
-    ## F-statistic:  1699 on 1 and 1089 DF,  p-value: < 2.2e-16
-
-``` r
-# Add residuals
-V.table$resid_ibd <- resid(lm_ibd)
-
-# Filter and SAVE modeling-relevant columns of V.table
-rf_mean_data <- V.table[, c("resid_ibd", predictor_vars)]
-write.csv(rf_mean_data,file.path(input_dir, "Gff_cse_envCostPaths_residuals.csv"))
-
-# Rename predictors by removing "_mean" for later projections
-names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
-
-# Tune mtry (number of variables tried at each split)
-set.seed(92834567)
-rf_resid_tuned <- tuneRF(
-  x = rf_mean_data[, -1],   # exclude response variable
-  y = rf_mean_data$resid_ibd,
-  ntreeTry = 500,
-  stepFactor = 1.5,         # factor by which mtry is increased/decreased
-  improve = 0.01,           # minimum improvement to continue search
-  trace = TRUE,             # print progress
-  plot = TRUE,              # plot OOB error vs mtry
-  doBest = TRUE,             # return the model with lowest OOB error
-  importance = TRUE
-)
-```
-
-    ## mtry = 7  OOB error = 0.001266028 
-    ## Searching left ...
-    ## mtry = 5     OOB error = 0.001294334 
-    ## -0.02235792 0.01 
-    ## Searching right ...
-    ## mtry = 10    OOB error = 0.001281057 
-    ## -0.01187099 0.01
-
-![](05a_RFmodel_full_files/figure-gfm/residuals-1.png)<!-- -->
-
-``` r
-print(rf_resid_tuned)
-```
-
-    ## 
-    ## Call:
-    ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
-    ##                Type of random forest: regression
-    ##                      Number of trees: 500
-    ## No. of variables tried at each split: 7
-    ## 
-    ##           Mean of squared residuals: 0.001284575
-    ##                     % Var explained: 59.45
-
-``` r
-importance(rf_resid_tuned)
-```
-
-    ##          %IncMSE IncNodePurity
-    ## BIO1    16.34039    0.11411200
-    ## BIO2    19.15175    0.19952680
-    ## BIO3    28.96897    0.42906634
-    ## BIO4    17.27893    0.13556198
-    ## BIO5    15.94561    0.13705808
-    ## BIO6    15.07524    0.13467975
-    ## BIO7    18.78867    0.14378666
-    ## BIO8S   14.49637    0.12273993
-    ## BIO9S   21.11762    0.16354417
-    ## BIO10S  22.79015    0.11654906
-    ## BIO11S  18.13765    0.11930089
-    ## BIO12   18.69676    0.13406272
-    ## BIO13   28.45212    0.19634014
-    ## BIO14   20.00874    0.18591702
-    ## BIO15   20.33533    0.14811676
-    ## BIO16S  15.09068    0.16210213
-    ## BIO17S  14.36738    0.07626554
-    ## BIO18S  11.56201    0.07999218
-    ## BIO19S  14.70088    0.06841624
-    ## slope   21.40398    0.13543998
-    ## alt     16.01927    0.11144439
-    ## lakes   16.07053    0.10912013
-    ## riv_3km 28.37241    0.14619350
-
-``` r
-varImpPlot(rf_resid_tuned)
-```
-
-![](05a_RFmodel_full_files/figure-gfm/residuals-2.png)<!-- -->
-
-``` r
-# Save the tuned random forest model to disk
-saveRDS(rf_resid_tuned, file = file.path(results_dir, "rf_residuals.rds"))
-
-# Preserve as-is for projection
-rf_residuals <- rf_resid_tuned
-rf_residuals$importance
-```
-
-    ##              %IncMSE IncNodePurity
-    ## BIO1    0.0003434261    0.11411200
-    ## BIO2    0.0006111139    0.19952680
-    ## BIO3    0.0016241886    0.42906634
-    ## BIO4    0.0005225652    0.13556198
-    ## BIO5    0.0004077483    0.13705808
-    ## BIO6    0.0004509661    0.13467975
-    ## BIO7    0.0004479169    0.14378666
-    ## BIO8S   0.0003754683    0.12273993
-    ## BIO9S   0.0006381889    0.16354417
-    ## BIO10S  0.0003607484    0.11654906
-    ## BIO11S  0.0004348066    0.11930089
-    ## BIO12   0.0003387221    0.13406272
-    ## BIO13   0.0004902208    0.19634014
-    ## BIO14   0.0009830554    0.18591702
-    ## BIO15   0.0004792270    0.14811676
-    ## BIO16S  0.0005401290    0.16210213
-    ## BIO17S  0.0002689043    0.07626554
-    ## BIO18S  0.0003381436    0.07999218
-    ## BIO19S  0.0002202966    0.06841624
-    ## slope   0.0003028316    0.13543998
-    ## alt     0.0004657214    0.11144439
-    ## lakes   0.0002659170    0.10912013
-    ## riv_3km 0.0002624959    0.14619350
-
-FYI: Later, to load the model back into R:
-`rf_residuals <- readRDS(file.path(results_dir, "rf_residuals.rds"))`
-
-# 6. Project from IBD-residuals model
+# 5. Project predicted values from full CSE model
 
 ## Build Projection
 
@@ -745,15 +516,32 @@ FYI: Later, to load the model back into R:
 # Load env stack with named layers
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
-# Load rdf of final model
-rf_residuals <- readRDS(file.path(results_dir, "rf_residuals.rds"))
-prediction_raster <- predict(env, rf_residuals, type = "response")
+# Neutralize sampling layer to average
+env$samp_20km <- 1.027064e-11 #neutralize sampling bias
 
-# Write Prediction Raster to file
-writeRaster(prediction_raster, file.path(results_dir,"fullRF_residuals.tif"), format = "GTiff", overwrite = TRUE)
+# Load rdf of final model
+rf_predicted <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+rf_predicted
 ```
 
-## Plot predicted IBD residuals
+    ## 
+    ## Call:
+    ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 12
+    ## 
+    ##           Mean of squared residuals: 0.001159808
+    ##                     % Var explained: 85.7
+
+``` r
+prediction_raster <- predict(env, rf_predicted, type = "response")
+
+# Write Prediction Raster to file
+writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE.tif"), format = "GTiff", overwrite = TRUE)
+```
+
+## Plot predicted CSE
 
 ``` r
 # Create base plot with viridis
@@ -762,7 +550,7 @@ plot(prediction_raster,
      main = "Predicted CSE Distance",
      axes = FALSE,
      box = FALSE,
-     legend.args = list(text = "IBD residuals", side = 3, line = 1, cex = 1))
+     legend.args = list(text = "CSE", side = 3, line = 1, cex = 1))
 
 # Overlay lakes in dark gray
 lakes <- st_read(file.path(data_dir, "raw/ne_10m_lakes.shp"), quiet = TRUE)
@@ -779,15 +567,15 @@ uganda <- st_intersection(uganda, r_ext) # clip to extent
 plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/plot-projection-1.png)<!-- -->
+![](05a_RFmodel_CSE_files/figure-gfm/plot-projection-1.png)<!-- -->
 
-# 7. Scale residuals and SDM
+# 6. Scale and plot predicted connectivity (CSE) and SDM
 
-## Scale 0-1, habitat suitability and inverse of predicted residuals
+## Scale 0-1, habitat suitability and inverse of predicted connectivity (CSE)
 
 ``` r
 # Load raster layers
-con_raster <- rast(file.path(results_dir, "fullRF_residuals.tif"))
+con_raster <- rast(file.path(results_dir, "fullRF_CSE.tif"))
 fao <- rast(file.path(data_dir, "FAO_fuscipes_2001.tif"))
 update <- rast(file.path(data_dir, "SDM_2018update.tif"))
 
@@ -815,7 +603,7 @@ sdm <- (sdm - sdm_min) / (sdm_max - sdm_min)
 # Mask to common suitable area
 con <- mask(con, sdm)
 
-# Rescale inverse of residuals to 0-1
+# Rescale inverse of prediction to 0-1
 con_min <- global(con, "min", na.rm = TRUE)$min
 con_max <- global(con, "max", na.rm = TRUE)$max
 con <- 1 - ((con - con_min) / (con_max - con_min))
@@ -825,20 +613,20 @@ sdm_r <- raster(sdm)
 con_r <- raster(con)
 ```
 
-## Plot scaled residuals and SDM
+## Plot scaled predicted CSE and SDM
 
 ``` r
-# Plot Genetic Connectivity (inverse residuals)
+# Plot Genetic Connectivity (inverse predicted values)
 plot(con,
      col = rev(viridis::plasma(100)),  # high connectivity = dark
-     main = "Genetic Connectivity (inverse residuals)",
+     main = "Genetic Connectivity (inverse predicted CSE)",
      axes = FALSE, box = FALSE,
      legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/plot-sdm-con-1.png)<!-- -->
+![](05a_RFmodel_CSE_files/figure-gfm/plot-sdm-con-1.png)<!-- -->
 
 ``` r
 # Plot Habitat Suitability
@@ -851,7 +639,7 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/plot-sdm-con-2.png)<!-- -->
+![](05a_RFmodel_CSE_files/figure-gfm/plot-sdm-con-2.png)<!-- -->
 
 ``` r
 # Plot with custom colors
@@ -860,17 +648,17 @@ plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 connectivity_colors <- colorRampPalette(c("#FFFF00", "#FFA500", "#FF4500", "#700E40", "#2E003E"))(100)
 suitability_colors  <- colorRampPalette(c("white", "lightblue", "blue4"))(100)     # white → light blue → dark blue
 
-# Plot Genetic Connectivity (inverse residuals) with custom colors
+# Plot Genetic Connectivity (inverse predicted) with custom colors
 plot(con,
      col = connectivity_colors,
-     main = "Genetic Connectivity (inverse residuals)",
+     main = "Genetic Connectivity (inverse predicted CSE)",
      axes = FALSE, box = FALSE,
      legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/plot-sdm-con-3.png)<!-- -->
+![](05a_RFmodel_CSE_files/figure-gfm/plot-sdm-con-3.png)<!-- -->
 
 ``` r
 # Plot Habitat Suitability with custom colors
@@ -883,4 +671,8 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
 ```
 
-![](05a_RFmodel_full_files/figure-gfm/plot-sdm-con-4.png)<!-- -->
+![](05a_RFmodel_CSE_files/figure-gfm/plot-sdm-con-4.png)<!-- -->
+
+# 6. Variable importance plots
+
+Look at end of 06b LOPOCV scripts for inspiration
