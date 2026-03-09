@@ -1,4 +1,4 @@
-# Data Directory
+# Results Directory
 
 This directory is a placeholder; the actual data files are stored externally on CHPC at:
 
