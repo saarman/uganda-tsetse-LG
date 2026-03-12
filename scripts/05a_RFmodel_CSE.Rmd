@@ -258,7 +258,7 @@ Note: I did also try scaling CSE before runnning RF as a different idea, but per
 
 # 4. Final full model - (Tune random forest with mean variables)
 
-
+## Choose final predictor variables  
 ```{r tune_setup}
 # Load data
 V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
@@ -297,9 +297,8 @@ rf_mean_data <- V.table[, c("CSEdistance", predictor_vars)]
 names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
 ```
 
-Note: eval = FALSE to avoid re-running on knit
-```{r tune_run, warning=FALSE, eval = FALSE}
-
+## Full random forest model with raw CSE
+```{r tune_run, warning=FALSE}
 # Tune mtry (number of variables tried at each split)
 set.seed(92834567)
 rf_mean_full_tuned <- tuneRF(
@@ -314,26 +313,29 @@ rf_mean_full_tuned <- tuneRF(
   importance = TRUE
 )
 
+print(rf_mean_full_tuned)
+importance(rf_mean_full_tuned)
+varImpPlot(rf_mean_full_tuned)
+
 # Save the tuned random forest model to disk
 saveRDS(rf_mean_full_tuned, file = file.path(results_dir, "rf_mean_full_tuned.rds"))
 
-# Preserve as-is for projection
-rf_final <- rf_mean_full_tuned
 ```
 FYI: Later, to load the model back into R:
 `rf_mean_full_tuned <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))`
  
- ### Load full model from file
-```{r load_full}
+ 
+### Load saved (raw CSE) model
+```{r}
+# load saved model
 rf_full <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
 
+#double check they look correct
 print(rf_full)
-
-importance(rf_full)
+print(rf_full$importance)
 ```
 
 ## (Optional) Compare full and full tuned models (mean-only predictors)
-
 Note: eval = FALSE to avoid re-running on knit
 ```{r compare, eval=FALSE, warning=FALSE}
 
@@ -368,11 +370,13 @@ varImpPlot(rf_mean_full, main = "Full Model Importance",cex = 0.6, pch = 19)
 varImpPlot(rf_mean_full_tuned, main = "Tuned Full Model Importance",cex = 0.6, pch = 19)
 ```
 
+Results from optional comparison:
 The tuned model performs slightly better, but the gain may not be meaningful... however, it does confirm that the model is stable and that the mean-only predictors carry strong signal.
 
 Top 18 mean-based predictors retain nearly all the explanatory power of the original full model with 42 predictors.
  
 # 5. Project predicted values from full CSE model   
+
 ## Build Projection
 ```{r projection, warning=FALSE}
 # Load env stack with named layers
@@ -508,4 +512,127 @@ plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
   
 # 6. Variable importance plots  
 
-Look at end of 06b LOPOCV scripts for inspiration 
+## Percent Improvement MSE
+```{r variable-imp-mse}
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(randomForest)
+
+# Load full model (as opposed to LOPOCV later)
+full_model <- rf_predicted 
+full_imp <- importance(full_model, type = 1) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  rename(IncMSE = `%IncMSE`) %>%
+  mutate(model = "full")
+
+# Define custom labels
+label_map <- c(
+  BIO1   = "Annual Mean Temperature (BIO1)",
+  BIO2   = "Mean Diurnal Temp Range (BIO2)",
+  BIO3   = "Isothermality (BIO3)",
+  BIO4   = "Temperature Seasonality (BIO4)",
+  BIO5   = "Max Temp of Warmest Month (BIO5)",
+  BIO6   = "Min Temp of Coldest Month (BIO6)",
+  BIO7   = "Temperature Annual Range (BIO7)",
+  BIO8S  = "Mean Temp of Wettest Season (BIO8S)",
+  BIO9S  = "Mean Temp of Driest Season (BIO9S)",
+  BIO10S = "Mean Temp of Warmest Season (BIO10S)",
+  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
+  BIO12  = "Annual Precipitation (BIO12)",
+  BIO13  = "Precipitation of Wettest Month (BIO13)",
+  BIO14  = "Precipitation of Driest Month (BIO14)",
+  BIO15  = "Precipitation Seasonality (BIO15)",
+  BIO16S = "Precipitation of Wettest Season (BIO16S)",
+  BIO17S = "Precipitation of Driest Season (BIO17S)",
+  BIO18S = "Precipitation of Warmest Season (BIO18S)",
+  BIO19S = "Precipitation of Coldest Season (BIO19S)",
+  slope  = "Slope",
+  alt    = "Altitude",
+  lakes  = "Lake Presence/Absence",
+  riv_3km = "River Kernel Density (3 km bandwidth)",
+  samp_20km = "Sampling Density (20 km bandwidth)",
+  pix_dist = "Geographic Distance (km)"
+)
+
+
+# Order by full model's %IncMSE (top to bottom)
+full_order <- full_imp %>%
+  arrange(desc(IncMSE)) %>%
+  pull(variable)
+
+full_imp$variable <- factor(full_imp$variable, levels = rev(full_order))
+
+# Plot
+# pdf("../figures/VarImpPlot_residModel.pdf",width =6, height=6)
+ggplot(full_imp, aes(x = variable, y = IncMSE)) +
+  geom_point(data = filter(full_imp, model == "full"),
+             color = "black", size = 3) +
+  coord_flip() +
+  scale_y_continuous(name = "%IncMSE") +
+  scale_x_discrete(labels = label_map) +
+  labs(x = NULL, title = "Variable Importance of Raw CSE Model") +
+  theme_minimal()
+#dev.off()
+```
+## Node Purity
+```{r variable-imp-nodepurity}
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(randomForest)
+
+# Load full model
+full_model <- rf_predicted 
+
+full_imp <- importance(full_model, type = 2) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  mutate(model = "full")
+
+# Define custom labels
+label_map <- c(
+  BIO1   = "Annual Mean Temperature (BIO1)",
+  BIO2   = "Mean Diurnal Temp Range (BIO2)",
+  BIO3   = "Isothermality (BIO3)",
+  BIO4   = "Temperature Seasonality (BIO4)",
+  BIO5   = "Max Temp of Warmest Month (BIO5)",
+  BIO6   = "Min Temp of Coldest Month (BIO6)",
+  BIO7   = "Temperature Annual Range (BIO7)",
+  BIO8S  = "Mean Temp of Wettest Season (BIO8S)",
+  BIO9S  = "Mean Temp of Driest Season (BIO9S)",
+  BIO10S = "Mean Temp of Warmest Season (BIO10S)",
+  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
+  BIO12  = "Annual Precipitation (BIO12)",
+  BIO13  = "Precipitation of Wettest Month (BIO13)",
+  BIO14  = "Precipitation of Driest Month (BIO14)",
+  BIO15  = "Precipitation Seasonality (BIO15)",
+  BIO16S = "Precipitation of Wettest Season (BIO16S)",
+  BIO17S = "Precipitation of Driest Season (BIO17S)",
+  BIO18S = "Precipitation of Warmest Season (BIO18S)",
+  BIO19S = "Precipitation of Coldest Season (BIO19S)",
+  slope  = "Slope",
+  alt    = "Altitude",
+  lakes  = "Lake Presence/Absence",
+  riv_3km = "River Kernel Density (3 km bandwidth)",
+  samp_20km = "Sampling Density (20 km bandwidth)",
+  pix_dist = "Geographic Distance (km)"
+)
+
+# Order variables by node purity
+full_order <- full_imp %>%
+  arrange(desc(IncNodePurity)) %>%
+  pull(variable)
+
+full_imp$variable <- factor(full_imp$variable, levels = rev(full_order))
+
+# Plot
+ggplot(full_imp, aes(x = variable, y = IncNodePurity)) +
+  geom_point(color = "black", size = 3) +
+  coord_flip() +
+  scale_y_continuous(name = "Increase in Node Purity") +
+  scale_x_discrete(labels = label_map) +
+  labs(x = NULL, title = "Variable Importance of Raw CSE Model") +
+  theme_minimal()
+```

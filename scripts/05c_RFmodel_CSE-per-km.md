@@ -7,16 +7,15 @@ Norah Saarman
 - [1. Prepare the data](#1-prepare-the-data)
 - [2. CSE per km to find response
   variable](#2-cse-per-km-to-find-response-variable)
-  - [Plot IBD linear model, CSE vs km, CSE vs
-    log10(km)](#plot-ibd-linear-model-cse-vs-km-cse-vs-log10km)
-- [3. Run CSE per km rf model (with CSE-per-km as response, drop
+- [2. Run CSE per km rf model (with CSE-per-km as response, drop
   pix_dist for
-  predictor)](#3-run-cse-per-km-rf-model-with-cse-per-km-as-response-drop-pix_dist-for-predictor)
-  - [Full random forest model with
-    CSE/km](#full-random-forest-model-with-csekm)
-    - [Load saved CSE-per-km model](#load-saved-cse-per-km-model)
-- [4. Project predicted values from full CSE-per-km
-  model](#4-project-predicted-values-from-full-cse-per-km-model)
+  predictor)](#2-run-cse-per-km-rf-model-with-cse-per-km-as-response-drop-pix_dist-for-predictor)
+  - [Full random forest model with CSE/km as a
+    rate](#full-random-forest-model-with-csekm-as-a-rate)
+    - [Load saved (CSE-per-km rate)
+      model](#load-saved-cse-per-km-rate-model)
+- [4. Project predicted values from full CSE-per-km rate
+  model](#4-project-predicted-values-from-full-cse-per-km-rate-model)
   - [Build Projection](#build-projection)
   - [Plot predicted CSE-per-km](#plot-predicted-cse-per-km)
 - [5. Scale and plot predicted connectivity (CSE-per-km) and
@@ -26,12 +25,14 @@ Norah Saarman
     (CSE-per-km)](#scale-0-1-habitat-suitability-and-inverse-of-predicted-connectivity-cse-per-km)
   - [Plot scaled predicted CSE-per-km and
     SDM](#plot-scaled-predicted-cse-per-km-and-sdm)
+  - [Percent Improvement MSE](#percent-improvement-mse)
+  - [Node Purity](#node-purity)
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
 - **Number of cores:** 4 (up to 32 available)  
 - **Account:** saarman-np  
-- **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
+- **Partition:** saarman-np (allows multiple simultaneous jobs)  
 - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding
 half)  
 \# Setup
@@ -181,10 +182,10 @@ length(sites)
     ## [1] 67
 
 ``` r
-# Choose predictors for RF model (adjust names if necessary)
-predictor_vars <- c("BIO1_mean","BIO2_mean","BIO3_mean","BIO4_mean", "BIO5_mean","BIO6_mean","BIO7_mean", "BIO8S_mean", "BIO9S_mean","BIO10S_mean", "BIO11S_mean","BIO12_mean", "BIO13_mean","BIO14_mean","BIO15_mean","BIO16S_mean","BIO17S_mean", "BIO18S_mean","BIO19S_mean","slope_mean","alt_mean", "lakes_mean","riv_3km_mean") 
+# Choose predictors for RF model (all but pix_dist)
+predictor_vars <- c("BIO1_mean","BIO2_mean","BIO3_mean","BIO4_mean", "BIO5_mean","BIO6_mean","BIO7_mean", "BIO8S_mean", "BIO9S_mean","BIO10S_mean", "BIO11S_mean","BIO12_mean", "BIO13_mean","BIO14_mean","BIO15_mean","BIO16S_mean","BIO17S_mean", "BIO18S_mean","BIO19S_mean","slope_mean","alt_mean", "lakes_mean","riv_3km_mean", "samp_20km_mean")
 
-# ,"samp_20km_mean","pix_dist") # REMOVED
+# "pix_dist") # REMOVED
 
 # Add CSE per pix_dist to predictors table (V.table)
 V.table$CSE_per_km <- V.table$CSEdistance/V.table$pix_dist
@@ -196,84 +197,13 @@ rf_mean_data <- V.table[, c("CSE_per_km", predictor_vars)]
 names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
 ```
 
-### Plot IBD linear model, CSE vs km, CSE vs log10(km)
+# 2. Run CSE per km rf model (with CSE-per-km as response, drop pix_dist for predictor)
 
-``` r
-# colors
-colors <- c("north" = "#1f78b4", "south" = "#e66101")
-
-# raw geo dist
-lm_ibd <- lm(CSEdistance ~ pix_dist, data = V.table)
-summary(lm_ibd)
-```
-
-    ## 
-    ## Call:
-    ## lm(formula = CSEdistance ~ pix_dist, data = V.table)
-    ## 
-    ## Residuals:
-    ##       Min        1Q    Median        3Q       Max 
-    ## -0.170128 -0.038628 -0.001543  0.036318  0.183730 
-    ## 
-    ## Coefficients:
-    ##              Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept) 2.814e-01  3.255e-03   86.45   <2e-16 ***
-    ## pix_dist    4.746e-04  1.151e-05   41.22   <2e-16 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## Residual standard error: 0.05633 on 1089 degrees of freedom
-    ## Multiple R-squared:  0.6094, Adjusted R-squared:  0.609 
-    ## F-statistic:  1699 on 1 and 1089 DF,  p-value: < 2.2e-16
-
-``` r
-plot(V.table$pix_dist, V.table$CSEdistance, col = colors[ V.table$Pop1_cluster],pch = 19, xlab = "Geo. distance (km)", ylab = "Gen. distance (CSE)")
-abline(lm_ibd)
-```
-
-![](05c_RFmodel_CSE-per-km_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
-
-``` r
-# log10 geo dist
-lm_ibd_log <- lm(CSEdistance ~ log10(pix_dist), data = V.table)
-summary(lm_ibd_log)
-```
-
-    ## 
-    ## Call:
-    ## lm(formula = CSEdistance ~ log10(pix_dist), data = V.table)
-    ## 
-    ## Residuals:
-    ##       Min        1Q    Median        3Q       Max 
-    ## -0.163873 -0.043257 -0.006829  0.040182  0.234622 
-    ## 
-    ## Coefficients:
-    ##                  Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)     -0.040200   0.011552   -3.48 0.000521 ***
-    ## log10(pix_dist)  0.191883   0.005024   38.19  < 2e-16 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## Residual standard error: 0.05893 on 1089 degrees of freedom
-    ## Multiple R-squared:  0.5726, Adjusted R-squared:  0.5722 
-    ## F-statistic:  1459 on 1 and 1089 DF,  p-value: < 2.2e-16
-
-``` r
-plot(log10(V.table$pix_dist), V.table$CSEdistance, col = colors[ V.table$Pop1_cluster],pch = 19, xlab = "Log10 Geo. distance (km)", ylab = "Gen. distance (CSE)")
-abline(lm_ibd_log)
-```
-
-![](05c_RFmodel_CSE-per-km_files/figure-gfm/unnamed-chunk-1-2.png)<!-- -->
-
-# 3. Run CSE per km rf model (with CSE-per-km as response, drop pix_dist for predictor)
-
-## Full random forest model with CSE/km
-
-Note: Marked eval = FALSE to avoid re-running on knit
+## Full random forest model with CSE/km as a rate
 
 ``` r
 # Tune mtry (number of variables tried at each split)
-set.seed(92834567)
+set.seed(9283456)
 rf_rate_tuned <- tuneRF(
   x = rf_mean_data[, -1],   # exclude response variable
   y = rf_mean_data$CSE_per_km,
@@ -285,22 +215,80 @@ rf_rate_tuned <- tuneRF(
   doBest = TRUE,             # return the model with lowest OOB error
   importance = TRUE
 )
-print(rf_rate_tuned)
-importance(rf_rate_tuned)
-varImpPlot(rf_rate_tuned)
-
-# Save the tuned random forest model to disk
-saveRDS(rf_rate_tuned, file = file.path(results_dir, "rf_rate.rds"))
-
-# Preserve as-is for projection
-rf_rate <- rf_rate_tuned
-rf_rate$importance
 ```
 
-### Load saved CSE-per-km model
+    ## mtry = 8  OOB error = 7.908232e-06 
+    ## Searching left ...
+    ## mtry = 6     OOB error = 7.986897e-06 
+    ## -0.009947273 0.01 
+    ## Searching right ...
+    ## mtry = 12    OOB error = 7.893696e-06 
+    ## 0.001838154 0.01
+
+![](05c_RFmodel_CSE-per-km_files/figure-gfm/rf%20full%20CSE%20rate%20(per%20km)-1.png)<!-- -->
 
 ``` r
+print(rf_rate_tuned)
+```
+
+    ## 
+    ## Call:
+    ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 12
+    ## 
+    ##           Mean of squared residuals: 8.037939e-06
+    ##                     % Var explained: 56.64
+
+``` r
+importance(rf_rate_tuned)
+```
+
+    ##             %IncMSE IncNodePurity
+    ## BIO1       4.587971  0.0002977096
+    ## BIO2       4.362442  0.0002407483
+    ## BIO3      11.810174  0.0006441259
+    ## BIO4       2.558606  0.0001582295
+    ## BIO5       3.696757  0.0002697620
+    ## BIO6      13.473950  0.0005305827
+    ## BIO7       4.185785  0.0001453542
+    ## BIO8S      5.390165  0.0001845527
+    ## BIO9S      5.138124  0.0001617074
+    ## BIO10S     4.639491  0.0006709239
+    ## BIO11S     5.956340  0.0002687609
+    ## BIO12      4.040854  0.0001874538
+    ## BIO13     10.636104  0.0017681048
+    ## BIO14      5.141323  0.0004218309
+    ## BIO15     16.156894  0.0024928979
+    ## BIO16S     4.242554  0.0004561199
+    ## BIO17S     4.695356  0.0003495089
+    ## BIO18S     3.101648  0.0003657518
+    ## BIO19S     9.201667  0.0002474063
+    ## slope      4.984244  0.0009434430
+    ## alt        2.707489  0.0004213371
+    ## lakes      9.769093  0.0014200816
+    ## riv_3km   14.209582  0.0027343239
+    ## samp_20km 24.842561  0.0042037069
+
+``` r
+varImpPlot(rf_rate_tuned)
+```
+
+![](05c_RFmodel_CSE-per-km_files/figure-gfm/rf%20full%20CSE%20rate%20(per%20km)-2.png)<!-- -->
+
+``` r
+# Save the tuned random forest model to disk
+saveRDS(rf_rate_tuned, file = file.path(results_dir, "rf_rate.rds"))
+```
+
+### Load saved (CSE-per-km rate) model
+
+``` r
+# load saved model
 rf_rate <- readRDS(file.path(results_dir, "rf_rate.rds"))
+
+#double check they look correct
 print(rf_rate)
 ```
 
@@ -309,41 +297,42 @@ print(rf_rate)
     ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
     ##                Type of random forest: regression
     ##                      Number of trees: 500
-    ## No. of variables tried at each split: 7
+    ## No. of variables tried at each split: 12
     ## 
-    ##           Mean of squared residuals: 8.085224e-06
-    ##                     % Var explained: 56.38
+    ##           Mean of squared residuals: 8.037939e-06
+    ##                     % Var explained: 56.64
 
 ``` r
 print(rf_rate$importance)
 ```
 
-    ##              %IncMSE IncNodePurity
-    ## BIO1    1.736007e-06  0.0004988685
-    ## BIO2    2.659362e-06  0.0007457887
-    ## BIO3    3.798791e-06  0.0007902613
-    ## BIO4    2.132549e-06  0.0002962381
-    ## BIO5    3.031021e-06  0.0004772268
-    ## BIO6    2.516587e-06  0.0006874733
-    ## BIO7    1.568675e-06  0.0003683682
-    ## BIO8S   4.272513e-06  0.0004045270
-    ## BIO9S   3.122552e-06  0.0003983805
-    ## BIO10S  4.692264e-06  0.0011432832
-    ## BIO11S  2.955630e-06  0.0005213234
-    ## BIO12   2.900105e-06  0.0003375686
-    ## BIO13   5.025505e-06  0.0021910848
-    ## BIO14   2.584525e-06  0.0007193777
-    ## BIO15   5.537683e-06  0.0021090919
-    ## BIO16S  2.147560e-06  0.0005728219
-    ## BIO17S  1.348961e-06  0.0003222295
-    ## BIO18S  2.233114e-06  0.0004847321
-    ## BIO19S  1.271830e-06  0.0003694415
-    ## slope   1.281090e-06  0.0010277648
-    ## alt     2.705537e-06  0.0004986653
-    ## lakes   2.869309e-06  0.0014337858
-    ## riv_3km 6.976663e-06  0.0031744786
+    ##                %IncMSE IncNodePurity
+    ## BIO1      3.022836e-07  0.0002977096
+    ## BIO2      5.629122e-07  0.0002407483
+    ## BIO3      5.030517e-06  0.0006441259
+    ## BIO4      2.312641e-07  0.0001582295
+    ## BIO5      4.071485e-07  0.0002697620
+    ## BIO6      1.035128e-06  0.0005305827
+    ## BIO7      4.920943e-07  0.0001453542
+    ## BIO8S     5.124107e-07  0.0001845527
+    ## BIO9S     5.310421e-07  0.0001617074
+    ## BIO10S    1.148699e-06  0.0006709239
+    ## BIO11S    8.571642e-07  0.0002687609
+    ## BIO12     6.238017e-07  0.0001874538
+    ## BIO13     2.351988e-06  0.0017681048
+    ## BIO14     6.669534e-07  0.0004218309
+    ## BIO15     4.261487e-06  0.0024928979
+    ## BIO16S    3.322938e-07  0.0004561199
+    ## BIO17S    2.757436e-07  0.0003495089
+    ## BIO18S    3.476408e-07  0.0003657518
+    ## BIO19S    1.518360e-07  0.0002474063
+    ## slope     3.970871e-07  0.0009434430
+    ## alt       5.937741e-07  0.0004213371
+    ## lakes     1.101492e-06  0.0014200816
+    ## riv_3km   4.187845e-06  0.0027343239
+    ## samp_20km 1.358790e-05  0.0042037069
 
-# 4. Project predicted values from full CSE-per-km model
+# 4. Project predicted values from full CSE-per-km rate model
 
 ## Build Projection
 
@@ -364,10 +353,10 @@ rf_predicted
     ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
     ##                Type of random forest: regression
     ##                      Number of trees: 500
-    ## No. of variables tried at each split: 7
+    ## No. of variables tried at each split: 12
     ## 
-    ##           Mean of squared residuals: 8.085224e-06
-    ##                     % Var explained: 56.38
+    ##           Mean of squared residuals: 8.037939e-06
+    ##                     % Var explained: 56.64
 
 ``` r
 prediction_raster <- predict(env, rf_predicted, type = "response")
@@ -507,3 +496,138 @@ plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
 ```
 
 ![](05c_RFmodel_CSE-per-km_files/figure-gfm/plot-sdm-con-4.png)<!-- -->
+
+## Percent Improvement MSE
+
+``` r
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(randomForest)
+
+# Load full model (as opposed to LOPOCV later)
+full_model <- rf_predicted 
+full_imp <- importance(full_model, type = 1) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  rename(IncMSE = `%IncMSE`) %>%
+  mutate(model = "full")
+
+# Define custom labels
+label_map <- c(
+  BIO1   = "Annual Mean Temperature (BIO1)",
+  BIO2   = "Mean Diurnal Temp Range (BIO2)",
+  BIO3   = "Isothermality (BIO3)",
+  BIO4   = "Temperature Seasonality (BIO4)",
+  BIO5   = "Max Temp of Warmest Month (BIO5)",
+  BIO6   = "Min Temp of Coldest Month (BIO6)",
+  BIO7   = "Temperature Annual Range (BIO7)",
+  BIO8S  = "Mean Temp of Wettest Season (BIO8S)",
+  BIO9S  = "Mean Temp of Driest Season (BIO9S)",
+  BIO10S = "Mean Temp of Warmest Season (BIO10S)",
+  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
+  BIO12  = "Annual Precipitation (BIO12)",
+  BIO13  = "Precipitation of Wettest Month (BIO13)",
+  BIO14  = "Precipitation of Driest Month (BIO14)",
+  BIO15  = "Precipitation Seasonality (BIO15)",
+  BIO16S = "Precipitation of Wettest Season (BIO16S)",
+  BIO17S = "Precipitation of Driest Season (BIO17S)",
+  BIO18S = "Precipitation of Warmest Season (BIO18S)",
+  BIO19S = "Precipitation of Coldest Season (BIO19S)",
+  slope  = "Slope",
+  alt    = "Altitude",
+  lakes  = "Lake Presence/Absence",
+  riv_3km = "River Kernel Density (3 km bandwidth)",
+  samp_20km = "Sampling Density (20 km bandwidth)",
+  pix_dist = "Geographic Distance (km)"
+)
+
+
+# Order by full model's %IncMSE (top to bottom)
+full_order <- full_imp %>%
+  arrange(desc(IncMSE)) %>%
+  pull(variable)
+
+full_imp$variable <- factor(full_imp$variable, levels = rev(full_order))
+
+# Plot
+# pdf("../figures/VarImpPlot_residModel.pdf",width =6, height=6)
+ggplot(full_imp, aes(x = variable, y = IncMSE)) +
+  geom_point(data = filter(full_imp, model == "full"),
+             color = "black", size = 3) +
+  coord_flip() +
+  scale_y_continuous(name = "%IncMSE") +
+  scale_x_discrete(labels = label_map) +
+  labs(x = NULL, title = "Variable Importance of CSE/km Rate Model") +
+  theme_minimal()
+```
+
+![](05c_RFmodel_CSE-per-km_files/figure-gfm/variable-imp-mse-1.png)<!-- -->
+
+``` r
+#dev.off()
+```
+
+## Node Purity
+
+``` r
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(randomForest)
+
+# Load full model
+full_model <- rf_predicted 
+
+full_imp <- importance(full_model, type = 2) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  mutate(model = "full")
+
+# Define custom labels
+label_map <- c(
+  BIO1   = "Annual Mean Temperature (BIO1)",
+  BIO2   = "Mean Diurnal Temp Range (BIO2)",
+  BIO3   = "Isothermality (BIO3)",
+  BIO4   = "Temperature Seasonality (BIO4)",
+  BIO5   = "Max Temp of Warmest Month (BIO5)",
+  BIO6   = "Min Temp of Coldest Month (BIO6)",
+  BIO7   = "Temperature Annual Range (BIO7)",
+  BIO8S  = "Mean Temp of Wettest Season (BIO8S)",
+  BIO9S  = "Mean Temp of Driest Season (BIO9S)",
+  BIO10S = "Mean Temp of Warmest Season (BIO10S)",
+  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
+  BIO12  = "Annual Precipitation (BIO12)",
+  BIO13  = "Precipitation of Wettest Month (BIO13)",
+  BIO14  = "Precipitation of Driest Month (BIO14)",
+  BIO15  = "Precipitation Seasonality (BIO15)",
+  BIO16S = "Precipitation of Wettest Season (BIO16S)",
+  BIO17S = "Precipitation of Driest Season (BIO17S)",
+  BIO18S = "Precipitation of Warmest Season (BIO18S)",
+  BIO19S = "Precipitation of Coldest Season (BIO19S)",
+  slope  = "Slope",
+  alt    = "Altitude",
+  lakes  = "Lake Presence/Absence",
+  riv_3km = "River Kernel Density (3 km bandwidth)",
+  samp_20km = "Sampling Density (20 km bandwidth)",
+  pix_dist = "Geographic Distance (km)"
+)
+
+# Order variables by node purity
+full_order <- full_imp %>%
+  arrange(desc(IncNodePurity)) %>%
+  pull(variable)
+
+full_imp$variable <- factor(full_imp$variable, levels = rev(full_order))
+
+# Plot
+ggplot(full_imp, aes(x = variable, y = IncNodePurity)) +
+  geom_point(color = "black", size = 3) +
+  coord_flip() +
+  scale_y_continuous(name = "Increase in Node Purity") +
+  scale_x_discrete(labels = label_map) +
+  labs(x = NULL, title = "Variable Importance of CSE/km Rate Model") +
+  theme_minimal()
+```
+
+![](05c_RFmodel_CSE-per-km_files/figure-gfm/variable-imp-nodepurity-1.png)<!-- -->

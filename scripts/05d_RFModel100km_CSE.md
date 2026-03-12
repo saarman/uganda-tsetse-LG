@@ -1,4 +1,4 @@
-5a. RF model full – raw CSE (LC lakes paths)
+5a. RF model local (\<100 km) Raw CSE (LC lakes paths)
 ================
 Norah Saarman
 2026-03-09
@@ -73,10 +73,17 @@ results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/
 # read the combined CSE + coords table + pix_dist + Env variables
 V.table <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"),
                     header = TRUE)
-# This was added only after completing LOPOCV...
+
+# This was added only after completing LOPOCV on full model...
 # Filter out western outlier "50-KB" 
 V.table <- V.table %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
+
+# This is only for the RFModel100km runs...
+# Filter out pairs with geographic distance >100 km
+# based on results from Mantel Correlogram
+V.table <- V.table %>%
+  filter(pix_dist < 100)
 
 # define coordinate reference system
 crs_geo <- 4326     # EPSG code for WGS84
@@ -145,7 +152,7 @@ plot(rf_data$pix_dist, rf_data$CSEdistance)
 abline(g)
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/prep-1.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/prep-1.png)<!-- -->
 
 ``` r
 # Extract groups of variables by suffix
@@ -215,22 +222,22 @@ summary(pca_res)
 ```
 
     ## Importance of components:
-    ##                          PC1    PC2     PC3     PC4     PC5     PC6     PC7
-    ## Standard deviation     3.922 1.8929 1.41176 0.92121 0.82331 0.71845 0.60506
-    ## Proportion of Variance 0.641 0.1493 0.08304 0.03536 0.02824 0.02151 0.01525
-    ## Cumulative Proportion  0.641 0.7903 0.87334 0.90870 0.93694 0.95845 0.97370
-    ##                            PC8     PC9    PC10    PC11    PC12    PC13    PC14
-    ## Standard deviation     0.54540 0.43062 0.31334 0.12881 0.11472 0.10062 0.07217
-    ## Proportion of Variance 0.01239 0.00773 0.00409 0.00069 0.00055 0.00042 0.00022
-    ## Cumulative Proportion  0.98610 0.99382 0.99791 0.99860 0.99915 0.99957 0.99979
+    ##                           PC1    PC2    PC3     PC4     PC5     PC6     PC7
+    ## Standard deviation     3.7578 1.8596 1.5946 1.11662 0.96397 0.72845 0.63985
+    ## Proportion of Variance 0.5884 0.1441 0.1059 0.05195 0.03872 0.02211 0.01706
+    ## Cumulative Proportion  0.5884 0.7325 0.8384 0.89037 0.92908 0.95119 0.96825
+    ##                            PC8    PC9    PC10    PC11   PC12    PC13    PC14
+    ## Standard deviation     0.60247 0.4490 0.35693 0.16078 0.1385 0.09374 0.08560
+    ## Proportion of Variance 0.01512 0.0084 0.00531 0.00108 0.0008 0.00037 0.00031
+    ## Cumulative Proportion  0.98338 0.9918 0.99709 0.99816 0.9990 0.99933 0.99963
     ##                           PC15    PC16    PC17    PC18    PC19    PC20     PC21
-    ## Standard deviation     0.04574 0.03875 0.02555 0.02099 0.01165 0.01015 0.006646
-    ## Proportion of Variance 0.00009 0.00006 0.00003 0.00002 0.00001 0.00000 0.000000
-    ## Cumulative Proportion  0.99988 0.99994 0.99997 0.99999 0.99999 1.00000 1.000000
-    ##                            PC22      PC23      PC24
-    ## Standard deviation     0.004712 0.0004084 2.354e-07
-    ## Proportion of Variance 0.000000 0.0000000 0.000e+00
-    ## Cumulative Proportion  1.000000 1.0000000 1.000e+00
+    ## Standard deviation     0.06319 0.05087 0.03208 0.02532 0.01608 0.01420 0.008238
+    ## Proportion of Variance 0.00017 0.00011 0.00004 0.00003 0.00001 0.00001 0.000000
+    ## Cumulative Proportion  0.99980 0.99991 0.99995 0.99998 0.99999 1.00000 1.000000
+    ##                            PC22     PC23      PC24
+    ## Standard deviation     0.004843 0.000527 3.668e-07
+    ## Proportion of Variance 0.000000 0.000000 0.000e+00
+    ## Cumulative Proportion  1.000000 1.000000 1.000e+00
 
 ``` r
 # Scree plot of variance explained
@@ -244,7 +251,7 @@ ggplot(df_ve, aes(PC, Var)) +
   theme_classic()
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
 
 ``` r
 # PCA biplot with individuals (rows) and variables (arrows)
@@ -255,7 +262,7 @@ fviz_pca_biplot(pca_res,
 )
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/unnamed-chunk-1-2.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/unnamed-chunk-1-2.png)<!-- -->
 
 ``` r
 # PCA variables plot (correlation circle)
@@ -278,7 +285,7 @@ ggplot() +
   theme_classic()
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/unnamed-chunk-1-3.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/unnamed-chunk-1-3.png)<!-- -->
 
 ``` r
 fviz_pca_var(pca_res,
@@ -288,7 +295,7 @@ fviz_pca_var(pca_res,
 )
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/unnamed-chunk-1-4.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/unnamed-chunk-1-4.png)<!-- -->
 
 ## (Optional) Prune more variables after narrowing to mean only?
 
@@ -348,28 +355,13 @@ CSE before modeling.
 ## Choose final predictor variables
 
 ``` r
-# Load data
-V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
-
 # estimate mean sampling density
-mean(V.table_full$samp_20km_mean, na.rm = TRUE)
+mean(V.table$samp_20km_mean, na.rm = TRUE)
 ```
 
-    ## [1] 1.027064e-11
+    ## [1] 1.550707e-11
 
 ``` r
-# Filter out western outlier "50-KB" 
-V.table <- V.table_full %>%
-  filter(Var1 != "50-KB", Var2 != "50-KB")
-
-# Filter for within-cluster pairs AND geographic distance ≤ 100 km
-#V.table <- V.table_full %>%
-#  filter(Pop1_cluster == Pop2_cluster) %>%
-#  filter(pix_dist <= 100)
-
-# Create unique ID after filtering
-V.table$id <- paste(V.table$Var1, V.table$Var2, sep = "_")
-
 # Define site list
 sites <- sort(unique(c(V.table$Var1, V.table$Var2)))
 
@@ -379,14 +371,14 @@ table(V.table$Pop1_cluster)
 
     ## 
     ## north south 
-    ##   595   496
+    ##   124    70
 
 ``` r
 # How many unique sites?
 length(sites)
 ```
 
-    ## [1] 67
+    ## [1] 66
 
 ``` r
 # Choose predictors for RF model (adjust names if necessary)
@@ -403,7 +395,7 @@ names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
 
 ``` r
 # Tune mtry (number of variables tried at each split)
-set.seed(92834567)
+set.seed(92834)
 rf_mean_full_tuned <- tuneRF(
   x = rf_mean_data[, -1],   # exclude response variable
   y = rf_mean_data$CSEdistance,
@@ -417,15 +409,15 @@ rf_mean_full_tuned <- tuneRF(
 )
 ```
 
-    ## mtry = 8  OOB error = 0.001167869 
+    ## mtry = 8  OOB error = 0.002158435 
     ## Searching left ...
-    ## mtry = 6     OOB error = 0.001165692 
-    ## 0.001864473 0.01 
+    ## mtry = 6     OOB error = 0.002137213 
+    ## 0.009832112 0.01 
     ## Searching right ...
-    ## mtry = 12    OOB error = 0.001159827 
-    ## 0.006885999 0.01
+    ## mtry = 12    OOB error = 0.002156232 
+    ## 0.001020703 0.01
 
-![](05a_RFmodel_CSE_files/figure-gfm/tune_run-1.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/tune_run-1.png)<!-- -->
 
 ``` r
 print(rf_mean_full_tuned)
@@ -436,61 +428,61 @@ print(rf_mean_full_tuned)
     ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
     ##                Type of random forest: regression
     ##                      Number of trees: 500
-    ## No. of variables tried at each split: 12
+    ## No. of variables tried at each split: 6
     ## 
-    ##           Mean of squared residuals: 0.001159808
-    ##                     % Var explained: 85.7
+    ##           Mean of squared residuals: 0.002116133
+    ##                     % Var explained: 56.85
 
 ``` r
 importance(rf_mean_full_tuned)
 ```
 
     ##             %IncMSE IncNodePurity
-    ## BIO1      15.402725    0.08260644
-    ## BIO2      13.973900    0.13417148
-    ## BIO3      20.081142    0.49594070
-    ## BIO4      19.971111    0.14142361
-    ## BIO5      14.729129    0.09686819
-    ## BIO6      18.780347    0.28761449
-    ## BIO7      21.588124    0.12205648
-    ## BIO8S     17.780629    0.11071230
-    ## BIO9S     16.876518    0.16430456
-    ## BIO10S    18.009074    0.08892864
-    ## BIO11S    19.622665    0.18474855
-    ## BIO12     14.317559    0.08642528
-    ## BIO13     19.728394    0.16883174
-    ## BIO14     14.588808    0.26422377
-    ## BIO15     16.386966    0.18748348
-    ## BIO16S    16.439604    0.08259274
-    ## BIO17S    11.566631    0.11029099
-    ## BIO18S     7.346078    0.07294360
-    ## BIO19S    10.219341    0.09772391
-    ## slope     16.515957    0.10049135
-    ## alt       17.359818    0.10772336
-    ## lakes      9.130651    0.10792335
-    ## riv_3km   17.252330    0.12710960
-    ## samp_20km 23.662285    1.28875961
-    ## pix_dist  87.248679    4.07276605
+    ## BIO1       9.484682    0.03688015
+    ## BIO2      13.940412    0.06798981
+    ## BIO3      16.424771    0.07749905
+    ## BIO4      11.699304    0.04654505
+    ## BIO5       8.836165    0.02778484
+    ## BIO6       7.398376    0.02767627
+    ## BIO7      14.969535    0.06810512
+    ## BIO8S     10.315028    0.02800927
+    ## BIO9S      9.832812    0.03596521
+    ## BIO10S    10.731887    0.02797769
+    ## BIO11S    11.909853    0.04384236
+    ## BIO12      7.043478    0.01922448
+    ## BIO13      8.683840    0.02850986
+    ## BIO14     10.325783    0.02326266
+    ## BIO15      7.561399    0.02057907
+    ## BIO16S     7.787524    0.03256321
+    ## BIO17S     9.222669    0.02968561
+    ## BIO18S     7.130051    0.02297461
+    ## BIO19S     9.637463    0.02680013
+    ## slope      6.599890    0.01726052
+    ## alt        8.609335    0.03036913
+    ## lakes      7.879204    0.01811064
+    ## riv_3km    7.614750    0.02186096
+    ## samp_20km 15.874590    0.09509855
+    ## pix_dist  11.384204    0.04400029
 
 ``` r
 varImpPlot(rf_mean_full_tuned)
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/tune_run-2.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/tune_run-2.png)<!-- -->
 
 ``` r
 # Save the tuned random forest model to disk
-saveRDS(rf_mean_full_tuned, file = file.path(results_dir, "rf_mean_full_tuned.rds"))
+saveRDS(rf_mean_full_tuned, file = file.path(results_dir, "rf_mean_full_tuned_100km.rds"))
 ```
 
 FYI: Later, to load the model back into R:
-`rf_mean_full_tuned <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))`
+`rf_mean_full_tuned <- readRDS(file.path(results_dir, "rf_mean_full_tuned_100km.rds"))`
 
 ### Load saved (raw CSE) model
 
 ``` r
 # load saved model
-rf_full <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+rf_full <- readRDS(file.path(results_dir, "rf_mean_full_tuned_100km.rds"))
 
 #double check they look correct
 print(rf_full)
@@ -501,41 +493,41 @@ print(rf_full)
     ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
     ##                Type of random forest: regression
     ##                      Number of trees: 500
-    ## No. of variables tried at each split: 12
+    ## No. of variables tried at each split: 6
     ## 
-    ##           Mean of squared residuals: 0.001159808
-    ##                     % Var explained: 85.7
+    ##           Mean of squared residuals: 0.002116133
+    ##                     % Var explained: 56.85
 
 ``` r
 print(rf_full$importance)
 ```
 
     ##                %IncMSE IncNodePurity
-    ## BIO1      0.0001632526    0.08260644
-    ## BIO2      0.0003014225    0.13417148
-    ## BIO3      0.0015371814    0.49594070
-    ## BIO4      0.0002384781    0.14142361
-    ## BIO5      0.0001917286    0.09686819
-    ## BIO6      0.0005759119    0.28761449
-    ## BIO7      0.0002275212    0.12205648
-    ## BIO8S     0.0002500370    0.11071230
-    ## BIO9S     0.0003935809    0.16430456
-    ## BIO10S    0.0001925266    0.08892864
-    ## BIO11S    0.0004299928    0.18474855
-    ## BIO12     0.0001587739    0.08642528
-    ## BIO13     0.0003142826    0.16883174
-    ## BIO14     0.0005473538    0.26422377
-    ## BIO15     0.0003653509    0.18748348
-    ## BIO16S    0.0001619166    0.08259274
-    ## BIO17S    0.0003270565    0.11029099
-    ## BIO18S    0.0002432277    0.07294360
-    ## BIO19S    0.0002768421    0.09772391
-    ## slope     0.0001573800    0.10049135
-    ## alt       0.0002650561    0.10772336
-    ## lakes     0.0002521603    0.10792335
-    ## riv_3km   0.0001432166    0.12710960
-    ## samp_20km 0.0015702706    1.28875961
-    ## pix_dist  0.0074908937    4.07276605
+    ## BIO1      7.181217e-04    0.03688015
+    ## BIO2      1.115098e-03    0.06798981
+    ## BIO3      9.334336e-04    0.07749905
+    ## BIO4      3.818416e-04    0.04654505
+    ## BIO5      3.681166e-04    0.02778484
+    ## BIO6      1.466886e-04    0.02767627
+    ## BIO7      8.948434e-04    0.06810512
+    ## BIO8S     2.442712e-04    0.02800927
+    ## BIO9S     3.199100e-04    0.03596521
+    ## BIO10S    2.407870e-04    0.02797769
+    ## BIO11S    6.517909e-04    0.04384236
+    ## BIO12     1.435967e-04    0.01922448
+    ## BIO13     1.868064e-04    0.02850986
+    ## BIO14     2.253158e-04    0.02326266
+    ## BIO15     1.960444e-04    0.02057907
+    ## BIO16S    3.818734e-04    0.03256321
+    ## BIO17S    2.260867e-04    0.02968561
+    ## BIO18S    3.494583e-04    0.02297461
+    ## BIO19S    2.365338e-04    0.02680013
+    ## slope     9.749325e-05    0.01726052
+    ## alt       3.134921e-04    0.03036913
+    ## lakes     1.905998e-04    0.01811064
+    ## riv_3km   1.030855e-04    0.02186096
+    ## samp_20km 9.038861e-04    0.09509855
+    ## pix_dist  3.232680e-04    0.04400029
 
 ## (Optional) Compare full and full tuned models (mean-only predictors)
 
@@ -590,10 +582,10 @@ the original full model with 42 predictors.
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
 # Neutralize sampling layer to average
-env$samp_20km <- 1.027064e-11 #neutralize sampling bias
+env$samp_20km <- mean(V.table$samp_20km_mean, na.rm = TRUE) #neutralize sampling bias
 
 # Load rdf of final model
-rf_predicted <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+rf_predicted <- readRDS(file.path(results_dir, "rf_mean_full_tuned_100km.rds"))
 rf_predicted
 ```
 
@@ -602,10 +594,10 @@ rf_predicted
     ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
     ##                Type of random forest: regression
     ##                      Number of trees: 500
-    ## No. of variables tried at each split: 12
+    ## No. of variables tried at each split: 6
     ## 
-    ##           Mean of squared residuals: 0.001159808
-    ##                     % Var explained: 85.7
+    ##           Mean of squared residuals: 0.002116133
+    ##                     % Var explained: 56.85
 
 ``` r
 prediction_raster <- predict(env, rf_predicted, type = "response")
@@ -640,7 +632,7 @@ uganda <- st_intersection(uganda, r_ext) # clip to extent
 plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/plot-projection-1.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/plot-projection-1.png)<!-- -->
 
 # 6. Scale and plot predicted connectivity (CSE) and SDM
 
@@ -699,7 +691,7 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/plot-sdm-con-1.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/plot-sdm-con-1.png)<!-- -->
 
 ``` r
 # Plot Habitat Suitability
@@ -712,7 +704,7 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/plot-sdm-con-2.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/plot-sdm-con-2.png)<!-- -->
 
 ``` r
 # Plot with custom colors
@@ -731,7 +723,7 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/plot-sdm-con-3.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/plot-sdm-con-3.png)<!-- -->
 
 ``` r
 # Plot Habitat Suitability with custom colors
@@ -744,7 +736,7 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/plot-sdm-con-4.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/plot-sdm-con-4.png)<!-- -->
 
 # 6. Variable importance plots
 
@@ -813,7 +805,7 @@ ggplot(full_imp, aes(x = variable, y = IncMSE)) +
   theme_minimal()
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/variable-imp-mse-1.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/variable-imp-mse-1.png)<!-- -->
 
 ``` r
 #dev.off()
@@ -881,4 +873,4 @@ ggplot(full_imp, aes(x = variable, y = IncNodePurity)) +
   theme_minimal()
 ```
 
-![](05a_RFmodel_CSE_files/figure-gfm/variable-imp-nodepurity-1.png)<!-- -->
+![](05d_RFModel100km_CSE_files/figure-gfm/variable-imp-nodepurity-1.png)<!-- -->

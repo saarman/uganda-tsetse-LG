@@ -1,4 +1,4 @@
-5b. RF model full – residuals (IBD by using LC lakes paths)
+5b. RF model local (\<100 km) Residuals (IBD by using LC lakes paths)
 ================
 Norah Saarman
 2026-03-09
@@ -64,10 +64,17 @@ results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/
 # read the combined CSE + coords table + pix_dist + Env variables
 V.table <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"),
                     header = TRUE)
-# This was added only after completing LOPOCV...
+
+# This was added only after completing LOPOCV on full model...
 # Filter out western outlier "50-KB" 
 V.table <- V.table %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
+
+# This is only for the RFModel100km runs...
+# Filter out pairs with geographic distance >100 km
+# based on results from Mantel Correlogram
+V.table <- V.table %>%
+  filter(pix_dist < 100)
 
 # define coordinate reference system
 crs_geo <- 4326     # EPSG code for WGS84
@@ -135,7 +142,7 @@ plot(rf_data$pix_dist, rf_data$CSEdistance)
 abline(g)
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/prep-1.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/prep-1.png)<!-- -->
 
 ``` r
 # Extract groups of variables by suffix
@@ -147,20 +154,13 @@ mode_vars   <- grep("_mode$", names(rf_data), value = TRUE)
 # 2. IBD regression to find residuals
 
 ``` r
-# Load raw data
-V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
-
 # estimate mean sampling density
-mean(V.table_full$samp_20km_mean, na.rm = TRUE)
+mean(V.table$samp_20km_mean, na.rm = TRUE)
 ```
 
-    ## [1] 1.027064e-11
+    ## [1] 1.550707e-11
 
 ``` r
-# Filter out western outlier "50-KB" 
-V.table <- V.table_full %>%
-  filter(Var1 != "50-KB", Var2 != "50-KB")
-
 # Create unique ID after filtering
 V.table$id <- paste(V.table$Var1, V.table$Var2, sep = "_")
 
@@ -173,14 +173,14 @@ table(V.table$Pop1_cluster)
 
     ## 
     ## north south 
-    ##   595   496
+    ##   124    70
 
 ``` r
 # How many unique sites?
 length(sites)
 ```
 
-    ## [1] 67
+    ## [1] 66
 
 ``` r
 # Choose predictors for RF model (all but pix_dist)
@@ -197,19 +197,19 @@ summary(lm_ibd)
     ## lm(formula = CSEdistance ~ pix_dist, data = V.table)
     ## 
     ## Residuals:
-    ##       Min        1Q    Median        3Q       Max 
-    ## -0.170128 -0.038628 -0.001543  0.036318  0.183730 
+    ##      Min       1Q   Median       3Q      Max 
+    ## -0.15100 -0.04841 -0.01322  0.05346  0.20257 
     ## 
     ## Coefficients:
     ##              Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept) 2.814e-01  3.255e-03   86.45   <2e-16 ***
-    ## pix_dist    4.746e-04  1.151e-05   41.22   <2e-16 ***
+    ## (Intercept) 0.2445739  0.0114891  21.287  < 2e-16 ***
+    ## pix_dist    0.0007605  0.0001800   4.224  3.7e-05 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 0.05633 on 1089 degrees of freedom
-    ## Multiple R-squared:  0.6094, Adjusted R-squared:  0.609 
-    ## F-statistic:  1699 on 1 and 1089 DF,  p-value: < 2.2e-16
+    ## Residual standard error: 0.06733 on 192 degrees of freedom
+    ## Multiple R-squared:  0.08503,    Adjusted R-squared:  0.08026 
+    ## F-statistic: 17.84 on 1 and 192 DF,  p-value: 3.704e-05
 
 ``` r
 # Add residuals to predictors table (V.table)
@@ -238,26 +238,26 @@ summary(lm_ibd)
     ## lm(formula = CSEdistance ~ pix_dist, data = V.table)
     ## 
     ## Residuals:
-    ##       Min        1Q    Median        3Q       Max 
-    ## -0.170128 -0.038628 -0.001543  0.036318  0.183730 
+    ##      Min       1Q   Median       3Q      Max 
+    ## -0.15100 -0.04841 -0.01322  0.05346  0.20257 
     ## 
     ## Coefficients:
     ##              Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept) 2.814e-01  3.255e-03   86.45   <2e-16 ***
-    ## pix_dist    4.746e-04  1.151e-05   41.22   <2e-16 ***
+    ## (Intercept) 0.2445739  0.0114891  21.287  < 2e-16 ***
+    ## pix_dist    0.0007605  0.0001800   4.224  3.7e-05 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 0.05633 on 1089 degrees of freedom
-    ## Multiple R-squared:  0.6094, Adjusted R-squared:  0.609 
-    ## F-statistic:  1699 on 1 and 1089 DF,  p-value: < 2.2e-16
+    ## Residual standard error: 0.06733 on 192 degrees of freedom
+    ## Multiple R-squared:  0.08503,    Adjusted R-squared:  0.08026 
+    ## F-statistic: 17.84 on 1 and 192 DF,  p-value: 3.704e-05
 
 ``` r
 plot(V.table$pix_dist, V.table$CSEdistance, col = colors[ V.table$Pop1_cluster],pch = 19, xlab = "Geo. distance (km)", ylab = "Gen. distance (CSE)")
 abline(lm_ibd)
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
 
 ``` r
 # log10 geo dist
@@ -271,25 +271,25 @@ summary(lm_ibd_log)
     ## 
     ## Residuals:
     ##       Min        1Q    Median        3Q       Max 
-    ## -0.163873 -0.043257 -0.006829  0.040182  0.234622 
+    ## -0.154766 -0.050043 -0.009959  0.052188  0.199111 
     ## 
     ## Coefficients:
-    ##                  Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)     -0.040200   0.011552   -3.48 0.000521 ***
-    ## log10(pix_dist)  0.191883   0.005024   38.19  < 2e-16 ***
+    ##                 Estimate Std. Error t value Pr(>|t|)    
+    ## (Intercept)      0.17827    0.02791   6.387 1.25e-09 ***
+    ## log10(pix_dist)  0.06539    0.01629   4.013 8.57e-05 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 0.05893 on 1089 degrees of freedom
-    ## Multiple R-squared:  0.5726, Adjusted R-squared:  0.5722 
-    ## F-statistic:  1459 on 1 and 1089 DF,  p-value: < 2.2e-16
+    ## Residual standard error: 0.06761 on 192 degrees of freedom
+    ## Multiple R-squared:  0.0774, Adjusted R-squared:  0.0726 
+    ## F-statistic: 16.11 on 1 and 192 DF,  p-value: 8.573e-05
 
 ``` r
 plot(log10(V.table$pix_dist), V.table$CSEdistance, col = colors[ V.table$Pop1_cluster],pch = 19, xlab = "Log10 Geo. distance (km)", ylab = "Gen. distance (CSE)")
 abline(lm_ibd_log)
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/unnamed-chunk-1-2.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/unnamed-chunk-1-2.png)<!-- -->
 
 # 3. Run IBD-residuals rf model (with residuals as response, drop pix_dist for predictor)
 
@@ -311,15 +311,15 @@ rf_resid_tuned <- tuneRF(
 )
 ```
 
-    ## mtry = 8  OOB error = 0.001222935 
+    ## mtry = 8  OOB error = 0.002097515 
     ## Searching left ...
-    ## mtry = 6     OOB error = 0.001235964 
-    ## -0.01065346 0.01 
+    ## mtry = 6     OOB error = 0.002137282 
+    ## -0.01895897 0.01 
     ## Searching right ...
-    ## mtry = 12    OOB error = 0.001220842 
-    ## 0.001711967 0.01
+    ## mtry = 12    OOB error = 0.002116381 
+    ## -0.008994312 0.01
 
-![](05b_RFmodel_residuals_files/figure-gfm/rf%20full%20residuals-1.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/rf%20full%20residuals-1.png)<!-- -->
 
 ``` r
 print(rf_resid_tuned)
@@ -330,57 +330,57 @@ print(rf_resid_tuned)
     ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
     ##                Type of random forest: regression
     ##                      Number of trees: 500
-    ## No. of variables tried at each split: 12
+    ## No. of variables tried at each split: 8
     ## 
-    ##           Mean of squared residuals: 0.001232708
-    ##                     % Var explained: 61.08
+    ##           Mean of squared residuals: 0.00212717
+    ##                     % Var explained: 52.59
 
 ``` r
 importance(rf_resid_tuned)
 ```
 
-    ##            %IncMSE IncNodePurity
-    ## BIO1      11.76271    0.10056247
-    ## BIO2      20.00268    0.19410970
-    ## BIO3      33.65062    0.51685192
-    ## BIO4      16.42328    0.11451964
-    ## BIO5      15.64219    0.10812344
-    ## BIO6      15.36999    0.15328888
-    ## BIO7      16.08151    0.11926059
-    ## BIO8S     11.61654    0.09646008
-    ## BIO9S     19.54143    0.14925619
-    ## BIO10S    20.12315    0.10359776
-    ## BIO11S    18.01946    0.11473141
-    ## BIO12     17.17012    0.10550581
-    ## BIO13     30.03003    0.20312245
-    ## BIO14     20.52008    0.15939933
-    ## BIO15     19.01378    0.12658511
-    ## BIO16S    16.39778    0.14256920
-    ## BIO17S    14.43686    0.06435874
-    ## BIO18S    10.75113    0.05133021
-    ## BIO19S    13.71012    0.05100297
-    ## slope     23.58799    0.15269396
-    ## alt       15.19737    0.09111589
-    ## lakes     14.98634    0.10148212
-    ## riv_3km   30.00681    0.13639393
-    ## samp_20km 36.19544    0.24478694
+    ##             %IncMSE IncNodePurity
+    ## BIO1       9.909287    0.03654490
+    ## BIO2      13.776213    0.06917382
+    ## BIO3      18.418076    0.10175196
+    ## BIO4      11.464906    0.05099966
+    ## BIO5       7.681051    0.02202358
+    ## BIO6       5.000972    0.02332806
+    ## BIO7      13.739711    0.06733806
+    ## BIO8S      9.287240    0.02651883
+    ## BIO9S     10.068402    0.03201117
+    ## BIO10S    12.363390    0.03644732
+    ## BIO11S    12.593550    0.05416480
+    ## BIO12      6.567615    0.02013201
+    ## BIO13      9.104683    0.03206507
+    ## BIO14      8.258536    0.01982788
+    ## BIO15      7.972459    0.02438925
+    ## BIO16S     9.629055    0.03531385
+    ## BIO17S     8.318486    0.01864713
+    ## BIO18S     7.419446    0.02264624
+    ## BIO19S     7.815916    0.01956127
+    ## slope      7.517311    0.02136747
+    ## alt        9.154964    0.03015827
+    ## lakes      7.375320    0.01584231
+    ## riv_3km    9.215781    0.02318538
+    ## samp_20km  6.529974    0.03428774
 
 ``` r
 varImpPlot(rf_resid_tuned)
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/rf%20full%20residuals-2.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/rf%20full%20residuals-2.png)<!-- -->
 
 ``` r
 # Save the tuned random forest model to disk
-saveRDS(rf_resid_tuned, file = file.path(results_dir, "rf_residuals.rds"))
+saveRDS(rf_resid_tuned, file = file.path(results_dir, "rf_residuals_100km.rds"))
 ```
 
 ### Load saved (residuals) model
 
 ``` r
 # load saved model
-rf_residuals <- readRDS(file.path(results_dir, "rf_residuals.rds"))
+rf_residuals <- readRDS(file.path(results_dir, "rf_residuals_100km.rds"))
 
 #double check they look correct
 print(rf_residuals)
@@ -391,40 +391,40 @@ print(rf_residuals)
     ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
     ##                Type of random forest: regression
     ##                      Number of trees: 500
-    ## No. of variables tried at each split: 12
+    ## No. of variables tried at each split: 8
     ## 
-    ##           Mean of squared residuals: 0.001232708
-    ##                     % Var explained: 61.08
+    ##           Mean of squared residuals: 0.00212717
+    ##                     % Var explained: 52.59
 
 ``` r
 print(rf_residuals$importance)
 ```
 
     ##                %IncMSE IncNodePurity
-    ## BIO1      0.0002484851    0.10056247
-    ## BIO2      0.0004917423    0.19410970
-    ## BIO3      0.0020390824    0.51685192
-    ## BIO4      0.0003720112    0.11451964
-    ## BIO5      0.0002608535    0.10812344
-    ## BIO6      0.0004497172    0.15328888
-    ## BIO7      0.0003463552    0.11926059
-    ## BIO8S     0.0003049704    0.09646008
-    ## BIO9S     0.0005704390    0.14925619
-    ## BIO10S    0.0002972806    0.10359776
-    ## BIO11S    0.0003859081    0.11473141
-    ## BIO12     0.0002520567    0.10550581
-    ## BIO13     0.0004797717    0.20312245
-    ## BIO14     0.0008521505    0.15939933
-    ## BIO15     0.0003629246    0.12658511
-    ## BIO16S    0.0003539647    0.14256920
-    ## BIO17S    0.0002175375    0.06435874
-    ## BIO18S    0.0001599565    0.05133021
-    ## BIO19S    0.0001636527    0.05100297
-    ## slope     0.0003519104    0.15269396
-    ## alt       0.0003478297    0.09111589
-    ## lakes     0.0001856338    0.10148212
-    ## riv_3km   0.0002491449    0.13639393
-    ## samp_20km 0.0006070110    0.24478694
+    ## BIO1      7.331195e-04    0.03654490
+    ## BIO2      1.138356e-03    0.06917382
+    ## BIO3      1.251364e-03    0.10175196
+    ## BIO4      4.713844e-04    0.05099966
+    ## BIO5      3.561286e-04    0.02202358
+    ## BIO6      9.741059e-05    0.02332806
+    ## BIO7      9.726355e-04    0.06733806
+    ## BIO8S     2.104349e-04    0.02651883
+    ## BIO9S     3.989134e-04    0.03201117
+    ## BIO10S    3.153953e-04    0.03644732
+    ## BIO11S    7.878773e-04    0.05416480
+    ## BIO12     1.237578e-04    0.02013201
+    ## BIO13     2.307894e-04    0.03206507
+    ## BIO14     1.785300e-04    0.01982788
+    ## BIO15     1.824206e-04    0.02438925
+    ## BIO16S    5.942328e-04    0.03531385
+    ## BIO17S    2.121461e-04    0.01864713
+    ## BIO18S    4.170561e-04    0.02264624
+    ## BIO19S    2.373714e-04    0.01956127
+    ## slope     1.279536e-04    0.02136747
+    ## alt       3.258067e-04    0.03015827
+    ## lakes     1.902675e-04    0.01584231
+    ## riv_3km   1.286698e-04    0.02318538
+    ## samp_20km 1.723472e-04    0.03428774
 
 # 4. Project predicted values from full IBD-residuals model
 
@@ -435,10 +435,10 @@ print(rf_residuals$importance)
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
 # Neutralize sampling layer to average
-env$samp_20km <- 1.027064e-11 #neutralize sampling bias
+env$samp_20km <- mean(V.table$samp_20km_mean, na.rm = TRUE) #neutralize sampling bias
 
 # Load rdf of final model
-rf_predicted <- readRDS(file.path(results_dir, "rf_residuals.rds"))
+rf_predicted <- readRDS(file.path(results_dir, "rf_residuals_100km.rds"))
 rf_predicted
 ```
 
@@ -447,10 +447,10 @@ rf_predicted
     ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
     ##                Type of random forest: regression
     ##                      Number of trees: 500
-    ## No. of variables tried at each split: 12
+    ## No. of variables tried at each split: 8
     ## 
-    ##           Mean of squared residuals: 0.001232708
-    ##                     % Var explained: 61.08
+    ##           Mean of squared residuals: 0.00212717
+    ##                     % Var explained: 52.59
 
 ``` r
 prediction_raster <- predict(env, rf_predicted, type = "response")
@@ -485,7 +485,7 @@ uganda <- st_intersection(uganda, r_ext) # clip to extent
 plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/plot-projection-1.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/plot-projection-1.png)<!-- -->
 
 # 5. Scale and plot predicted connectivity (residuals) and SDM
 
@@ -544,7 +544,7 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/plot-sdm-con-1.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/plot-sdm-con-1.png)<!-- -->
 
 ``` r
 # Plot Habitat Suitability
@@ -557,7 +557,7 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/plot-sdm-con-2.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/plot-sdm-con-2.png)<!-- -->
 
 ``` r
 # Plot with custom colors
@@ -576,7 +576,7 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/plot-sdm-con-3.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/plot-sdm-con-3.png)<!-- -->
 
 ``` r
 # Plot Habitat Suitability with custom colors
@@ -589,7 +589,7 @@ plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/plot-sdm-con-4.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/plot-sdm-con-4.png)<!-- -->
 
 # 6. Variable importance plots
 
@@ -658,7 +658,7 @@ ggplot(full_imp, aes(x = variable, y = IncMSE)) +
   theme_minimal()
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/variable-imp-mse-1.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/variable-imp-mse-1.png)<!-- -->
 
 ``` r
 #dev.off()
@@ -726,4 +726,4 @@ ggplot(full_imp, aes(x = variable, y = IncNodePurity)) +
   theme_minimal()
 ```
 
-![](05b_RFmodel_residuals_files/figure-gfm/variable-imp-nodepurity-1.png)<!-- -->
+![](05e_RFmodel100km_residuals_files/figure-gfm/variable-imp-nodepurity-1.png)<!-- -->
