@@ -1,5 +1,5 @@
 ---
-title: "Least-cost-paths across full RF model resistance surface"
+title: "Spatial Evaluation - Full RF model of raw CSE"
 author: "Norah Saarman"
 date: "2025-06-23"
 output:
@@ -14,8 +14,40 @@ RStudio Configuration:
 - **R version:** R 4.4.0 (Geospatial packages)  
 - **Number of cores:** 8 (up to 32 available)   
 - **Account:** saarman-np  
-- **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
+- **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
 - **Memory per job:** 200G (cluster limit: 1000G total; avoid exceeding half)    
+
+
+# Plan for this script:
+This is a screening step (full model only). Use the fitted full model to compare candidate response formulations and spatial summaries.  
+
+Response formulations to compare:  
+- raw CSE (this script, 7a)  
+- residuals from simple IBD model (script 7b)  
+- CSE/km (script 7c)
+
+**For this script (7a):**  
+Run spatial evaluation across the raw CSE resistance surface (projected estimates of raw CSE at 1 pixel geodist) to estimate evaluation metrics by 3 methods:   
+1. Mean across least-cost path (mean LCP)   
+2. Sum across least-cost path (sum LCP)  
+3. Circuit-based effective resistance (CBER)  
+
+Metrics to calculate for this screening step: 
+
+Primary metrics:  
+1. RMSE  
+2. R² (1 − SSE/SST)  
+
+NOTE: RMSE is included alongside R² because it measures the absolute magnitude of prediction error in the original response scale, while R² measures variance explained relative to the mean model. Together they distinguish between models that explain variation and models that produce accuratepredictions.
+
+Secondary evaluation metrics:  
+3. MSE  
+4. MAE  
+5. correlation  
+
+NOTE: These screening metrics are used only to decide which response formulation and spatial summary to carry forward into the final LOPOCV validation framework and permutation-based significance testing.
+
+Idea: Can these estimates later be used as starting points for next iteration of the model?
 
 # Setup
 ```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
@@ -29,74 +61,177 @@ library(dplyr)
 library(ggplot2)
 library(rnaturalearth)
 library(rnaturalearthdata)
-
-# Define Paths to directories
-data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
-results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/"
-output_dir <- paste0(results_dir,"lopocv_spatial")
-dir.create(output_dir, showWarnings = FALSE)
-
-# define coordinate reference system
-crs_geo <- 4326     # EPSG code for WGS84
 ```
 
 # Inputs
-  - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2)
-  - `../results_dir/fullRF_CSE_resistance.tif` - Final full model projected resistance surface
+  - `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2), same input used for building model.
+  - `../results_dir/fullRF_CSE.tif` - Final full model projected estimates of CSE at 1 pixel geodist.
   - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)   
-# Outputs  
-  - `../results_dir/LC_paths_fullRF.shp"` - 
   
-# Step 1: Prepare least-cost paths from full resistance surface
-**NOTE:** eval = FALSE so that it skips on knit
-```{r paths, eval=FALSE}
+# Outputs   
+Major outputs from this script are saved in two locations:  
+## Small text outputs saved to results_dir within git repo:
+ - `spatial_eval_rawCSE_predictions.csv` Pairwise evaluation table containing observed CSE and spatial predictions for each site pair: CSE, LCP_mean, LCP_sum, CBER
+ - `spatial_eval_rawCSE_metrics.csv` Summary table of evaluation metrics for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE, R², MSE, MAE, Correlation.  
+## Large or reusable outputs saved to results_dir_big:
+ - `least_cost_paths/LC_paths_fullRF_rawCSE.shp` Saved least-cost-path spatial lines for all evaluated site pairs. This is a reusable spatial output and does not need to be recomputed unless the resistance surface changes.  
+ - `spatial_eval_rawCSE_predictions.rds` R object version of the full pairwise evaluation table (eval_df) for quick reloading in later scripts.  
+ - `spatial_eval_rawCSE_predictions.csv`  Backup copy of the pairwise evaluation table saved in the large-results directory.  
+ - `spatial_eval_rawCSE_metrics.rds` R object version of the evaluation metrics table (metrics_df) for quick reloading in later scripts.  
+ - `spatial_eval_rawCSE_metrics.csv` Backup copy of the evaluation metrics table saved in the large-results directory.
+
+# Step 1: Inputs
+```{r directories-inputs}
+
+# Define Paths to directories
+input_dir <- "../input"
+data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
+results_dir_big <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/"
+results_dir <- "../results/"
+
+# define coordinate reference system
+crs_geo <- 4326     # EPSG code for WGS84
+
+cse_file   <- file.path("..", "input", "Gff_cse_envCostPaths.csv")
+surf_file  <- file.path(results_dir_big, "fullRF_CSE.tif")
+lake_file  <- file.path(data_dir, "processed", "lake_binary.tif")
+
+# Read pairwise CSE table
+cse_df <- read.csv(cse_file)
+# This was added only after completing LOPOCV...
+# Filter out western outlier "50-KB" 
+cse_df <- cse_df %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB")
+
+
+# Read projected raw CSE surface
+cse_surface <- raster(surf_file)
+
+# Read lake mask
+lake_mask <- raster(lake_file)
+```
+  
+# Step 2: Check raster alignment and assign high cost to water
+
+```{r check-alignment}
+if (!compareRaster(cse_surface, lake_mask,
+                   extent = TRUE, rowcol = TRUE,
+                   crs = TRUE, res = TRUE,
+                   stopiffalse = FALSE)) {
+  lake_mask <- projectRaster(lake_mask, cse_surface, method = "ngb")
+}
+
+# Inspect projected raw CSE values before altering water cells
+summary(values(cse_surface))
+
+# Keep water traversable but very costly
+cse_surface[lake_mask[] == 1] <- 2
+
+# Check again after assigning lakes
+summary(values(cse_surface))
+
+# Quick plot
+plot(cse_surface, main = "Projected raw CSE surface with water = high cost")
+
+# Check column names of cse_df
+names(cse_df)
+```
+
+# Step 3: Prepare pair table, site objects, and transition object  
+
+Diagonal movement is allowed in the 16-way transition matrix, and conductance is corrected for geographic distance, with geoCorrection(type = "c"), so diagonal steps are appropriately penalized relative to orthogonal steps.
+
+```{r prep-transition}
+# keep only within-cluster comparisons, matching your earlier workflow
+cse_df <- cse_df %>%
+  filter(Pop1_cluster == Pop2_cluster) %>%
+  mutate(
+    id  = paste(Var1, Var2, sep = "_"),
+    CSE = CSEdistance
+  )
+
+# unique site coordinates from both columns
+sites_coords <- bind_rows(
+  cse_df %>% dplyr::select(Site = Var1, lon = long1, lat = lat1),
+  cse_df %>% dplyr::select(Site = Var2, lon = long2, lat = lat2)
+) %>%
+  distinct()
+
+# convert to sf and then to SpatialPoints in raster CRS
+sites_df <- st_as_sf(sites_coords, coords = c("lon", "lat"), crs = crs_geo) %>%
+  st_transform(crs(cse_surface))
+
+sites_sp <- as(sites_df, "Spatial")
+
+# lookup index for site names
+site_index <- setNames(seq_len(nrow(sites_df)), sites_coords$Site)
+
+# pair table for evaluation
+site_pairs <- cse_df %>%
+  dplyr::select(Var1, Var2, id, CSE) %>%
+  distinct()
+
+# treat projected raw CSE as local resistance
+resistance_rast <- cse_surface
+
+# protect against zero or negative values before inversion
+min_pos <- min(values(resistance_rast)[values(resistance_rast) > 0], na.rm = TRUE)
+resistance_rast[resistance_rast <= 0] <- min_pos
+
+# convert resistance to conductance for gdistance
+conductance_rast <- 1 / resistance_rast
+
+# transition object:
+# directions = 16 allows diagonal/extended neighborhood movement
+# geoCorrection(type = "c") corrects conductance for inter-cell geographic distance,
+# including longer diagonal connections
+tr <- transition(conductance_rast, transitionFunction = mean, directions = 16)
+tr_corr <- geoCorrection(tr, type = "c")
+```
+
+# Step 4: Sanity checks
+```{r sanity}
+nrow(cse_df)
+nrow(site_pairs)
+nrow(sites_coords)
+
+head(site_pairs)
+
+plot(cse_surface, main = "Projected raw CSE surface")
+plot(sites_sp, add = TRUE, pch = 16, cex = 0.5)
+```  
+
+# Step 5: Test one least-cost path before parallel run
+```{r test-lcp}
+# choose first pair in site_pairs
+i <- site_index[site_pairs$Var1[100]]
+j <- site_index[site_pairs$Var2[100]]
+
+test_path <- shortestPath(tr_corr, sites_sp[i, ], sites_sp[j, ], output = "SpatialLines")
+
+plot(cse_surface, main = "Test least-cost path")
+lines(test_path, col = "red", lwd = 2)
+points(sites_sp[c(i, j), ], pch = 16)
+```  
+
+# Step 6: Compute least-cost paths in parallel (once) and save output
+```{r save-lcp, eval = FALSE}
+output_dir <- file.path(results_dir_big, "least_cost_paths")
+dir.create(output_dir, showWarnings = FALSE)
+
 # Set number of cores and register cluster
 n_cores <- 8
 cl <- makeCluster(n_cores)
 registerDoParallel(cl)
 
-# Load full model prediction raster as resistance surface
-resistance_rast <- raster(paste0(results_dir, "fullRF_CSE_resistance.tif"))
+paths_list <- foreach(k = 1:nrow(site_pairs),
+                      .packages = c("gdistance", "sp", "sf")) %dopar% {
 
-# Load lake mask and assign high CSE (e.g., 2)
-lake_mask <- raster(file.path(data_dir, "processed", "lake_binary.tif"))
-resistance_rast[lake_mask[,] == 1] <- 2
-
-# Convert resistance raster to transition object
-tr <- transition(1/resistance_rast, transitionFunction = mean, directions = 16)
-tr_corr <- geoCorrection(tr, type = "c")
-
-# Load V.table (after filtering)
-V.table_full <- read.csv("../input/Gff_cse_envCostPaths.csv")
-V.table <- V.table_full %>%
-  filter(Var1 != "50-KB", Var2 != "50-KB") %>%
-  filter(Pop1_cluster == Pop2_cluster) %>%
-  mutate(id = paste(Var1, Var2, sep = "_"))
-
-# Get unique site coordinates
-sites_coords <- V.table %>%
-  dplyr::select(Site = Var1, lon = long1, lat = lat1) %>%
-  distinct()
-
-sites_df <- st_as_sf(sites_coords, coords = c("lon", "lat"), crs = crs_geo) %>%
-  st_transform(crs(resistance_rast))
-
-# Create named SpatialPoints
-sites_sp <- as(sites_df, "Spatial")
-site_index <- setNames(seq_len(nrow(sites_df)), sites_df$Site)
-
-# Get list of site pairs to extract
-site_pairs <- V.table %>%
-  dplyr::select(Var1, Var2, id) %>%
-  distinct()
-
-# Parallel least-cost path computation with metadata
-paths_list <- foreach(k = 1:nrow(site_pairs), .packages = c("gdistance", "sp", "sf")) %dopar% {
   i <- site_index[site_pairs$Var1[k]]
   j <- site_index[site_pairs$Var2[k]]
-  
+
   path <- tryCatch({
-    shortestPath(tr_corr, sites_sp[i,], sites_sp[j,], output = "SpatialLines")
+    shortestPath(tr_corr, sites_sp[i, ], sites_sp[j, ], output = "SpatialLines")
   }, error = function(e) NULL)
 
   if (!is.null(path)) {
@@ -110,172 +245,204 @@ paths_list <- foreach(k = 1:nrow(site_pairs), .packages = c("gdistance", "sp", "
   }
 }
 
-# Stop cluster
 stopCluster(cl)
 
-# Combine list into single sf object
+# drop NULLs and combine
+paths_list <- paths_list[!sapply(paths_list, is.null)]
 paths_sf <- do.call(rbind, paths_list)
-st_crs(paths_sf) <- st_crs(resistance_rast)
+
+# assign CRS and transform back to geographic coordinates for saving
+st_crs(paths_sf) <- st_crs(cse_surface)
 paths_sf <- st_transform(paths_sf, crs = st_crs(crs_geo))
 
-# Join CSEdistance from V.table into lcp_sf
-paths_sf <- left_join(paths_sf, V.table[, c("id", "CSEdistance")], by = "id")
-paths_sf <- paths_sf %>%
-  rename(CSE = CSEdistance) # note rename!!!
+# join observed CSE values
+paths_sf <- left_join(paths_sf, site_pairs, by = "id")
 
-# Save to shapefile
-st_write(paths_sf, file.path(results_dir, "LC_paths_fullRF.shp"), delete_layer = TRUE)
-
-```
-# Visualize Least Cost Paths
-```{r map-paths}
-# Load shapefile of least-cost paths
-lcp_sf <- st_read(file.path(results_dir, "LC_paths_fullRF.shp")) 
-lcp_sf <- st_transform(lcp_sf, crs = st_crs(crs_geo))
-
-# Load Uganda country boundary and lakes
-uganda <- ne_countries(scale = "medium", country = "Uganda", returnclass = "sf") %>%
-  st_transform(crs = st_crs(crs_geo))
-lakes <- ne_download(scale = 10, type = "lakes", category = "physical", returnclass = "sf") %>%
-  st_transform(st_crs(crs_geo))
-
-# (Optional) Load resistance raster for background
-resistance_rast <- raster(file.path(results_dir, "fullRF_CSE_resistance.tif"))
-
-xlim <- c(28.6, 35.4)
-ylim <- c(-1.500000 , 4.733333)
-
-# Basic plot with paths and country
-ggplot() +
-  geom_raster(data = as.data.frame(rasterToPoints(resistance_rast)) %>%
-                setNames(c("x", "y", "resist")),
-              aes(x = x, y = y, fill = resist)) +
-  scale_fill_viridis_c(option = "C", na.value = "transparent") +
-  geom_sf(data = lakes, fill = "gray80", color = NA) +
-  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.4) +
-  geom_sf(data = lcp_sf, color = "dark blue", size = 0.4, alpha = 0.8) +
-  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
-  theme_minimal() +
-  theme(panel.grid = element_blank()) +
-  labs(title = "Least-Cost Paths on Resistance Surface",
-       x = "Longitude", y = "Latitude", fill = "Resistance") 
-
+# save paths
+st_write(paths_sf,
+         file.path(output_dir, "LC_paths_fullRF_rawCSE.shp"),
+         delete_layer = TRUE)
 ```
 
+# Step 7: Extract raw CSE values along LCPs and calculate mean and sum
+```{r extract-mean-sum, eval = FALSE}
+# if needed later, reload:
+# paths_sf <- st_read(file.path(results_dir_big, "least_cost_paths", "LC_paths_fullRF_rawCSE.shp"), quiet = TRUE)
 
-# Compare 3 spatial predicitons: predicted pairwise value for each site pair:
+# transform paths to raster CRS for extraction
+paths_extract <- st_transform(paths_sf, crs = crs(cse_surface))
 
-## 1. mean along LCP
+# extract raster values along each path
+path_vals <- raster::extract(cse_surface, as(paths_extract, "Spatial"))
 
-## 2. sum along LCP
+# summarize values along each least-cost path
+lcp_summary <- data.frame(
+  id = paths_extract$id,
+  LCP_mean = sapply(path_vals, function(x) {
+    if (is.null(x) || all(is.na(x))) NA_real_ else mean(x, na.rm = TRUE)
+  }),
+  LCP_sum = sapply(path_vals, function(x) {
+    if (is.null(x) || all(is.na(x))) NA_real_ else sum(x, na.rm = TRUE)
+  })
+)
 
-## 3. circuit-based effective resistance
+# join back to pair table
+eval_df <- site_pairs %>%
+  left_join(lcp_summary, by = "id")
 
-R package 'gdistance' commuteDistance() function is mathematically identical to the effective resistance used in Circuitscape. If a reviewer asks whether we used Circuitscape, we can say that the same circuit-theory metric was computed directly in R using gdistance.
+head(eval_df)
+summary(eval_df$LCP_mean)
+summary(eval_df$LCP_sum)
 
-Once each method gives a pairwise prediction, you can compare those predictions to observed pairwise CSE using the same evaluation framework.
 
-Evaluative metrics:
+# Save outputs
+saveRDS(
+  eval_df,
+  file.path(results_dir_big, "spatial_eval_rawCSE_predictions.rds")
+)
 
-1. RMSE
-2. MSE
-3. MAE
-4. R-squared from observed vs predicted (1 - SSE/SST; from observed vs predicted on the held-out data.)*
-5. correlation between observed and predicted
-6. permutation-based significance of those metrics
-7. leave-one-population-out framework for inference of error across space
+write.csv(
+  eval_df,
+  file.path(results_dir, "spatial_eval_rawCSE_predictions.csv"),
+  row.names = FALSE
+)
 
-*Better than relying on whatever internal random forest R-squared was reported during training, because now you are comparing projected path-level summaries across methods.
+write.csv(
+  eval_df,
+  file.path(results_dir_big, "spatial_eval_rawCSE_predictions.csv"),
+  row.names = FALSE
+)
+```  
 
-Notes of caution:
-1. Pairwise non-independence. All pairwise distances are not independent because each site appears in many pairs. So the absolute p-values from ordinary regression are not very trustworthy. Use RMSE and R-squared:
- - mainly as predictive comparison metrics
- - use permutation or your leave-one-population-out framework for inference rather than naive regression p-values
-2. Circuit resistance assumes the raster represents local resistance per step. Be sure raster values can be interpreted as resistance before you run gedistance
+# Step 8: Compute circuit-based effective resistance (CBER)  
+Also save output from steps 6-8 to file again...
+```{r cber, eval = FALSE}
 
-```{r circuit-resistance}
-library(raster)
-library(gdistance)
+n_cores <- 8
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
 
-# ------------------------------------------------
-# 1. Load projected connectivity surface from your RF model
-#    (assuming larger values = higher connectivity)
-# ------------------------------------------------
+cber_list <- foreach(k = 1:nrow(site_pairs),
+                     .packages = c("gdistance", "sp")) %dopar% {
 
-rf_surface <- raster("rf_projection.tif")
+  i <- site_index[site_pairs$Var1[k]]
+  j <- site_index[site_pairs$Var2[k]]
 
-# ------------------------------------------------
-# 2. Convert connectivity surface to resistance surface
-#    (high connectivity = low resistance)
-# ------------------------------------------------
+  val <- tryCatch({
+    dmat <- commuteDistance(tr_corr, sites_sp[c(i, j), ])
+    as.numeric(dmat[1, 2])
+  }, error = function(e) NA_real_)
 
-resistance <- max(values(rf_surface), na.rm = TRUE) - rf_surface
+  data.frame(
+    id = site_pairs$id[k],
+    CBER = val
+  )
+}
 
-# ------------------------------------------------
-# 3. Convert resistance to conductance (gdistance expects conductance)
-# ------------------------------------------------
+stopCluster(cl)
 
-conductance <- 1 / resistance
+cber_df <- bind_rows(cber_list)
 
-# ------------------------------------------------
-# 4. Build transition object (8 directions)
-# ------------------------------------------------
+eval_df <- eval_df %>%
+  left_join(cber_df, by = "id")
 
-tr <- transition(conductance, transitionFunction = mean, directions = 8)
+# Print evaluation table
+print(head(eval_df))
+summary(eval_df$CBER)
 
-# correct for geographic distance
-tr <- geoCorrection(tr, type = "c")
+# Save outputs
+saveRDS(
+  eval_df,
+  file.path(results_dir_big, "spatial_eval_rawCSE_predictions.rds")
+)
 
-# transition(..., directions = 8) allows diagonal pathways and produces more realistic connectivity surfaces.
+write.csv(
+  eval_df,
+  file.path(results_dir, "spatial_eval_rawCSE_predictions.csv"),
+  row.names = FALSE
+)
 
-# geoCorrection(type="c") adjusts transition values so that movement probabilities or conductance values are scaled appropriately for cell geometry. In other words, it accounts for the longer distance of diagonal connections and prevents the grid structure from biasing results.
+write.csv(
+  eval_df,
+  file.path(results_dir_big, "spatial_eval_rawCSE_predictions.csv"),
+  row.names = FALSE
+)
+```
 
-# ------------------------------------------------
-# 5. Site coordinates
-# ------------------------------------------------
+# Step 9: Calculate evaluation metrics from eval_df (load from file) 
+```{r}
+# load eval_df from file
+eval_df <- read.csv(file.path(results_dir, "spatial_eval_rawCSE_predictions.csv"))
+  
+calc_metrics <- function(obs, pred) {
+  keep <- complete.cases(obs, pred)
+  obs  <- obs[keep]
+  pred <- pred[keep]
+  
+  sse  <- sum((obs - pred)^2)
+  sst  <- sum((obs - mean(obs))^2)
+  mse  <- mean((obs - pred)^2)
+  rmse <- sqrt(mse)
+  mae  <- mean(abs(obs - pred))
+  rsq  <- 1 - (sse / sst)
+  corr <- cor(obs, pred)
+  
+  data.frame(
+    n = length(obs),
+    MSE = mse,
+    RMSE = rmse,
+    MAE = mae,
+    RSQ = rsq,
+    Correlation = corr
+  )
+}
 
-coords <- as.matrix(site_df[, c("x","y")])
+metrics_df <- bind_rows(
+  calc_metrics(eval_df$CSE, eval_df$LCP_mean) %>% mutate(method = "LCP_mean"),
+  calc_metrics(eval_df$CSE, eval_df$LCP_sum)  %>% mutate(method = "LCP_sum"),
+  calc_metrics(eval_df$CSE, eval_df$CBER)     %>% mutate(method = "CBER")
+) %>%
+  dplyr::select(method, everything())
 
-# ------------------------------------------------
-# 6. Compute circuit-based effective resistance
-# ------------------------------------------------
+# Print metrics
+print(metrics_df)
 
-res_matrix <- commuteDistance(tr, coords)
+# Save outputs
+saveRDS(
+  metrics_df,
+  file.path(results_dir_big, "spatial_eval_rawCSE_metrics.rds")
+)
 
-# ------------------------------------------------
-# 7. Convert matrix to pairwise vector
-# ------------------------------------------------
-res_vector <- res_matrix[upper.tri(res_matrix)]
+write.csv(
+  metrics_df,
+  file.path(results_dir_big, "spatial_eval_rawCSE_metrics.csv"),
+  row.names = FALSE
+)
 
-# observed genetic distances
-obs_vector <- CSE_matrix[upper.tri(CSE_matrix)]
-
-# -----------------------------------------------
-# 8. Simple evaluation
-# -----------------------------------------------
-
-# R-squared
-rsq <- cor(obs_vector, res_vector)^2
-
-# RMSE
-rmse <- sqrt(mean((obs_vector - res_vector)^2))
-
-# MSE
-mse <- mean((obs_vector - res_vector)^2)
-
-print(rsq)
-print(rmse)
-print(mse)
-
-# ------------------------------------------------
-# 9. Quick diagnostic plot
-# ------------------------------------------------
-
-plot(res_vector, obs_vector,
-     xlab = "Circuit-based resistance distance",
-     ylab = "Observed CSE",
-     pch = 16)
-
-abline(lm(obs_vector ~ res_vector), col = "red")
+write.csv(
+  metrics_df,
+  file.path(results_dir, "spatial_eval_rawCSE_metrics.csv"),
+  row.names = FALSE
+)
 
 ```
+
+# This script should be followed by:
+
+First, 7b-7f. Choose one response formulation and spatial summary.
+
+Then, after selecting the best response formulation and spatial summary:  
+
+Run the final validation framework, full LOPOCV evaluation, including:  
+- non-spatial evaluation  
+- spatial evaluation (mean LCP, sum LCP, or CBER depending on screening results)  
+- Calculate final metrics on held-out data (RMSE, R², MSE, MAE, correlation)
+
+Permutation test for inference  
+- Run ~100 permutations where the response is randomized.
+
+For each permutation:  
+- rerun the full LOPOCV workflow  
+- recompute spatial predictions  
+- calculate the same evaluation metrics  
+Compare observed metrics (especially RMSE and R²) to the permutation distribution to test whether predictive performance is better than expected by chance.
