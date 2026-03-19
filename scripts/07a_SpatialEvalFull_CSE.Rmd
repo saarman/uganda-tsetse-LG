@@ -7,9 +7,6 @@ output:
     toc: true
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
 - **Number of cores:** 8 (up to 32 available)   
@@ -17,8 +14,42 @@ RStudio Configuration:
 - **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
 - **Memory per job:** 200G (cluster limit: 1000G total; avoid exceeding half)    
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-# Plan for this script:
+# Setup
+## Load libraries
+```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+# load only required packages
+library(doParallel)
+library(foreach)
+library(raster)
+library(gdistance)
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(rnaturalearth)
+library(rnaturalearthdata)
+```
+## Inputs
+  - `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2), same input used for building model.
+  - `../results_dir/fullRF_CSE.tif` - Final full model projected estimates of CSE at 1 pixel geodist.
+  - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)   
+  
+## Outputs   
+Major outputs from this script are saved in two locations:  
+**Small text outputs saved to results_dir within git repo:**
+ - `spatial_eval_rawCSE_predictions.csv` Pairwise evaluation table containing observed CSE and spatial predictions for each site pair: CSE, LCP_mean, LCP_sum, CBER
+ - `spatial_eval_rawCSE_metrics.csv` Summary table of evaluation metrics for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE, R², MSE, MAE, Correlation.  
+**Large or reusable outputs saved to results_dir_big:**
+ - `least_cost_paths/LC_paths_fullRF_rawCSE.shp` Saved least-cost-path spatial lines for all evaluated site pairs. This is a reusable spatial output and does not need to be recomputed unless the resistance surface changes.  
+ - `spatial_eval_rawCSE_predictions.rds` R object version of the full pairwise evaluation table (eval_df) for quick reloading in later scripts.  
+ - `spatial_eval_rawCSE_predictions.csv`  Backup copy of the pairwise evaluation table saved in the large-results directory.  
+ - `spatial_eval_rawCSE_metrics.rds` R object version of the evaluation metrics table (metrics_df) for quick reloading in later scripts.  
+ - `spatial_eval_rawCSE_metrics.csv` Backup copy of the evaluation metrics table saved in the large-results directory.  
+ 
+# Step 0: Script Outline
 This is a screening step (full model only). Use the fitted full model to compare candidate response formulations and spatial summaries.  
 
 Response formulations to compare:  
@@ -35,50 +66,22 @@ Run spatial evaluation across the raw CSE resistance surface (projected estimate
 Metrics to calculate for this screening step: 
 
 Primary metrics:  
-1. RMSE  
-2. R² (1 − SSE/SST)  
-
-NOTE: RMSE is included alongside R² because it measures the absolute magnitude of prediction error in the original response scale, while R² measures variance explained relative to the mean model. Together they distinguish between models that explain variation and models that produce accuratepredictions.
+1. correlation (Correlation here answers: does the method recover relative ordering?)
+2. R² (1 − SSE/SST, after correcting for scale mismatch) 
 
 Secondary evaluation metrics:  
-3. MSE  
-4. MAE  
-5. correlation  
+3. RMSE (after correcting for scale mismatch)
+4. MSE (after correcting for scale mismatch) 
+5. MAE(after correcting for scale mismatch) 
 
-NOTE: These screening metrics are used only to decide which response formulation and spatial summary to carry forward into the final LOPOCV validation framework and permutation-based significance testing.
+NOTE: RMSE, MSE, MAE, and R2 after scaling answer: after correcting for simple scale mismatch, how well does the method recover observed CSE?). These screening metrics are used only to decide which response formulation and spatial summary to carry forward into the final LOPOCV validation framework and permutation-based significance testing.
 
-Idea: Can these estimates later be used as starting points for next iteration of the model?
-
-# Setup
-```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
-# load only required packages
-library(doParallel)
-library(foreach)
-library(raster)
-library(gdistance)
-library(sf)
-library(dplyr)
-library(ggplot2)
-library(rnaturalearth)
-library(rnaturalearthdata)
-```
-
-# Inputs
-  - `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2), same input used for building model.
-  - `../results_dir/fullRF_CSE.tif` - Final full model projected estimates of CSE at 1 pixel geodist.
-  - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)   
-  
-# Outputs   
-Major outputs from this script are saved in two locations:  
-## Small text outputs saved to results_dir within git repo:
- - `spatial_eval_rawCSE_predictions.csv` Pairwise evaluation table containing observed CSE and spatial predictions for each site pair: CSE, LCP_mean, LCP_sum, CBER
- - `spatial_eval_rawCSE_metrics.csv` Summary table of evaluation metrics for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE, R², MSE, MAE, Correlation.  
-## Large or reusable outputs saved to results_dir_big:
- - `least_cost_paths/LC_paths_fullRF_rawCSE.shp` Saved least-cost-path spatial lines for all evaluated site pairs. This is a reusable spatial output and does not need to be recomputed unless the resistance surface changes.  
- - `spatial_eval_rawCSE_predictions.rds` R object version of the full pairwise evaluation table (eval_df) for quick reloading in later scripts.  
- - `spatial_eval_rawCSE_predictions.csv`  Backup copy of the pairwise evaluation table saved in the large-results directory.  
- - `spatial_eval_rawCSE_metrics.rds` R object version of the evaluation metrics table (metrics_df) for quick reloading in later scripts.  
- - `spatial_eval_rawCSE_metrics.csv` Backup copy of the evaluation metrics table saved in the large-results directory.
+IDEA: LCP and CBER might serve as starting points for a next iteration of resistance optimization. Especially CBER. Current density (circuit theory) – longer-term idea:  
+- Would show where movement concentrates across the landscape, and identify broad corridors, alternative routes, and pinch points.   
+- More biologically realistic than a single LCP because it integrates multiple possible paths... This would extend the current LCP-based spatial evaluation toward a more biologically realistic representation of multi-route dispersal and provide a natural next step beyond the Bishop et al. and Pless et al. random-forest LCTA framework.  
+- Not implemented here because gdistance::commuteDistance() only returns pairwise effective resistance, not current maps, and true current density would require a Circuitscape-style current-flow analysis using the RF-derived resistance surface.
+- We would then need to figure out a way to weight the original predictive surfaces in a meaningful way based on the current-flow density for the next iteration of the model.  
+- So, for now, I'll use CBER as a screening summary alongside mean LCP and sum LCP. Keep current density as a future extension if the circuit-based approach looks promising.
 
 # Step 1: Inputs
 ```{r directories-inputs}
@@ -183,10 +186,15 @@ conductance_rast <- 1 / resistance_rast
 
 # transition object:
 # directions = 16 allows diagonal/extended neighborhood movement
-# geoCorrection(type = "c") corrects conductance for inter-cell geographic distance,
-# including longer diagonal connections
 tr <- transition(conductance_rast, transitionFunction = mean, directions = 16)
-tr_corr <- geoCorrection(tr, type = "c")
+
+# correction for least-cost paths
+# geoCorrection(type = "c") corrects with longer diagonal
+tr_lcp <- geoCorrection(tr, type = "c")
+
+# correction for circuit / random-walk distances
+# geoCorrection(type = "r") corrects for random walk
+tr_cber <- geoCorrection(tr, type = "r")
 ```
 
 # Step 4: Sanity checks
@@ -201,20 +209,20 @@ plot(cse_surface, main = "Projected raw CSE surface")
 plot(sites_sp, add = TRUE, pch = 16, cex = 0.5)
 ```  
 
-# Step 5: Test one least-cost path before parallel run
+# Step 5: Compute least-cost paths in parallel (once) and save output  
+Test one path first:
 ```{r test-lcp}
-# choose first pair in site_pairs
+# Test one least-cost path before parallel run
 i <- site_index[site_pairs$Var1[100]]
 j <- site_index[site_pairs$Var2[100]]
 
-test_path <- shortestPath(tr_corr, sites_sp[i, ], sites_sp[j, ], output = "SpatialLines")
+test_path <- shortestPath(tr_lcp, sites_sp[i, ], sites_sp[j, ], output = "SpatialLines")
 
 plot(cse_surface, main = "Test least-cost path")
 lines(test_path, col = "red", lwd = 2)
 points(sites_sp[c(i, j), ], pch = 16)
 ```  
-
-# Step 6: Compute least-cost paths in parallel (once) and save output
+Run full loop:
 ```{r save-lcp, eval = FALSE}
 output_dir <- file.path(results_dir_big, "least_cost_paths")
 dir.create(output_dir, showWarnings = FALSE)
@@ -231,7 +239,7 @@ paths_list <- foreach(k = 1:nrow(site_pairs),
   j <- site_index[site_pairs$Var2[k]]
 
   path <- tryCatch({
-    shortestPath(tr_corr, sites_sp[i, ], sites_sp[j, ], output = "SpatialLines")
+    shortestPath(tr_lcp, sites_sp[i, ], sites_sp[j, ], output = "SpatialLines")
   }, error = function(e) NULL)
 
   if (!is.null(path)) {
@@ -315,34 +323,52 @@ write.csv(
 ```  
 
 # Step 8: Compute circuit-based effective resistance (CBER)  
-Also save output from steps 6-8 to file again...
-```{r cber, eval = FALSE}
+Test one CBER calculation first:
+```{r cber-test, eval = TRUE}
+# test one CBER calculation first
+i <- site_index[site_pairs$Var1[1]]
+j <- site_index[site_pairs$Var2[1]]
 
-n_cores <- 8
-cl <- makeCluster(n_cores)
-registerDoParallel(cl)
+dmat_test <- commuteDistance(tr_cber, sites_sp[c(i, j), ])
+dmat_test
+```
+Run as a loop sequentially, also save output from steps 6-8 to file again...
 
-cber_list <- foreach(k = 1:nrow(site_pairs),
-                     .packages = c("gdistance", "sp")) %dopar% {
+NOTE: I tried to run in parallel as well, but there were errors that I couldn't solve.
+```{r cyber, eval = TRUE}
+# Compute circuit-based effective resistance (CBER) sequentially
+cber_list <- vector("list", nrow(site_pairs))
+
+pb <- txtProgressBar(min = 0, max = nrow(site_pairs), style = 3)
+
+for (k in seq_len(nrow(site_pairs))) {
 
   i <- site_index[site_pairs$Var1[k]]
   j <- site_index[site_pairs$Var2[k]]
 
-  val <- tryCatch({
-    dmat <- commuteDistance(tr_corr, sites_sp[c(i, j), ])
+  dval <- tryCatch({
+    dmat <- commuteDistance(tr_cber, sites_sp[c(i, j), ])
     as.numeric(dmat[1, 2])
-  }, error = function(e) NA_real_)
+  }, error = function(e) {
+    NA_real_
+  })
 
-  data.frame(
-    id = site_pairs$id[k],
-    CBER = val
+  cber_list[[k]] <- data.frame(
+    Var1 = site_pairs$Var1[k],
+    Var2 = site_pairs$Var2[k],
+    id   = site_pairs$id[k],
+    CSE  = site_pairs$CSE[k],
+    CBER = dval
   )
+
+  setTxtProgressBar(pb, k)
 }
 
-stopCluster(cl)
+close(pb)
 
-cber_df <- bind_rows(cber_list)
+cber_df <- do.call(rbind, cber_list)
 
+# join to eval_df
 eval_df <- eval_df %>%
   left_join(cber_df, by = "id")
 
@@ -370,22 +396,98 @@ write.csv(
 ```
 
 # Step 9: Calculate evaluation metrics from eval_df (load from file) 
-```{r}
+```{r calibrate-and-metrics}
 # load eval_df from file
 eval_df <- read.csv(file.path(results_dir, "spatial_eval_rawCSE_predictions.csv"))
-  
-calc_metrics <- function(obs, pred) {
+
+# helper: fit linear calibration and return calibrated predictions
+calibrate_pred <- function(obs, pred) {
   keep <- complete.cases(obs, pred)
-  obs  <- obs[keep]
-  pred <- pred[keep]
+  df <- data.frame(obs = obs[keep], pred = pred[keep])
+  fit <- lm(obs ~ pred, data = df)
   
-  sse  <- sum((obs - pred)^2)
+  out <- rep(NA_real_, length(obs))
+  out[keep] <- predict(fit, newdata = data.frame(pred = pred[keep]))
+  out
+}
+
+# create calibrated predictions
+eval_df$LCP_sum_cal  <- calibrate_pred(eval_df$CSE, eval_df$LCP_sum)
+eval_df$LCP_mean_cal <- calibrate_pred(eval_df$CSE, eval_df$LCP_mean)
+#eval_df$CBER_cal     <- calibrate_pred(eval_df$CSE, eval_df$CBER)
+
+# plots: raw predicted vs observed, with fitted line
+plot1 <- ggplot(eval_df, aes(x = LCP_sum, y = CSE)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(
+    x = "Predicted CSE (LCP sum, raw scale)",
+    y = "Observed CSE"
+  )
+plot1
+
+plot2 <- ggplot(eval_df, aes(x = LCP_mean, y = CSE)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(
+    x = "Predicted CSE (LCP mean, raw scale)",
+    y = "Observed CSE"
+  )
+plot2
+
+plot3 <- ggplot(eval_df, aes(x = CBER, y = CSE)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(
+    x = "Predicted CSE (CBER, raw scale)",
+    y = "Observed CSE"
+  )
+#plot3
+
+# optional: plots of calibrated predictions vs observed
+plot1_cal <- ggplot(eval_df, aes(x = LCP_sum_cal, y = CSE)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(
+    x = "Predicted CSE (LCP sum, calibrated)",
+    y = "Observed CSE"
+  )
+plot1_cal
+
+plot2_cal <- ggplot(eval_df, aes(x = LCP_mean_cal, y = CSE)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(
+    x = "Predicted CSE (LCP mean, calibrated)",
+    y = "Observed CSE"
+  )
+plot2_cal
+
+plot3_cal <- ggplot(eval_df, aes(x = CBER_cal, y = CSE)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(
+    x = "Predicted CSE (CBER, calibrated)",
+    y = "Observed CSE"
+  )
+#plot3_cal
+
+# calculate formal metrics
+# correlation is kept on raw predictions because it is scale-invariant
+# error metrics and R2 are calculated on calibrated predictions
+calc_metrics <- function(obs, pred_raw, pred_cal) {
+  keep <- complete.cases(obs, pred_raw, pred_cal)
+  obs      <- obs[keep]
+  pred_raw <- pred_raw[keep]
+  pred_cal <- pred_cal[keep]
+  
+  sse  <- sum((obs - pred_cal)^2)
   sst  <- sum((obs - mean(obs))^2)
-  mse  <- mean((obs - pred)^2)
+  mse  <- mean((obs - pred_cal)^2)
   rmse <- sqrt(mse)
-  mae  <- mean(abs(obs - pred))
+  mae  <- mean(abs(obs - pred_cal))
   rsq  <- 1 - (sse / sst)
-  corr <- cor(obs, pred)
+  corr <- cor(obs, pred_raw)
   
   data.frame(
     n = length(obs),
@@ -398,13 +500,16 @@ calc_metrics <- function(obs, pred) {
 }
 
 metrics_df <- bind_rows(
-  calc_metrics(eval_df$CSE, eval_df$LCP_mean) %>% mutate(method = "LCP_mean"),
-  calc_metrics(eval_df$CSE, eval_df$LCP_sum)  %>% mutate(method = "LCP_sum"),
-  calc_metrics(eval_df$CSE, eval_df$CBER)     %>% mutate(method = "CBER")
+  calc_metrics(eval_df$CSE, eval_df$LCP_mean, eval_df$LCP_mean_cal) %>%
+    mutate(method = "LCP_mean"),
+  calc_metrics(eval_df$CSE, eval_df$LCP_sum, eval_df$LCP_sum_cal) %>%
+    mutate(method = "LCP_sum")
+  #calc_metrics(eval_df$CSE, eval_df$CBER, eval_df$CBER_cal) %>%
+   # mutate(method = "CBER")
 ) %>%
   dplyr::select(method, everything())
 
-# Print metrics
+# print metrics
 print(metrics_df)
 
 # Save outputs
