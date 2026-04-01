@@ -1,5 +1,5 @@
 ---
-title: "Spatial Evaluation - Full RF model of raw CSE"
+title: "Spatial Evaluation - CSE per km (rate, LC lakes paths)"
 author: "Norah Saarman"
 date: "2026-04-01"
 output:
@@ -34,26 +34,26 @@ library(rnaturalearthdata)
 ```
 ## Inputs
   - `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2), same input used for building model.
-  - `../results_dir/fullRF_CSE.tif` - Final full model projected estimates of CSE at 1 pixel geodist.
+  - `../results_dir/fullRF_rate.tif` - Final full model projected estimates of CSE at 1 pixel geodist.
   - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)   
   
 ## Outputs   
 Major outputs from this script are saved in two locations:  
 **Small text outputs saved to results_dir within git repo:**
- - `spatial_eval_rawCSE_LCPpred.csv` Pairwise least-cost path summaries for each site pair: LCP_mean, LCP_sum.
- - `spatial_eval_rawCSE_cber.csv` Pairwise circuit-based effective resistance (CBER) values for each site pair.
- - `spatial_eval_rawCSE_predictions.csv` Combined pairwise evaluation table containing observed CSE and spatial predictions for each site pair: CSE, LCP_mean, LCP_sum, CBER.
- - `spatial_eval_rawCSE_eval_metrics.csv` Summary table of evaluation metrics for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE, R², MSE, MAE, Correlation.
+ - `spatial_eval_rate_LCPpred.csv` Pairwise least-cost path summaries for each site pair: LCP_mean, LCP_sum.
+ - `spatial_eval_rate_cber.csv` Pairwise circuit-based effective resistance (CBER) values for each site pair.
+ - `spatial_eval_rate_predictions.csv` Combined pairwise evaluation table containing observed CSE and spatial predictions for each site pair: CSE, LCP_mean, LCP_sum, CBER.
+ - `spatial_eval_rate_eval_metrics.csv` Summary table of evaluation metrics for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE, R², MSE, MAE, Correlation.
 
 **Large or reusable outputs saved to results_dir_big:**
- - `least_cost_paths/LC_paths_fullRF_rawCSE.shp` Saved least-cost-path spatial lines for all evaluated site pairs. This is a reusable spatial output and does not need to be recomputed unless the resistance surface changes.
- - `spatial_eval_rawCSE_LCPpred.csv` Backup copy of least-cost path summaries.
- - `spatial_eval_rawCSE_cber.csv` Backup copy of circuit-based effective resistance (CBER) results.
- - `spatial_eval_rawCSE_predictions.rds` R object version of the combined evaluation table (eval_results) for quick reloading in later scripts.
- - `spatial_eval_rawCSE_predictions.csv` Backup copy of the combined evaluation table saved in the large-results directory.
- - `spatial_eval_rawCSE_predictions_calibrated.rds` R object version of the evaluation table with calibrated predictions (eval_df), including LCP_mean_cal, LCP_sum_cal, and CBER_cal.
- - `spatial_eval_rawCSE_eval_metrics.rds` R object version of the evaluation metrics table (metrics_df) for quick reloading in later scripts.
- - `spatial_eval_rawCSE_eval_metrics.csv` Backup copy of the evaluation metrics table saved in the large-results directory.
+ - `least_cost_paths/LC_paths_fullRF_rate.shp` Saved least-cost-path spatial lines for all evaluated site pairs. This is a reusable spatial output and does not need to be recomputed unless the resistance surface changes.
+ - `spatial_eval_rate_LCPpred.csv` Backup copy of least-cost path summaries.
+ - `spatial_eval_rate_cber.csv` Backup copy of circuit-based effective resistance (CBER) results.
+ - `spatial_eval_rate_predictions.rds` R object version of the combined evaluation table (eval_results) for quick reloading in later scripts.
+ - `spatial_eval_rate_predictions.csv` Backup copy of the combined evaluation table saved in the large-results directory.
+ - `spatial_eval_rate_predictions_calibrated.rds` R object version of the evaluation table with calibrated predictions (eval_df), including LCP_mean_cal, LCP_sum_cal, and CBER_cal.
+ - `spatial_eval_rate_eval_metrics.rds` R object version of the evaluation metrics table (metrics_df) for quick reloading in later scripts.
+ - `spatial_eval_rate_eval_metrics.csv` Backup copy of the evaluation metrics table saved in the large-results directory.
  
 # Step 0: Script Outline
 This is a screening step (full model only). Use the fitted full model to compare candidate response formulations and spatial summaries.  
@@ -63,8 +63,8 @@ Response formulations to compare:
 - residuals from simple IBD model (script 7b)  
 - CSE/km (script 7c)
 
-**For this script (7a):**  
-Run spatial evaluation across the raw CSE resistance surface (projected estimates of raw CSE at 1 pixel geodist) to estimate evaluation metrics by 3 methods:   
+**For this script (7c):**  
+Run spatial evaluation across the CSE/km resistance surface (projected estimates of CSE/km) to estimate evaluation metrics by 3 methods:   
 1. Mean across least-cost path (mean LCP)   
 2. Sum across least-cost path (sum LCP)  
 3. Circuit-based effective resistance (CBER)  
@@ -103,7 +103,7 @@ crs_geo <- 4326     # EPSG code for WGS84
 
 ######################################
 # What surface are you using?
-surf_file  <- file.path(results_dir_big, "fullRF_CSE.tif")
+surf_file  <- file.path(results_dir_big, "fullRF_rate.tif")
 ########################################
 
 lake_file  <- file.path(data_dir, "processed", "lake_binary.tif")
@@ -234,7 +234,7 @@ lines(test_path, col = "red", lwd = 2)
 points(sites_sp[c(i, j), ], pch = 16)
 ```  
 Run full loop:
-```{r save-lcp, eval = FALSE}
+```{r save-lcp}
 output_dir <- file.path(results_dir_big, "least_cost_paths")
 dir.create(output_dir, showWarnings = FALSE)
 
@@ -279,14 +279,14 @@ paths_sf <- left_join(paths_sf, site_pairs, by = "id")
 
 # save paths
 st_write(paths_sf,
-         file.path(output_dir, "LC_paths_fullRF_rawCSE.shp"),
+         file.path(output_dir, "LC_paths_fullRF_rate.shp"),
          delete_layer = TRUE)
 ```
 
 # Step 7: Extract predicted CSE values along LCPs and calculate mean and sum
-```{r extract-mean-sum, eval = FALSE}
+```{r extract-mean-sum}
 # if needed later, reload:
-paths_sf <- st_read(file.path(results_dir_big, "least_cost_paths", "LC_paths_fullRF_rawCSE.shp"), quiet = TRUE)
+paths_sf <- st_read(file.path(results_dir_big, "least_cost_paths", "LC_paths_fullRF_rate.shp"), quiet = TRUE)
 
 # transform paths to raster CRS for extraction
 paths_extract <- st_transform(paths_sf, crs = crs(cse_surface))
@@ -309,14 +309,14 @@ lcp_summary <- data.frame(
 LCP_results <- site_pairs %>%
   left_join(lcp_summary, by = "id")
 
-
+head(LCP_results)
 summary(LCP_results$LCP_mean)
 summary(LCP_results$LCP_sum)
 
 # Save LCP output as text file in results directories
-write.csv(LCP_results,file.path(results_dir, "spatial_eval_rawCSE_LCPpred.csv"), row.names = FALSE)
+write.csv(LCP_results,file.path(results_dir, "spatial_eval_rate_LCPpred.csv"), row.names = FALSE)
 
-write.csv(LCP_results,file.path(results_dir_big, "spatial_eval_rawCSE_LCPpred.csv"), row.names = FALSE)
+write.csv(LCP_results,file.path(results_dir_big, "spatial_eval_rate_LCPpred.csv"), row.names = FALSE)
 
 ```  
 
@@ -333,7 +333,7 @@ as.numeric(dmat_test)[1] # returns the single number for pair
 ```
 Run as a loop sequentially, also save output from steps 6-8 to file again...
 
-```{r cber_calculations, eval = FALSE}
+```{r cber_calculations}
 library(doParallel)
 library(foreach)
 library(gdistance)
@@ -389,9 +389,9 @@ head(cber_results)
 str(cber_results)
 
 # save output in results directories
-write.csv(cber_results,file.path(results_dir, "spatial_eval_rawCSE_cber.csv"), row.names = FALSE)
+write.csv(cber_results,file.path(results_dir, "spatial_eval_rate_cber.csv"), row.names = FALSE)
 
-write.csv(cber_results,file.path(results_dir_big, "spatial_eval_rawCSE_cber.csv"), row.names = FALSE)
+write.csv(cber_results,file.path(results_dir_big, "spatial_eval_rate_cber.csv"), row.names = FALSE)
 
 ```
 
@@ -401,10 +401,7 @@ write.csv(cber_results,file.path(results_dir_big, "spatial_eval_rawCSE_cber.csv"
 library(dplyr)
 
 # load the LCP sum and mean results you just computed
-LCP_results <- read.csv(file.path(results_dir, "spatial_eval_rawCSE_LCPpred.csv"))
-
-# load the CBER results you just computed
-cber_results <- read.csv(file.path(results_dir, "spatial_eval_rawCSE_cber.csv"))
+LCP_results <- read.csv(file.path(results_dir, "spatial_eval_rate_LCPpred.csv"))
 
 # bind CBER and LCP results
 eval_results <- LCP_results %>%
@@ -416,7 +413,7 @@ eval_results <- LCP_results %>%
 # Save results output as RDS for later ease of loading
 saveRDS(
   eval_results,
-  file.path(results_dir_big, "spatial_eval_rawCSE_predictions.rds")
+  file.path(results_dir_big, "spatial_eval_rate_predictions.rds")
 )
 ```
 
@@ -518,18 +515,18 @@ print(metrics_df)
 # Save outputs
 saveRDS(
   metrics_df,
-  file.path(results_dir_big, "spatial_eval_rawCSE_eval_metrics.rds")
+  file.path(results_dir_big, "spatial_eval_rate_eval_metrics.rds")
 )
 
 write.csv(
   metrics_df,
-  file.path(results_dir_big, "spatial_eval_rawCSE_eval_metrics.csv"),
+  file.path(results_dir_big, "spatial_eval_rate_eval_metrics.csv"),
   row.names = FALSE
 )
 
 write.csv(
   metrics_df,
-  file.path(results_dir, "spatial_eval_rawCSE_eval_metrics.csv"),
+  file.path(results_dir, "spatial_eval_rate_eval_metrics.csv"),
   row.names = FALSE
 )
 ```

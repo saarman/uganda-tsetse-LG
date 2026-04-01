@@ -1,26 +1,47 @@
----
-title: "Spatial Evaluation - Full RF model of raw CSE"
-author: "Norah Saarman"
-date: "2026-04-01"
-output:
-  github_document:
-    toc: true
----
+Spatial Evaluation - Full RF model of raw CSE
+================
+Norah Saarman
+2026-04-01
+
+- [Setup](#setup)
+  - [Load libraries](#load-libraries)
+  - [Inputs](#inputs)
+  - [Outputs](#outputs)
+- [Step 0: Script Outline](#step-0-script-outline)
+- [Step 1: Inputs](#step-1-inputs)
+- [Step 2: Check raster alignment and assign high cost to
+  water](#step-2-check-raster-alignment-and-assign-high-cost-to-water)
+- [Step 3: Prepare pair table, site objects, and transition
+  object](#step-3-prepare-pair-table-site-objects-and-transition-object)
+- [Step 4: Sanity checks](#step-4-sanity-checks)
+- [Step 5: Compute least-cost paths in parallel (once) and save
+  output](#step-5-compute-least-cost-paths-in-parallel-once-and-save-output)
+- [Step 7: Extract predicted CSE values along LCPs and calculate mean
+  and
+  sum](#step-7-extract-predicted-cse-values-along-lcps-and-calculate-mean-and-sum)
+- [Step 8: Compute circuit-based effective resistance
+  (CBER)](#step-8-compute-circuit-based-effective-resistance-cber)
+- [Step 9: Combine LCP and CBER
+  results](#step-9-combine-lcp-and-cber-results)
+- [Step 10: Calculate evaluation metrics from
+  eval_results](#step-10-calculate-evaluation-metrics-from-eval_results)
+- [This script should be followed
+  by:](#this-script-should-be-followed-by)
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 16 (up to 32 available)   
+- **Number of cores:** 16 (up to 32 available)  
 - **Account:** saarman-np  
-- **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
-- **Memory per job:** 400G (cluster limit: 1000G total; avoid exceeding half)    
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+- **Partition:** saarman-np (allows multiple simultaneous jobs
+automatically now)  
+- **Memory per job:** 400G (cluster limit: 1000G total; avoid exceeding
+half)
 
 # Setup
+
 ## Load libraries
-```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+
+``` r
 # load only required packages
 library(doParallel)
 library(foreach)
@@ -32,31 +53,54 @@ library(ggplot2)
 library(rnaturalearth)
 library(rnaturalearthdata)
 ```
-## Inputs
-  - `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2), same input used for building model.
-  - `../results_dir/fullRF_CSE.tif` - Final full model projected estimates of CSE at 1 pixel geodist.
-  - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)   
-  
-## Outputs   
-Major outputs from this script are saved in two locations:  
-**Small text outputs saved to results_dir within git repo:**
- - `spatial_eval_rawCSE_LCPpred.csv` Pairwise least-cost path summaries for each site pair: LCP_mean, LCP_sum.
- - `spatial_eval_rawCSE_cber.csv` Pairwise circuit-based effective resistance (CBER) values for each site pair.
- - `spatial_eval_rawCSE_predictions.csv` Combined pairwise evaluation table containing observed CSE and spatial predictions for each site pair: CSE, LCP_mean, LCP_sum, CBER.
- - `spatial_eval_rawCSE_eval_metrics.csv` Summary table of evaluation metrics for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE, R², MSE, MAE, Correlation.
 
-**Large or reusable outputs saved to results_dir_big:**
- - `least_cost_paths/LC_paths_fullRF_rawCSE.shp` Saved least-cost-path spatial lines for all evaluated site pairs. This is a reusable spatial output and does not need to be recomputed unless the resistance surface changes.
- - `spatial_eval_rawCSE_LCPpred.csv` Backup copy of least-cost path summaries.
- - `spatial_eval_rawCSE_cber.csv` Backup copy of circuit-based effective resistance (CBER) results.
- - `spatial_eval_rawCSE_predictions.rds` R object version of the combined evaluation table (eval_results) for quick reloading in later scripts.
- - `spatial_eval_rawCSE_predictions.csv` Backup copy of the combined evaluation table saved in the large-results directory.
- - `spatial_eval_rawCSE_predictions_calibrated.rds` R object version of the evaluation table with calibrated predictions (eval_df), including LCP_mean_cal, LCP_sum_cal, and CBER_cal.
- - `spatial_eval_rawCSE_eval_metrics.rds` R object version of the evaluation metrics table (metrics_df) for quick reloading in later scripts.
- - `spatial_eval_rawCSE_eval_metrics.csv` Backup copy of the evaluation metrics table saved in the large-results directory.
- 
+## Inputs
+
+- `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2), same input used for building
+  model.
+- `../results_dir/fullRF_CSE.tif` - Final full model projected estimates
+  of CSE at 1 pixel geodist.
+- `../data_dir/processed/lake_binary.tif` \# binary lake mask (1 =
+  water, 0 = land)
+
+## Outputs
+
+Major outputs from this script are saved in two locations:  
+**Small text outputs saved to results_dir within git repo:** -
+`spatial_eval_rawCSE_LCPpred.csv` Pairwise least-cost path summaries for
+each site pair: LCP_mean, LCP_sum. - `spatial_eval_rawCSE_cber.csv`
+Pairwise circuit-based effective resistance (CBER) values for each site
+pair. - `spatial_eval_rawCSE_predictions.csv` Combined pairwise
+evaluation table containing observed CSE and spatial predictions for
+each site pair: CSE, LCP_mean, LCP_sum, CBER. -
+`spatial_eval_rawCSE_eval_metrics.csv` Summary table of evaluation
+metrics for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE,
+R², MSE, MAE, Correlation.
+
+**Large or reusable outputs saved to results_dir_big:** -
+`least_cost_paths/LC_paths_fullRF_rawCSE.shp` Saved least-cost-path
+spatial lines for all evaluated site pairs. This is a reusable spatial
+output and does not need to be recomputed unless the resistance surface
+changes. - `spatial_eval_rawCSE_LCPpred.csv` Backup copy of least-cost
+path summaries. - `spatial_eval_rawCSE_cber.csv` Backup copy of
+circuit-based effective resistance (CBER) results. -
+`spatial_eval_rawCSE_predictions.rds` R object version of the combined
+evaluation table (eval_results) for quick reloading in later scripts. -
+`spatial_eval_rawCSE_predictions.csv` Backup copy of the combined
+evaluation table saved in the large-results directory. -
+`spatial_eval_rawCSE_predictions_calibrated.rds` R object version of the
+evaluation table with calibrated predictions (eval_df), including
+LCP_mean_cal, LCP_sum_cal, and CBER_cal. -
+`spatial_eval_rawCSE_eval_metrics.rds` R object version of the
+evaluation metrics table (metrics_df) for quick reloading in later
+scripts. - `spatial_eval_rawCSE_eval_metrics.csv` Backup copy of the
+evaluation metrics table saved in the large-results directory.
+
 # Step 0: Script Outline
-This is a screening step (full model only). Use the fitted full model to compare candidate response formulations and spatial summaries.  
+
+This is a screening step (full model only). Use the fitted full model to
+compare candidate response formulations and spatial summaries.
 
 Response formulations to compare:  
 - raw CSE (this script, 7a)  
@@ -64,34 +108,53 @@ Response formulations to compare:
 - CSE/km (script 7c)
 
 **For this script (7a):**  
-Run spatial evaluation across the raw CSE resistance surface (projected estimates of raw CSE at 1 pixel geodist) to estimate evaluation metrics by 3 methods:   
-1. Mean across least-cost path (mean LCP)   
+Run spatial evaluation across the raw CSE resistance surface (projected
+estimates of raw CSE at 1 pixel geodist) to estimate evaluation metrics
+by 3 methods:  
+1. Mean across least-cost path (mean LCP)  
 2. Sum across least-cost path (sum LCP)  
-3. Circuit-based effective resistance (CBER)  
+3. Circuit-based effective resistance (CBER)
 
-Metrics to calculate for this screening step: 
+Metrics to calculate for this screening step:
 
 Primary metrics:  
-1. correlation (Correlation here answers: does the method recover relative ordering?)
-2. R² (1 − SSE/SST, after correcting for scale mismatch) 
+1. correlation (Correlation here answers: does the method recover
+relative ordering?) 2. R² (1 − SSE/SST, after correcting for scale
+mismatch)
 
 Secondary evaluation metrics:  
-3. RMSE (after correcting for scale mismatch)
-4. MSE (after correcting for scale mismatch) 
-5. MAE(after correcting for scale mismatch) 
+3. RMSE (after correcting for scale mismatch) 4. MSE (after correcting
+for scale mismatch) 5. MAE(after correcting for scale mismatch)
 
-NOTE: RMSE, MSE, MAE, and R2 after scaling answer: after correcting for simple scale mismatch, how well does the method recover observed CSE?). These screening metrics are used only to decide which response formulation and spatial summary to carry forward into the final LOPOCV validation framework and permutation-based significance testing.
+NOTE: RMSE, MSE, MAE, and R2 after scaling answer: after correcting for
+simple scale mismatch, how well does the method recover observed CSE?).
+These screening metrics are used only to decide which response
+formulation and spatial summary to carry forward into the final LOPOCV
+validation framework and permutation-based significance testing.
 
-IDEA: LCP and CBER might serve as starting points for a next iteration of resistance optimization. Especially CBER. Current density (circuit theory) – longer-term idea:  
-- Would show where movement concentrates across the landscape, and identify broad corridors, alternative routes, and pinch points.   
-- More biologically realistic than a single LCP because it integrates multiple possible paths... This would extend the current LCP-based spatial evaluation toward a more biologically realistic representation of multi-route dispersal and provide a natural next step beyond the Bishop et al. and Pless et al. random-forest LCTA framework.  
-- Not implemented here because gdistance::commuteDistance() only returns pairwise effective resistance, not current maps, and true current density would require a Circuitscape-style current-flow analysis using the RF-derived resistance surface.
-- We would then need to figure out a way to weight the original predictive surfaces in a meaningful way based on the current-flow density for the next iteration of the model.  
-- So, for now, I'll use CBER as a screening summary alongside mean LCP and sum LCP. Keep current density as a future extension if the circuit-based approach looks promising.
+IDEA: LCP and CBER might serve as starting points for a next iteration
+of resistance optimization. Especially CBER. Current density (circuit
+theory) – longer-term idea:  
+- Would show where movement concentrates across the landscape, and
+identify broad corridors, alternative routes, and pinch points.  
+- More biologically realistic than a single LCP because it integrates
+multiple possible paths… This would extend the current LCP-based spatial
+evaluation toward a more biologically realistic representation of
+multi-route dispersal and provide a natural next step beyond the Bishop
+et al. and Pless et al. random-forest LCTA framework.  
+- Not implemented here because gdistance::commuteDistance() only returns
+pairwise effective resistance, not current maps, and true current
+density would require a Circuitscape-style current-flow analysis using
+the RF-derived resistance surface. - We would then need to figure out a
+way to weight the original predictive surfaces in a meaningful way based
+on the current-flow density for the next iteration of the model.  
+- So, for now, I’ll use CBER as a screening summary alongside mean LCP
+and sum LCP. Keep current density as a future extension if the
+circuit-based approach looks promising.
 
 # Step 1: Inputs
-```{r directories-inputs}
 
+``` r
 # Define Paths to directories
 input_dir <- "../input"
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
@@ -124,10 +187,10 @@ cse_surface <- raster(surf_file)
 # Read lake mask
 lake_mask <- raster(lake_file)
 ```
-  
+
 # Step 2: Check raster alignment and assign high cost to water
 
-```{r check-alignment}
+``` r
 if (!compareRaster(cse_surface, lake_mask,
                    extent = TRUE, rowcol = TRUE,
                    crs = TRUE, res = TRUE,
@@ -137,25 +200,64 @@ if (!compareRaster(cse_surface, lake_mask,
 
 # Inspect projected raw CSE values before altering water cells
 summary(values(cse_surface))
+```
 
+    ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+    ##  0.1790  0.2859  0.3025  0.2989  0.3237  0.3633
+
+``` r
 # Keep water traversible but very costly (max value from model)
 cse_surface[lake_mask[] == 1] <- max(values(cse_surface))
 
 # Check again after assigning lakes
 summary(values(cse_surface))
+```
 
+    ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+    ##  0.1835  0.2926  0.3091  0.3110  0.3316  0.3633
+
+``` r
 # Quick plot
 plot(cse_surface, main = "Projected raw CSE surface with water = high cost")
+```
 
+![](07a_SpatialEvalFull_CSE_files/figure-gfm/check-alignment-1.png)<!-- -->
+
+``` r
 # Check column names of cse_df
 names(cse_df)
 ```
 
-# Step 3: Prepare pair table, site objects, and transition object  
+    ##  [1] "Var1"             "Var2"             "CSEdistance"      "lat1"            
+    ##  [5] "long1"            "lat2"             "long2"            "Pop1_cluster"    
+    ##  [9] "Pop2_cluster"     "pix_dist"         "BIO1_mean"        "BIO2_mean"       
+    ## [13] "BIO3_mean"        "BIO4_mean"        "BIO5_mean"        "BIO6_mean"       
+    ## [17] "BIO7_mean"        "BIO8S_mean"       "BIO9S_mean"       "BIO10S_mean"     
+    ## [21] "BIO11S_mean"      "BIO12_mean"       "BIO13_mean"       "BIO14_mean"      
+    ## [25] "BIO15_mean"       "BIO16S_mean"      "BIO17S_mean"      "BIO18S_mean"     
+    ## [29] "BIO19S_mean"      "alt_mean"         "slope_mean"       "riv_3km_mean"    
+    ## [33] "samp_20km_mean"   "lakes_mean"       "BIO1_median"      "BIO2_median"     
+    ## [37] "BIO3_median"      "BIO4_median"      "BIO5_median"      "BIO6_median"     
+    ## [41] "BIO7_median"      "BIO8S_median"     "BIO9S_median"     "BIO10S_median"   
+    ## [45] "BIO11S_median"    "BIO12_median"     "BIO13_median"     "BIO14_median"    
+    ## [49] "BIO15_median"     "BIO16S_median"    "BIO17S_median"    "BIO18S_median"   
+    ## [53] "BIO19S_median"    "alt_median"       "slope_median"     "riv_3km_median"  
+    ## [57] "samp_20km_median" "lakes_median"     "BIO1_mode"        "BIO2_mode"       
+    ## [61] "BIO3_mode"        "BIO4_mode"        "BIO5_mode"        "BIO6_mode"       
+    ## [65] "BIO7_mode"        "BIO8S_mode"       "BIO9S_mode"       "BIO10S_mode"     
+    ## [69] "BIO11S_mode"      "BIO12_mode"       "BIO13_mode"       "BIO14_mode"      
+    ## [73] "BIO15_mode"       "BIO16S_mode"      "BIO17S_mode"      "BIO18S_mode"     
+    ## [77] "BIO19S_mode"      "alt_mode"         "slope_mode"       "riv_3km_mode"    
+    ## [81] "samp_20km_mode"   "lakes_mode"
 
-Diagonal movement is allowed in the 16-way transition matrix, and conductance is corrected for geographic distance, with geoCorrection(type = "c"), so diagonal steps are appropriately penalized relative to orthogonal steps.
+# Step 3: Prepare pair table, site objects, and transition object
 
-```{r prep-transition}
+Diagonal movement is allowed in the 16-way transition matrix, and
+conductance is corrected for geographic distance, with
+geoCorrection(type = “c”), so diagonal steps are appropriately penalized
+relative to orthogonal steps.
+
+``` r
 # keep only within-cluster comparisons, matching your earlier workflow
 cse_df <- cse_df %>%
   filter(Pop1_cluster == Pop2_cluster) %>%
@@ -209,20 +311,49 @@ tr_cber <- geoCorrection(tr, type = "r")
 ```
 
 # Step 4: Sanity checks
-```{r sanity}
+
+``` r
 nrow(cse_df)
+```
+
+    ## [1] 1091
+
+``` r
 nrow(site_pairs)
+```
+
+    ## [1] 1091
+
+``` r
 nrow(sites_coords)
+```
 
+    ## [1] 67
+
+``` r
 head(site_pairs)
+```
 
+    ##     Var1   Var2            id       CSE
+    ## 1 01-AIN 02-GAN 01-AIN_02-GAN 0.2424627
+    ## 2 01-AIN 03-DUK 01-AIN_03-DUK 0.3169412
+    ## 3 02-GAN 03-DUK 02-GAN_03-DUK 0.3076377
+    ## 4 03-DUK 07-OSG 03-DUK_07-OSG 0.4064882
+    ## 5 02-GAN 07-OSG 02-GAN_07-OSG 0.3732382
+    ## 6 01-AIN 07-OSG 01-AIN_07-OSG 0.3726589
+
+``` r
 plot(cse_surface, main = "Projected raw CSE surface")
 plot(sites_sp, add = TRUE, pch = 16, cex = 0.5)
-```  
+```
 
-# Step 5: Compute least-cost paths in parallel (once) and save output  
+![](07a_SpatialEvalFull_CSE_files/figure-gfm/sanity-1.png)<!-- -->
+
+# Step 5: Compute least-cost paths in parallel (once) and save output
+
 Test one path first:
-```{r test-lcp}
+
+``` r
 # Test one least-cost path before parallel run
 i <- site_index[site_pairs$Var1[100]]
 j <- site_index[site_pairs$Var2[100]]
@@ -232,9 +363,12 @@ test_path <- shortestPath(tr_lcp, sites_sp[i, ], sites_sp[j, ], output = "Spatia
 plot(cse_surface, main = "Test least-cost path")
 lines(test_path, col = "red", lwd = 2)
 points(sites_sp[c(i, j), ], pch = 16)
-```  
-Run full loop:
-```{r save-lcp, eval = FALSE}
+```
+
+![](07a_SpatialEvalFull_CSE_files/figure-gfm/test-lcp-1.png)<!-- --> Run
+full loop:
+
+``` r
 output_dir <- file.path(results_dir_big, "least_cost_paths")
 dir.create(output_dir, showWarnings = FALSE)
 
@@ -284,7 +418,8 @@ st_write(paths_sf,
 ```
 
 # Step 7: Extract predicted CSE values along LCPs and calculate mean and sum
-```{r extract-mean-sum, eval = FALSE}
+
+``` r
 # if needed later, reload:
 paths_sf <- st_read(file.path(results_dir_big, "least_cost_paths", "LC_paths_fullRF_rawCSE.shp"), quiet = TRUE)
 
@@ -317,12 +452,13 @@ summary(LCP_results$LCP_sum)
 write.csv(LCP_results,file.path(results_dir, "spatial_eval_rawCSE_LCPpred.csv"), row.names = FALSE)
 
 write.csv(LCP_results,file.path(results_dir_big, "spatial_eval_rawCSE_LCPpred.csv"), row.names = FALSE)
+```
 
-```  
+# Step 8: Compute circuit-based effective resistance (CBER)
 
-# Step 8: Compute circuit-based effective resistance (CBER)  
 Test one CBER calculation first:
-```{r cber-test, eval = TRUE}
+
+``` r
 # test one CBER calculation first
 i <- site_index[site_pairs$Var1[1]]
 j <- site_index[site_pairs$Var2[1]]
@@ -331,9 +467,13 @@ dmat_test <- commuteDistance(tr_cber, sites_sp[c(i, j), ])
 
 as.numeric(dmat_test)[1] # returns the single number for pair
 ```
-Run as a loop sequentially, also save output from steps 6-8 to file again...
 
-```{r cber_calculations, eval = FALSE}
+    ## [1] 1542224
+
+Run as a loop sequentially, also save output from steps 6-8 to file
+again…
+
+``` r
 library(doParallel)
 library(foreach)
 library(gdistance)
@@ -392,11 +532,11 @@ str(cber_results)
 write.csv(cber_results,file.path(results_dir, "spatial_eval_rawCSE_cber.csv"), row.names = FALSE)
 
 write.csv(cber_results,file.path(results_dir_big, "spatial_eval_rawCSE_cber.csv"), row.names = FALSE)
-
 ```
 
 # Step 9: Combine LCP and CBER results
-```{r combine}
+
+``` r
 # load and bind your existing evaluation data
 library(dplyr)
 
@@ -421,7 +561,8 @@ saveRDS(
 ```
 
 # Step 10: Calculate evaluation metrics from eval_results
-```{r calibrate-and-metrics}
+
+``` r
 library(dplyr)
 library(ggplot2)
 
@@ -454,7 +595,13 @@ plot1 <- ggplot(eval_df, aes(x = LCP_sum, y = CSE)) +
     y = "Observed CSE"
   )
 plot1
+```
 
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](07a_SpatialEvalFull_CSE_files/figure-gfm/calibrate-and-metrics-1.png)<!-- -->
+
+``` r
 plot2 <- ggplot(eval_df, aes(x = LCP_mean, y = CSE)) +
   geom_point() +
   geom_smooth(method = "lm") +
@@ -463,7 +610,13 @@ plot2 <- ggplot(eval_df, aes(x = LCP_mean, y = CSE)) +
     y = "Observed CSE"
   )
 plot2
+```
 
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](07a_SpatialEvalFull_CSE_files/figure-gfm/calibrate-and-metrics-2.png)<!-- -->
+
+``` r
 plot3 <- ggplot(eval_df, aes(x = CBER, y = CSE)) +
   geom_point() +
   geom_smooth(method = "lm") +
@@ -472,7 +625,13 @@ plot3 <- ggplot(eval_df, aes(x = CBER, y = CSE)) +
     y = "Observed CSE"
   )
 plot3
+```
 
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+![](07a_SpatialEvalFull_CSE_files/figure-gfm/calibrate-and-metrics-3.png)<!-- -->
+
+``` r
 # Calculate formal metrics
 # Correlation is calculated on raw predictions because it is scale-invariant
 # Error metrics and R2 are calculated on calibrated predictions
@@ -514,7 +673,14 @@ metrics_df <- bind_rows(
 
 # Print metrics
 print(metrics_df)
+```
 
+    ##     method    n         MSE       RMSE        MAE         RSQ Correlation
+    ## 1 LCP_mean 1091 0.008041377 0.08967373 0.07147271 0.008405221 -0.09167999
+    ## 2  LCP_sum 1091 0.003425431 0.05852718 0.04619039 0.577604718  0.76000310
+    ## 3     CBER 1091 0.007377591 0.08589290 0.06745773 0.090257728  0.30042924
+
+``` r
 # Save outputs
 saveRDS(
   metrics_df,
@@ -538,12 +704,14 @@ write.csv(
 
 First, 7b-7f. Choose one response formulation and spatial summary.
 
-Then, after selecting the best response formulation and spatial summary:  
+Then, after selecting the best response formulation and spatial summary:
 
 Run the final validation framework, full LOPOCV evaluation, including:  
 - non-spatial evaluation  
-- spatial evaluation (mean LCP, sum LCP, or CBER depending on screening results)  
-- Calculate final metrics on held-out data (RMSE, R², MSE, MAE, correlation)
+- spatial evaluation (mean LCP, sum LCP, or CBER depending on screening
+results)  
+- Calculate final metrics on held-out data (RMSE, R², MSE, MAE,
+correlation)
 
 Permutation test for inference  
 - Run ~100 permutations where the response is randomized.
@@ -552,4 +720,6 @@ For each permutation:
 - rerun the full LOPOCV workflow  
 - recompute spatial predictions  
 - calculate the same evaluation metrics  
-Compare observed metrics (especially RMSE and R²) to the permutation distribution to test whether predictive performance is better than expected by chance.
+Compare observed metrics (especially RMSE and R²) to the permutation
+distribution to test whether predictive performance is better than
+expected by chance.
