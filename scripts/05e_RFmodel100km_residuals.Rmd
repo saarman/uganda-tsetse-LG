@@ -223,7 +223,7 @@ rf_predicted
 prediction_raster <- predict(env, rf_predicted, type = "response")
 
 # Write Prediction Raster to file
-writeRaster(prediction_raster, file.path(results_dir,"fullRF_residuals.tif"), format = "GTiff", overwrite = TRUE)
+writeRaster(prediction_raster, file.path(results_dir,"fullRF100km_residuals.tif"), format = "GTiff", overwrite = TRUE)
 ```
   
 ## Plot predicted residuals
@@ -258,7 +258,7 @@ plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```{r bivmap-scale, warning=FALSE}
 
 # Load raster layers
-con_raster <- rast(file.path(results_dir, "fullRF_residuals.tif"))
+con_raster <- rast(file.path(results_dir, "fullRF100km_residuals.tif"))
 fao <- rast(file.path(data_dir, "FAO_fuscipes_2001.tif"))
 update <- rast(file.path(data_dir, "SDM_2018update.tif"))
 

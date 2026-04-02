@@ -203,7 +203,7 @@ summary(values(cse_surface))
 ```
 
     ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-    ##  0.1790  0.2859  0.3025  0.2989  0.3237  0.3633
+    ##  0.1877  0.3098  0.3323  0.3322  0.3608  0.4338
 
 ``` r
 # Keep water traversible but very costly (max value from model)
@@ -214,7 +214,7 @@ summary(values(cse_surface))
 ```
 
     ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-    ##  0.1835  0.2926  0.3091  0.3110  0.3316  0.3633
+    ##  0.1922  0.3204  0.3386  0.3487  0.3728  0.4338
 
 ``` r
 # Quick plot
@@ -417,6 +417,11 @@ st_write(paths_sf,
          delete_layer = TRUE)
 ```
 
+    ## Deleting layer `LC_paths_fullRF_rawCSE' using driver `ESRI Shapefile'
+    ## Writing layer `LC_paths_fullRF_rawCSE' to data source 
+    ##   `/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results//least_cost_paths/LC_paths_fullRF_rawCSE.shp' using driver `ESRI Shapefile'
+    ## Writing 1091 features with 6 fields and geometry type Line String.
+
 # Step 7: Extract predicted CSE values along LCPs and calculate mean and sum
 
 ``` r
@@ -446,8 +451,19 @@ LCP_results <- site_pairs %>%
 
 
 summary(LCP_results$LCP_mean)
-summary(LCP_results$LCP_sum)
+```
 
+    ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+    ##  0.2560  0.2970  0.3096  0.3200  0.3339  0.4276
+
+``` r
+summary(LCP_results$LCP_sum)
+```
+
+    ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+    ##   1.716  36.219  64.318  71.369 100.138 227.064
+
+``` r
 # Save LCP output as text file in results directories
 write.csv(LCP_results,file.path(results_dir, "spatial_eval_rawCSE_LCPpred.csv"), row.names = FALSE)
 
@@ -468,7 +484,7 @@ dmat_test <- commuteDistance(tr_cber, sites_sp[c(i, j), ])
 as.numeric(dmat_test)[1] # returns the single number for pair
 ```
 
-    ## [1] 1542224
+    ## [1] 1596873
 
 Run as a loop sequentially, also save output from steps 6-8 to file
 again…
@@ -492,7 +508,11 @@ j <- site_index[site_pairs$Var2[1]]
 
 dmat_test <- commuteDistance(tr_cber, sites_sp[c(i, j), ])
 as.numeric(dmat_test)[1]
+```
 
+    ## [1] 1596873
+
+``` r
 # parallel loop across all 1091 pairs
 cber_results <- foreach(
   k = seq_len(nrow(site_pairs)),
@@ -526,8 +546,27 @@ stopCluster(cl)
 
 # inspect
 head(cber_results)
-str(cber_results)
+```
 
+    ##     Var1   Var2            id    CBER
+    ## 1 01-AIN 02-GAN 01-AIN_02-GAN 1596873
+    ## 2 01-AIN 03-DUK 01-AIN_03-DUK 1512439
+    ## 3 02-GAN 03-DUK 02-GAN_03-DUK 1386251
+    ## 4 03-DUK 07-OSG 03-DUK_07-OSG 2236234
+    ## 5 02-GAN 07-OSG 02-GAN_07-OSG 2241443
+    ## 6 01-AIN 07-OSG 01-AIN_07-OSG 2239248
+
+``` r
+str(cber_results)
+```
+
+    ## 'data.frame':    1091 obs. of  4 variables:
+    ##  $ Var1: chr  "01-AIN" "01-AIN" "02-GAN" "03-DUK" ...
+    ##  $ Var2: chr  "02-GAN" "03-DUK" "03-DUK" "07-OSG" ...
+    ##  $ id  : chr  "01-AIN_02-GAN" "01-AIN_03-DUK" "02-GAN_03-DUK" "03-DUK_07-OSG" ...
+    ##  $ CBER: num  1596873 1512439 1386251 2236234 2241443 ...
+
+``` r
 # save output in results directories
 write.csv(cber_results,file.path(results_dir, "spatial_eval_rawCSE_cber.csv"), row.names = FALSE)
 
@@ -675,10 +714,10 @@ metrics_df <- bind_rows(
 print(metrics_df)
 ```
 
-    ##     method    n         MSE       RMSE        MAE         RSQ Correlation
-    ## 1 LCP_mean 1091 0.008041377 0.08967373 0.07147271 0.008405221 -0.09167999
-    ## 2  LCP_sum 1091 0.003425431 0.05852718 0.04619039 0.577604718  0.76000310
-    ## 3     CBER 1091 0.007377591 0.08589290 0.06745773 0.090257728  0.30042924
+    ##     method    n         MSE       RMSE        MAE       RSQ Correlation
+    ## 1 LCP_mean 1091 0.007288414 0.08537221 0.06685447 0.1012543   0.3182048
+    ## 2  LCP_sum 1091 0.003114933 0.05581158 0.04540066 0.6158928   0.7847884
+    ## 3     CBER 1091 0.003508397 0.05923172 0.04633363 0.5673741   0.7532424
 
 ``` r
 # Save outputs

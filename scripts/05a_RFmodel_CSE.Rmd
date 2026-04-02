@@ -34,7 +34,7 @@ library(ggplot2)
 library(factoextra)   # for nice PCA plots
 library(ggpubr)
 ```
-
+## Directories
 ```{r input-dir}
 # base directories
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"

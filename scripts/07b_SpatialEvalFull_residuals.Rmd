@@ -59,7 +59,7 @@ Major outputs from this script are saved in two locations:
 This is a screening step (full model only). Use the fitted full model to compare candidate response formulations and spatial summaries.  
 
 Response formulations to compare:  
-- raw CSE (this script, 7a)  
+- raw CSE (script 7a)  
 - residuals from simple IBD model (script 7b)  
 - CSE/km (script 7c)
 

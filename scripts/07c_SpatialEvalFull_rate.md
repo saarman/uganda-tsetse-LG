@@ -1,4 +1,4 @@
-Spatial Evaluation – residuals (IBD by using LC lakes paths)
+Spatial Evaluation - CSE per km (rate, LC lakes paths)
 ================
 Norah Saarman
 2026-04-01
@@ -59,7 +59,7 @@ library(rnaturalearthdata)
 - `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with
   coordinates (long1, lat1, long2, lat2), same input used for building
   model.
-- `../results_dir/"fullRF_residuals.tif"` - Final full model projected
+- `../results_dir/fullRF_rate.tif` - Final full model projected
   estimates of CSE at 1 pixel geodist.
 - `../data_dir/processed/lake_binary.tif` \# binary lake mask (1 =
   water, 0 = land)
@@ -68,35 +68,34 @@ library(rnaturalearthdata)
 
 Major outputs from this script are saved in two locations:  
 **Small text outputs saved to results_dir within git repo:** -
-`spatial_eval_residuals_LCPpred.csv` Pairwise least-cost path summaries
-for each site pair: LCP_mean, LCP_sum. -
-`spatial_eval_residuals_cber.csv` Pairwise circuit-based effective
-resistance (CBER) values for each site pair. -
-`spatial_eval_residuals_predictions.csv` Combined pairwise evaluation
+`spatial_eval_rate_LCPpred.csv` Pairwise least-cost path summaries for
+each site pair: LCP_mean, LCP_sum. - `spatial_eval_rate_cber.csv`
+Pairwise circuit-based effective resistance (CBER) values for each site
+pair. - `spatial_eval_rate_predictions.csv` Combined pairwise evaluation
 table containing observed CSE and spatial predictions for each site
 pair: CSE, LCP_mean, LCP_sum, CBER. -
-`spatial_eval_residuals_eval_metrics.csv` Summary table of evaluation
-metrics for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE,
-R², MSE, MAE, Correlation.
+`spatial_eval_rate_eval_metrics.csv` Summary table of evaluation metrics
+for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE, R²,
+MSE, MAE, Correlation.
 
 **Large or reusable outputs saved to results_dir_big:** -
-`least_cost_paths/LC_paths_fullRF_residuals.shp` Saved least-cost-path
+`least_cost_paths/LC_paths_fullRF_rate.shp` Saved least-cost-path
 spatial lines for all evaluated site pairs. This is a reusable spatial
 output and does not need to be recomputed unless the resistance surface
-changes. - `spatial_eval_residuals_LCPpred.csv` Backup copy of
-least-cost path summaries. - `spatial_eval_residuals_cber.csv` Backup
-copy of circuit-based effective resistance (CBER) results. -
-`spatial_eval_residuals_predictions.rds` R object version of the
-combined evaluation table (eval_results) for quick reloading in later
-scripts. - `spatial_eval_residuals_predictions.csv` Backup copy of the
-combined evaluation table saved in the large-results directory. -
-`spatial_eval_residuals_predictions_calibrated.rds` R object version of
-the evaluation table with calibrated predictions (eval_df), including
+changes. - `spatial_eval_rate_LCPpred.csv` Backup copy of least-cost
+path summaries. - `spatial_eval_rate_cber.csv` Backup copy of
+circuit-based effective resistance (CBER) results. -
+`spatial_eval_rate_predictions.rds` R object version of the combined
+evaluation table (eval_results) for quick reloading in later scripts. -
+`spatial_eval_rate_predictions.csv` Backup copy of the combined
+evaluation table saved in the large-results directory. -
+`spatial_eval_rate_predictions_calibrated.rds` R object version of the
+evaluation table with calibrated predictions (eval_df), including
 LCP_mean_cal, LCP_sum_cal, and CBER_cal. -
-`spatial_eval_residuals_eval_metrics.rds` R object version of the
-evaluation metrics table (metrics_df) for quick reloading in later
-scripts. - `spatial_eval_residuals_eval_metrics.csv` Backup copy of the
-evaluation metrics table saved in the large-results directory.
+`spatial_eval_rate_eval_metrics.rds` R object version of the evaluation
+metrics table (metrics_df) for quick reloading in later scripts. -
+`spatial_eval_rate_eval_metrics.csv` Backup copy of the evaluation
+metrics table saved in the large-results directory.
 
 # Step 0: Script Outline
 
@@ -108,10 +107,9 @@ Response formulations to compare:
 - residuals from simple IBD model (script 7b)  
 - CSE/km (script 7c)
 
-**For this script (7b):**  
-Run spatial evaluation across the residuals resistance surface
-(projected estimates of residuals) to estimate evaluation metrics by 3
-methods:  
+**For this script (7c):**  
+Run spatial evaluation across the CSE/km resistance surface (projected
+estimates of CSE/km) to estimate evaluation metrics by 3 methods:  
 1. Mean across least-cost path (mean LCP)  
 2. Sum across least-cost path (sum LCP)  
 3. Circuit-based effective resistance (CBER)
@@ -167,7 +165,7 @@ crs_geo <- 4326     # EPSG code for WGS84
 
 ######################################
 # What surface are you using?
-surf_file  <- file.path(results_dir_big, "fullRF_residuals.tif")
+surf_file  <- file.path(results_dir_big, "fullRF_rate.tif")
 ########################################
 
 lake_file  <- file.path(data_dir, "processed", "lake_binary.tif")
@@ -204,7 +202,7 @@ summary(values(cse_surface))
 ```
 
     ##     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
-    ## -0.13626 -0.00128  0.01825  0.01800  0.04173  0.13413
+    ## 0.001359 0.005825 0.014867 0.015209 0.022207 0.042114
 
 ``` r
 # Keep water traversible but very costly (max value from model)
@@ -214,15 +212,15 @@ cse_surface[lake_mask[] == 1] <- max(values(cse_surface))
 summary(values(cse_surface))
 ```
 
-    ##      Min.   1st Qu.    Median      Mean   3rd Qu.      Max. 
-    ## -0.133161  0.005422  0.024874  0.036160  0.057104  0.134129
+    ##     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+    ## 0.001359 0.005825 0.014867 0.017235 0.028132 0.042114
 
 ``` r
 # Quick plot
 plot(cse_surface, main = "Projected raw CSE surface with water = high cost")
 ```
 
-![](07b_SpatialEvalFull_residuals_files/figure-gfm/check-alignment-1.png)<!-- -->
+![](07c_SpatialEvalFull_rate_files/figure-gfm/check-alignment-1.png)<!-- -->
 
 ``` r
 # Check column names of cse_df
@@ -348,7 +346,7 @@ plot(cse_surface, main = "Projected raw CSE surface")
 plot(sites_sp, add = TRUE, pch = 16, cex = 0.5)
 ```
 
-![](07b_SpatialEvalFull_residuals_files/figure-gfm/sanity-1.png)<!-- -->
+![](07c_SpatialEvalFull_rate_files/figure-gfm/sanity-1.png)<!-- -->
 
 # Step 5: Compute least-cost paths in parallel (once) and save output
 
@@ -366,7 +364,7 @@ lines(test_path, col = "red", lwd = 2)
 points(sites_sp[c(i, j), ], pch = 16)
 ```
 
-![](07b_SpatialEvalFull_residuals_files/figure-gfm/test-lcp-1.png)<!-- -->
+![](07c_SpatialEvalFull_rate_files/figure-gfm/test-lcp-1.png)<!-- -->
 Run full loop:
 
 ``` r
@@ -414,20 +412,20 @@ paths_sf <- left_join(paths_sf, site_pairs, by = "id")
 
 # save paths
 st_write(paths_sf,
-         file.path(output_dir, "LC_paths_fullRF_residuals.shp"),
+         file.path(output_dir, "LC_paths_fullRF_rate.shp"),
          delete_layer = TRUE)
 ```
 
-    ## Deleting layer `LC_paths_fullRF_residuals' using driver `ESRI Shapefile'
-    ## Writing layer `LC_paths_fullRF_residuals' to data source 
-    ##   `/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results//least_cost_paths/LC_paths_fullRF_residuals.shp' using driver `ESRI Shapefile'
+    ## Deleting layer `LC_paths_fullRF_rate' using driver `ESRI Shapefile'
+    ## Writing layer `LC_paths_fullRF_rate' to data source 
+    ##   `/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results//least_cost_paths/LC_paths_fullRF_rate.shp' using driver `ESRI Shapefile'
     ## Writing 1091 features with 6 fields and geometry type Line String.
 
 # Step 7: Extract predicted CSE values along LCPs and calculate mean and sum
 
 ``` r
 # if needed later, reload:
-paths_sf <- st_read(file.path(results_dir_big, "least_cost_paths", "LC_paths_fullRF_residuals.shp"), quiet = TRUE)
+paths_sf <- st_read(file.path(results_dir_big, "least_cost_paths", "LC_paths_fullRF_rate.shp"), quiet = TRUE)
 
 # transform paths to raster CRS for extraction
 paths_extract <- st_transform(paths_sf, crs = crs(cse_surface))
@@ -453,33 +451,33 @@ LCP_results <- site_pairs %>%
 head(LCP_results)
 ```
 
-    ##     Var1   Var2            id       CSE     LCP_mean     LCP_sum
-    ## 1 01-AIN 02-GAN 01-AIN_02-GAN 0.2424627  0.004104207  0.04514628
-    ## 2 01-AIN 03-DUK 01-AIN_03-DUK 0.3169412  0.001798512  0.01258958
-    ## 3 02-GAN 03-DUK 02-GAN_03-DUK 0.3076377  0.011827767  0.05913883
-    ## 4 03-DUK 07-OSG 03-DUK_07-OSG 0.4064882 -0.004983703 -0.44354952
-    ## 5 02-GAN 07-OSG 02-GAN_07-OSG 0.3732382 -0.004460707 -0.42376719
-    ## 6 01-AIN 07-OSG 01-AIN_07-OSG 0.3726589 -0.005287680 -0.50232960
+    ##     Var1   Var2            id       CSE    LCP_mean   LCP_sum
+    ## 1 01-AIN 02-GAN 01-AIN_02-GAN 0.2424627 0.024205155 0.3630773
+    ## 2 01-AIN 03-DUK 01-AIN_03-DUK 0.3169412 0.034300714 0.2401050
+    ## 3 02-GAN 03-DUK 02-GAN_03-DUK 0.3076377 0.029064534 0.1743872
+    ## 4 03-DUK 07-OSG 03-DUK_07-OSG 0.4064882 0.009064666 1.5681872
+    ## 5 02-GAN 07-OSG 02-GAN_07-OSG 0.3732382 0.008674687 1.4660221
+    ## 6 01-AIN 07-OSG 01-AIN_07-OSG 0.3726589 0.009501005 1.7006799
 
 ``` r
 summary(LCP_results$LCP_mean)
 ```
 
-    ##      Min.   1st Qu.    Median      Mean   3rd Qu.      Max. 
-    ## -0.064707 -0.013654 -0.009275 -0.004701 -0.002208  0.109985
+    ##     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+    ## 0.002098 0.003108 0.004279 0.005205 0.006225 0.034301
 
 ``` r
 summary(LCP_results$LCP_sum)
 ```
 
-    ##     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
-    ## -13.6636  -4.0026  -1.9214  -1.7291  -0.2168  11.0157
+    ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+    ## 0.03263 0.56675 1.13024 1.27441 1.82305 4.39909
 
 ``` r
 # Save LCP output as text file in results directories
-write.csv(LCP_results,file.path(results_dir, "spatial_eval_residuals_LCPpred.csv"), row.names = FALSE)
+write.csv(LCP_results,file.path(results_dir, "spatial_eval_rate_LCPpred.csv"), row.names = FALSE)
 
-write.csv(LCP_results,file.path(results_dir_big, "spatial_eval_residuals_LCPpred.csv"), row.names = FALSE)
+write.csv(LCP_results,file.path(results_dir_big, "spatial_eval_rate_LCPpred.csv"), row.names = FALSE)
 ```
 
 # Step 8: Compute circuit-based effective resistance (CBER)
@@ -496,7 +494,7 @@ dmat_test <- commuteDistance(tr_cber, sites_sp[c(i, j), ])
 as.numeric(dmat_test)[1] # returns the single number for pair
 ```
 
-    ## [1] 1901729
+    ## [1] 5289128
 
 Run as a loop sequentially, also save output from steps 6-8 to file
 again…
@@ -522,7 +520,7 @@ dmat_test <- commuteDistance(tr_cber, sites_sp[c(i, j), ])
 as.numeric(dmat_test)[1]
 ```
 
-    ## [1] 1901729
+    ## [1] 5289128
 
 ``` r
 # parallel loop across all 1091 pairs
@@ -561,12 +559,12 @@ head(cber_results)
 ```
 
     ##     Var1   Var2            id    CBER
-    ## 1 01-AIN 02-GAN 01-AIN_02-GAN 1901729
-    ## 2 01-AIN 03-DUK 01-AIN_03-DUK 1163386
-    ## 3 02-GAN 03-DUK 02-GAN_03-DUK 1561393
-    ## 4 03-DUK 07-OSG 03-DUK_07-OSG 6651086
-    ## 5 02-GAN 07-OSG 02-GAN_07-OSG 7431919
-    ## 6 01-AIN 07-OSG 01-AIN_07-OSG 7013223
+    ## 1 01-AIN 02-GAN 01-AIN_02-GAN 5289128
+    ## 2 01-AIN 03-DUK 01-AIN_03-DUK 6041662
+    ## 3 02-GAN 03-DUK 02-GAN_03-DUK 4508563
+    ## 4 03-DUK 07-OSG 03-DUK_07-OSG 4633766
+    ## 5 02-GAN 07-OSG 02-GAN_07-OSG 3477142
+    ## 6 01-AIN 07-OSG 01-AIN_07-OSG 4982602
 
 ``` r
 str(cber_results)
@@ -576,13 +574,13 @@ str(cber_results)
     ##  $ Var1: chr  "01-AIN" "01-AIN" "02-GAN" "03-DUK" ...
     ##  $ Var2: chr  "02-GAN" "03-DUK" "03-DUK" "07-OSG" ...
     ##  $ id  : chr  "01-AIN_02-GAN" "01-AIN_03-DUK" "02-GAN_03-DUK" "03-DUK_07-OSG" ...
-    ##  $ CBER: num  1901729 1163386 1561393 6651086 7431919 ...
+    ##  $ CBER: num  5289128 6041662 4508563 4633766 3477142 ...
 
 ``` r
 # save output in results directories
-write.csv(cber_results,file.path(results_dir, "spatial_eval_residuals_cber.csv"), row.names = FALSE)
+write.csv(cber_results,file.path(results_dir, "spatial_eval_rate_cber.csv"), row.names = FALSE)
 
-write.csv(cber_results,file.path(results_dir_big, "spatial_eval_residuals_cber.csv"), row.names = FALSE)
+write.csv(cber_results,file.path(results_dir_big, "spatial_eval_rate_cber.csv"), row.names = FALSE)
 ```
 
 # Step 9: Combine LCP and CBER results
@@ -592,7 +590,7 @@ write.csv(cber_results,file.path(results_dir_big, "spatial_eval_residuals_cber.c
 library(dplyr)
 
 # load the LCP sum and mean results you just computed
-LCP_results <- read.csv(file.path(results_dir, "spatial_eval_residuals_LCPpred.csv"))
+LCP_results <- read.csv(file.path(results_dir, "spatial_eval_rate_LCPpred.csv"))
 
 # bind CBER and LCP results
 eval_results <- LCP_results %>%
@@ -604,7 +602,7 @@ eval_results <- LCP_results %>%
 # Save results output as RDS for later ease of loading
 saveRDS(
   eval_results,
-  file.path(results_dir_big, "spatial_eval_residuals_predictions.rds")
+  file.path(results_dir_big, "spatial_eval_rate_predictions.rds")
 )
 ```
 
@@ -647,7 +645,7 @@ plot1
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-![](07b_SpatialEvalFull_residuals_files/figure-gfm/calibrate-and-metrics-1.png)<!-- -->
+![](07c_SpatialEvalFull_rate_files/figure-gfm/calibrate-and-metrics-1.png)<!-- -->
 
 ``` r
 plot2 <- ggplot(eval_df, aes(x = LCP_mean, y = CSE)) +
@@ -662,7 +660,7 @@ plot2
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-![](07b_SpatialEvalFull_residuals_files/figure-gfm/calibrate-and-metrics-2.png)<!-- -->
+![](07c_SpatialEvalFull_rate_files/figure-gfm/calibrate-and-metrics-2.png)<!-- -->
 
 ``` r
 plot3 <- ggplot(eval_df, aes(x = CBER, y = CSE)) +
@@ -677,7 +675,7 @@ plot3
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-![](07b_SpatialEvalFull_residuals_files/figure-gfm/calibrate-and-metrics-3.png)<!-- -->
+![](07c_SpatialEvalFull_rate_files/figure-gfm/calibrate-and-metrics-3.png)<!-- -->
 
 ``` r
 # Calculate formal metrics
@@ -723,27 +721,27 @@ metrics_df <- bind_rows(
 print(metrics_df)
 ```
 
-    ##     method    n         MSE       RMSE        MAE         RSQ Correlation
-    ## 1 LCP_mean 1091 0.008004301 0.08946676 0.07061746 0.012977113   0.1139171
-    ## 2  LCP_sum 1091 0.008085445 0.08991910 0.07127313 0.002971155  -0.0545083
-    ## 3     CBER 1091 0.007085320 0.08417434 0.06665123 0.126298189   0.3553846
+    ##     method    n         MSE       RMSE        MAE       RSQ Correlation
+    ## 1 LCP_mean 1091 0.007946381 0.08914247 0.07077996 0.0201194  -0.1418429
+    ## 2  LCP_sum 1091 0.004766389 0.06903904 0.05503143 0.4122492   0.6420663
+    ## 3     CBER 1091 0.007274920 0.08529314 0.06762456 0.1029182   0.3208087
 
 ``` r
 # Save outputs
 saveRDS(
   metrics_df,
-  file.path(results_dir_big, "spatial_eval_residuals_eval_metrics.rds")
+  file.path(results_dir_big, "spatial_eval_rate_eval_metrics.rds")
 )
 
 write.csv(
   metrics_df,
-  file.path(results_dir_big, "spatial_eval_residuals_eval_metrics.csv"),
+  file.path(results_dir_big, "spatial_eval_rate_eval_metrics.csv"),
   row.names = FALSE
 )
 
 write.csv(
   metrics_df,
-  file.path(results_dir, "spatial_eval_residuals_eval_metrics.csv"),
+  file.path(results_dir, "spatial_eval_rate_eval_metrics.csv"),
   row.names = FALSE
 )
 ```
