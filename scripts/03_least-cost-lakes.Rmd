@@ -1,15 +1,27 @@
 ---
 title: "Least-cost paths avoiding lakes"
 author: "Norah Saarman"
-date: "2025-06-10"
+date: "`r Sys.Date()`"
 output:
   github_document:
     toc: true
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_dir = "../scripts_knitted_md", 
+      envir = globalenv()
+    )
+  })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  # Saves PNGs to the root /figures folder
+  fig.path = "../figures/knitted_mds/" 
+)
 ```
+
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
 - **Number of cores:** 4 (up to 32 available)   

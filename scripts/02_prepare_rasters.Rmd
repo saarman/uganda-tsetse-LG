@@ -1,22 +1,33 @@
 ---
 title: "Uganda tsetse prepare rasters"
 author: "Norah Saarman"
-date: "2025-06-11"
+date: "`r Sys.Date()`"
 output:
   github_document:
     toc: true
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_dir = "../scripts_knitted_md", 
+      envir = globalenv()
+    )
+  })
 ---
-  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  # Saves PNGs to the root /figures folder
+  fig.path = "../figures/knitted_mds/" 
+)
+```
+
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
 - **Number of cores:** 4 (up to 32 available)   
 - **Account:** saarman-np  
-- **Partition:** saarman-shared-np (allows multiple simultaneous jobs)
+- **Partition:** saarman-np (allows multiple simultaneous jobs)
 - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
 # 1. Setup
 ```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
