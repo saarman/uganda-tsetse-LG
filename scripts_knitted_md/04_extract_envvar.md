@@ -1,36 +1,29 @@
----
-title: "Extract environmental variables along paths"
-author: "Norah Saarman"
-date: "`r Sys.Date()`"
-output:
-  github_document:
-    toc: true
-knit: (function(input, ...) {
-    rmarkdown::render(
-      input,
-      output_dir = "../scripts_knitted_md", 
-      envir = globalenv()
-    )
-  })
----
+Extract environmental variables along paths
+================
+Norah Saarman
+2026-04-04
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  echo = TRUE,
-  # Saves PNGs to the root /figures folder
-  fig.path = "../figures/knitted_mds/" 
-)
-```
+- [Setup](#setup)
+- [Inputs](#inputs)
+- [Outputs](#outputs)
+- [1. Load environmental rasters](#1-load-environmental-rasters)
+  - [Plot as a check and for fun :)](#plot-as-a-check-and-for-fun-)
+- [2. Load forecast RCP 4.5 environmental
+  rasters](#2-load-forecast-rcp-45-environmental-rasters)
+- [3. Extract mean, median, mode for each env summaries in
+  parallel](#3-extract-mean-median-mode-for-each-env-summaries-in-parallel)
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 4 (up to 32 available)   
+- **Number of cores:** 4 (up to 32 available)  
 - **Account:** saarman-np  
 - **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
-- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)    
+- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding
+half)
 
 # Setup
-```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+
+``` r
 # load only required packages
 library(raster)
 library(gdistance)
@@ -65,22 +58,38 @@ crs_geo <- 4326     # EPSG code for WGS84
 ```
 
 # Inputs
-  - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2) 
-  - `../data_dir/processed/altitude_1KMmedian_MERIT_UgandaClip.tif` - Median elevation at 1 km resolution (MERIT DEM)  
-  - `../data_dir/processed/slope_1KMmedian_MERIT_UgandaClip.tif` - Median slope (degrees) at 1 km resolution (derived from MERIT DEM)  
-  - `../data_dir/processed/UgandaBiovarsSeasonalAllYears.tif` - Seasonal BioClim variables (all seasons, all years)    
-  - `../data_dir/processed/river_kernel_density_3km.tif` - 3 km river+lake edge density 
-  - `../data_dir/processed/sample_kernel_density_20km.tif` - 20 km sampling density
-  - `../data_dir/processed/lake_binary.tif` - binary lake mask (1 = water, 0 = land)  
-  - `../data_dir/processed/geo_dist_uniform.tif` - uniform geographic distance raster   
-  - `../data_dir/raw/ne_10m_lakes.shp` - shapefile of lakes  
-  - `../data_dir/processed/LC_paths.shp` - Least cost paths spatialLines shapefile  
-  
-# Outputs  
-  - `../input/Gff_cse_envCostPaths.csv`  - Combined CSE table with coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance in sum of pixels, and mean, median, mode of each Env parameter   - `../data_dir/processed/env_stack.grd` - Final raster stack for prediction including pix_dist
-  
-# 1. Load environmental rasters  
-```{r, rasters}
+
+- `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2)
+- `../data_dir/processed/altitude_1KMmedian_MERIT_UgandaClip.tif` -
+  Median elevation at 1 km resolution (MERIT DEM)  
+- `../data_dir/processed/slope_1KMmedian_MERIT_UgandaClip.tif` - Median
+  slope (degrees) at 1 km resolution (derived from MERIT DEM)  
+- `../data_dir/processed/UgandaBiovarsSeasonalAllYears.tif` - Seasonal
+  BioClim variables (all seasons, all years)  
+- `../data_dir/processed/river_kernel_density_3km.tif` - 3 km river+lake
+  edge density
+- `../data_dir/processed/sample_kernel_density_20km.tif` - 20 km
+  sampling density
+- `../data_dir/processed/lake_binary.tif` - binary lake mask (1 = water,
+  0 = land)  
+- `../data_dir/processed/geo_dist_uniform.tif` - uniform geographic
+  distance raster  
+- `../data_dir/raw/ne_10m_lakes.shp` - shapefile of lakes  
+- `../data_dir/processed/LC_paths.shp` - Least cost paths spatialLines
+  shapefile
+
+# Outputs
+
+- `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance
+  in sum of pixels, and mean, median, mode of each Env parameter -
+  `../data_dir/processed/env_stack.grd` - Final raster stack for
+  prediction including pix_dist
+
+# 1. Load environmental rasters
+
+``` r
 # define WGS84 CRS
 crs_geo <- "+proj=longlat +datum=WGS84 +no_defs"
 
@@ -137,12 +146,17 @@ names(geo_dist) <- "pix_dist"
 # Stack all for extracting mean/median/mode
 env <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster)
 plot(env, maxnl = nlayers(env), axes = FALSE, box = FALSE, frame.plot = FALSE)
+```
 
+![](../figures/knitted_mds/rasters-1.png)<!-- -->
+
+``` r
 # Save to File: full env stack including pix_dist
 ## for later projection, need all layers
 envstack <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster, geo_dist)
 ```
-```{r, eval = FALSE}
+
+``` r
 # write to file as .grd to retain layer names
 writeRaster(envstack,
             filename = file.path(data_dir, "processed", "env_stack.grd"),
@@ -157,17 +171,26 @@ writeRaster(envstack,
 
 write.csv(names(envstack),file.path(data_dir, "processed", "env_stack_layers.csv"))
 ```
-## Plot as a check and for fun :) 
-```{r plot-for-fun}
+
+## Plot as a check and for fun :)
+
+``` r
 # plot all envstack
 plot(envstack, axes = FALSE, box = FALSE, frame.plot = FALSE, maxnl = nlayers(envstack))
+```
 
+![](../figures/knitted_mds/plot-for-fun-1.png)<!-- -->
+
+``` r
 # plot one layer, slope for example
 plot(envstack[["slope"]], axes = FALSE, box = FALSE, frame.plot = FALSE)
 ```
 
-# 2. Load forecast RCP 4.5 environmental rasters  
-```{r, forecast-rasters}
+![](../figures/knitted_mds/plot-for-fun-2.png)<!-- -->
+
+# 2. Load forecast RCP 4.5 environmental rasters
+
+``` r
 # define WGS84 CRS
 crs_geo <- "+proj=longlat +datum=WGS84 +no_defs"
 
@@ -176,6 +199,11 @@ envvars1 <- stack(
   file.path(data_dir, "forecasts", "UgandaBiovarsSeasonalFuture.tif"))
 crs(envvars1) <- crs_geo
 plot(envvars1)
+```
+
+![](../figures/knitted_mds/forecast-rasters-1.png)<!-- -->
+
+``` r
 names(envvars1) <- c(paste0("BIO", 8:11, "S"), paste0("BIO", 16:19, "S"))
 
 # load additional BioClim layers (annual, monthly, etc) and assign CRS
@@ -183,6 +211,11 @@ envvars2 <- stack(
   file.path(data_dir, "forecasts","UgandaBiovarsFuture.tif"))
 crs(envvars2) <- crs_geo
 plot(envvars2)
+```
+
+![](../figures/knitted_mds/forecast-rasters-2.png)<!-- -->
+
+``` r
 names(envvars2) <- paste0("BIO",c(1:19))
 
 # combine envvars in order
@@ -225,7 +258,11 @@ names(geo_dist) <- "pix_dist"
 # Stack all for extracting mean/median/mode
 env <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster)
 plot(env, maxnl = nlayers(env), axes = FALSE, box = FALSE, frame.plot = FALSE)
+```
 
+![](../figures/knitted_mds/forecast-rasters-3.png)<!-- -->
+
+``` r
 # Save to File: full env stack including pix_dist
 ## for later projection, need all layers
 envstack <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster, geo_dist)
@@ -236,7 +273,8 @@ envBase <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 envstack <- crop(envstack, envBase)
 envstack <- mask(envstack, envBase)
 ```
-```{r, eval = FALSE}
+
+``` r
 # write to file as .grd to retain layer names
 writeRaster(envstack,
             filename = file.path(data_dir, "processed", "env_stack_RCP4_5.grd",
@@ -253,7 +291,8 @@ write.csv(names(envstack),file.path(data_dir, "processed", "env_stack_layers_RCP
 ```
 
 # 3. Extract mean, median, mode for each env summaries in parallel
-```{r extract, eval=FALSE}
+
+``` r
 # assumes shape file of least-cost paths have already been created
 lines_sf <- st_read(file.path(data_dir,"processed","LC_paths.shp"), quiet=TRUE)
 
@@ -313,8 +352,8 @@ res <- cbind(G.table, pix_dist, env_summ)
 #preview
 head(res)
 ```
-```{r, eval = FALSE}
 
+``` r
 # and write it all out to a single CSV
 write.csv(
   res,

@@ -1,0 +1,482 @@
+Iterative RF model and least-cost path updating
+================
+Norah Saarman
+2026-04-04
+
+- [Setup](#setup)
+  - [Directories and inputs](#directories-and-inputs)
+- [1. Load environmental rasters](#1-load-environmental-rasters)
+- [2. Starting paths](#2-starting-paths)
+- [3. Helper functions](#3-helper-functions)
+- [4. Run iterative path extraction and model
+  updating](#4-run-iterative-path-extraction-and-model-updating)
+- [5. Review iteration summaries](#5-review-iteration-summaries)
+- [6. Notes](#6-notes)
+- [7. Likely places to adjust](#7-likely-places-to-adjust)
+
+RStudio Configuration:  
+- R version: R 4.4.0 (Geospatial packages)  
+- Number of cores: 4 (up to 32 available)  
+- Account: saarman-np  
+- Partition: saarman-np or saarman-shared-np  
+- Memory per job: 100G
+
+# Setup
+
+``` r
+library(randomForest)
+library(raster)
+library(terra)
+library(sf)
+library(sp)
+library(gdistance)
+library(dplyr)
+library(foreach)
+library(doParallel)
+```
+
+## Directories and inputs
+
+``` r
+# base directories
+data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
+input_dir <- "../input"
+results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results"
+
+# main pairwise table with coordinates and CSE
+G.table <- read.csv(
+  file.path(input_dir, "Gff_11loci_68sites_cse.csv"),
+  header = TRUE
+)
+
+# optional: remove western outlier now so it stays consistent through all iterations
+G.table <- G.table %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB")
+
+# create pair id
+G.table$id <- paste(G.table$Var1, G.table$Var2, sep = "_")
+
+# define coordinate reference system
+crs_geo <- "+proj=longlat +datum=WGS84 +no_defs"
+
+# number of iterations
+n_iter <- 10
+
+# number of cores
+n_cores <- 4
+```
+
+# 1. Load environmental rasters
+
+``` r
+# seasonal BioClim stack
+envvars1 <- stack(
+  file.path(data_dir, "processed", "UgandaBiovarsSeasonalAllYears.tif")
+)
+crs(envvars1) <- crs_geo
+names(envvars1) <- c(paste0("BIO", 8:11, "S"), paste0("BIO", 16:19, "S"))
+
+# additional BioClim layers
+envvars2 <- stack(
+  file.path(data_dir, "processed", "UgandaBiovarsQuartersAllYears.tif")
+)
+crs(envvars2) <- crs_geo
+names(envvars2) <- paste0("BIO", c(1:19))
+
+# combine in desired order
+envvars <- raster::stack(
+  envvars2[[1:7]],
+  envvars1[[1:4]],
+  envvars2[[12:15]],
+  envvars1[[5:8]]
+)
+
+# load elevation and slope rasters
+altitude <- raster(
+  file.path(data_dir, "processed", "altitude_1KMmedian_MERIT_UgandaClip.tif")
+)
+crs(altitude) <- crs_geo
+names(altitude) <- "alt"
+
+slope <- raster(
+  file.path(data_dir, "processed", "slope_1KMmedian_MERIT_UgandaClip.tif")
+)
+crs(slope) <- crs_geo
+names(slope) <- "slope"
+
+# load river and sampling kernels
+rivers <- raster(
+  file.path(data_dir, "processed", "river_kernel_density_3km.tif")
+)
+crs(rivers) <- crs_geo
+names(rivers) <- "riv_3km"
+
+kernel <- raster(
+  file.path(data_dir, "processed", "sample_kernel_density_20km.tif")
+)
+crs(kernel) <- crs_geo
+names(kernel) <- "samp_20km"
+
+# load lake binary layer
+lakeRaster <- raster(
+  file.path(data_dir, "processed", "lake_binary.tif")
+)
+crs(lakeRaster) <- crs_geo
+names(lakeRaster) <- "lakes"
+
+# load uniform geographic distance raster
+geo_dist <- raster(
+  file.path(data_dir, "processed", "geo_dist_uniform.tif")
+)
+crs(geo_dist) <- crs_geo
+names(geo_dist) <- "pix_dist"
+
+# stack for extraction
+env <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster)
+
+# stack for RF projection
+envstack <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster, geo_dist)
+
+# optional: neutralize sampling density before projection if desired
+# envstack$samp_20km <- 1.027064e-11
+```
+
+# 2. Starting paths
+
+Iteration 1 starts from the existing least-cost paths that already avoid
+lakes.
+
+``` r
+current_lines_sf <- st_read(
+  file.path(data_dir, "processed", "LC_paths.shp"),
+  quiet = TRUE
+)
+
+# make sure paths are in geographic coordinates
+current_lines_sf <- st_transform(current_lines_sf, crs = st_crs(crs_geo))
+```
+
+# 3. Helper functions
+
+``` r
+get_mode <- function(x) {
+  ux <- unique(x[!is.na(x)])
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+make_pair_points <- function(pair_table, crs_string) {
+  p1 <- SpatialPoints(
+    coords = pair_table[, c("long1", "lat1")],
+    proj4string = CRS(crs_string)
+  )
+  p2 <- SpatialPoints(
+    coords = pair_table[, c("long2", "lat2")],
+    proj4string = CRS(crs_string)
+  )
+  list(p1 = p1, p2 = p2)
+}
+
+split_lines_list <- function(lines_sf) {
+  lines_sp <- as(lines_sf, "Spatial")
+  lapply(seq_len(length(lines_sp)), function(i) lines_sp[i, ])
+}
+
+extract_env_along_paths <- function(lines_sf, env, geo_dist, pair_table, n_cores = 4) {
+  sp_lines_list <- split_lines_list(lines_sf)
+
+  cl <- makeCluster(n_cores)
+  registerDoParallel(cl)
+  clusterExport(cl, "get_mode")
+
+  env_summ <- foreach(
+    i = seq_along(sp_lines_list),
+    .combine = rbind,
+    .packages = "raster"
+  ) %dopar% {
+    vals <- extract(env, sp_lines_list[[i]])[[1]]
+
+    means <- colMeans(vals, na.rm = TRUE)
+    medians <- apply(vals, 2, median, na.rm = TRUE)
+    modes <- apply(vals, 2, get_mode)
+
+    data.frame(t(c(means, medians, modes)))
+  }
+
+  geo_dist_sum <- foreach(
+    i = seq_along(sp_lines_list),
+    .combine = c,
+    .packages = "raster"
+  ) %dopar% {
+    vals <- extract(geo_dist, sp_lines_list[[i]])[[1]]
+    sum(vals, na.rm = TRUE)
+  }
+
+  stopCluster(cl)
+
+  lay_names <- names(env)
+  new_names <- c(
+    paste0(lay_names, "_mean"),
+    paste0(lay_names, "_median"),
+    paste0(lay_names, "_mode")
+  )
+  colnames(env_summ) <- new_names
+
+  res <- cbind(
+    pair_table,
+    data.frame(pix_dist = geo_dist_sum),
+    env_summ
+  )
+
+  res
+}
+
+fit_rf_mean_model <- function(path_table, ntree = 500, seed = 1234) {
+  predictor_vars <- c(
+    "BIO1_mean", "BIO2_mean", "BIO3_mean", "BIO4_mean",
+    "BIO5_mean", "BIO6_mean", "BIO7_mean",
+    "BIO8S_mean", "BIO9S_mean", "BIO10S_mean", "BIO11S_mean",
+    "BIO12_mean", "BIO13_mean", "BIO14_mean", "BIO15_mean",
+    "BIO16S_mean", "BIO17S_mean", "BIO18S_mean", "BIO19S_mean",
+    "slope_mean", "alt_mean", "lakes_mean", "riv_3km_mean",
+    "samp_20km_mean", "pix_dist"
+  )
+
+  rf_mean_data <- path_table[, c("CSEdistance", predictor_vars)]
+  names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
+
+  set.seed(seed)
+  rf_model <- tuneRF(
+    x = rf_mean_data[, -1],
+    y = rf_mean_data$CSEdistance,
+    ntreeTry = ntree,
+    stepFactor = 1.5,
+    improve = 0.01,
+    trace = TRUE,
+    plot = FALSE,
+    doBest = TRUE,
+    importance = TRUE
+  )
+
+  rf_model
+}
+
+predict_rf_surface <- function(envstack, rf_model, out_file = NULL) {
+  pred <- predict(envstack, rf_model, type = "response")
+
+  if (!is.null(out_file)) {
+    writeRaster(pred, out_file, format = "GTiff", overwrite = TRUE)
+  }
+
+  pred
+}
+
+build_transition_from_cost <- function(cost_raster) {
+  cost_raster[cost_raster <= 0] <- NA
+
+  tr <- transition(
+    x = 1 / cost_raster,
+    transitionFunction = mean,
+    directions = 8
+  )
+
+  geoCorrection(tr, type = "c")
+}
+
+shortest_path_one_pair <- function(tr, x1, y1, x2, y2, crs_string) {
+  pt1 <- SpatialPoints(matrix(c(x1, y1), ncol = 2), proj4string = CRS(crs_string))
+  pt2 <- SpatialPoints(matrix(c(x2, y2), ncol = 2), proj4string = CRS(crs_string))
+
+  shortestPath(tr, pt1, pt2, output = "SpatialLines")
+}
+
+make_lcp_paths_from_surface <- function(pair_table, cost_raster, crs_string, n_cores = 4) {
+  tr <- build_transition_from_cost(cost_raster)
+
+  cl <- makeCluster(n_cores)
+  registerDoParallel(cl)
+  clusterExport(cl, c("tr", "crs_string", "shortest_path_one_pair"), envir = environment())
+
+  path_list <- foreach(
+    i = seq_len(nrow(pair_table)),
+    .packages = c("gdistance", "sp")
+  ) %dopar% {
+    shortest_path_one_pair(
+      tr = tr,
+      x1 = pair_table$long1[i],
+      y1 = pair_table$lat1[i],
+      x2 = pair_table$long2[i],
+      y2 = pair_table$lat2[i],
+      crs_string = crs_string
+    )
+  }
+
+  stopCluster(cl)
+
+  path_sfc <- st_sfc(lapply(path_list, st_as_sfc), crs = st_crs(crs_string))
+  path_sfc <- do.call(c, path_sfc)
+
+  st_sf(
+    id = pair_table$id,
+    geometry = path_sfc
+  )
+}
+
+mean_abs_raster_change <- function(r1, r2) {
+  d <- abs(r1 - r2)
+  cellStats(d, stat = "mean", na.rm = TRUE)
+}
+```
+
+# 4. Run iterative path extraction and model updating
+
+``` r
+# store outputs from each iteration
+iter_summary <- data.frame(
+  iteration = integer(),
+  oob_mse = numeric(),
+  percent_var_explained = numeric(),
+  mean_raster_change = numeric(),
+  stringsAsFactors = FALSE
+)
+
+pred_prev <- NULL
+
+for (iter in seq_len(n_iter)) {
+  cat("\n-----------------------------\n")
+  cat("Iteration", iter, "of", n_iter, "\n")
+  cat("-----------------------------\n")
+
+  # 1. extract summaries along current paths
+  path_table <- extract_env_along_paths(
+    lines_sf = current_lines_sf,
+    env = env,
+    geo_dist = geo_dist,
+    pair_table = G.table,
+    n_cores = n_cores
+  )
+
+  write.csv(
+    path_table,
+    file.path(results_dir, paste0("Gff_cse_envCostPaths_iter", iter, ".csv")),
+    row.names = FALSE
+  )
+
+  # 2. fit RF model using mean predictors only
+  rf_model <- fit_rf_mean_model(
+    path_table = path_table,
+    ntree = 500,
+    seed = 1000 + iter
+  )
+
+  saveRDS(
+    rf_model,
+    file.path(results_dir, paste0("rf_mean_full_tuned_iter", iter, ".rds"))
+  )
+
+  # 3. predict new surface
+  pred_file <- file.path(results_dir, paste0("fullRF_CSE_iter", iter, ".tif"))
+  pred_raster <- predict_rf_surface(
+    envstack = envstack,
+    rf_model = rf_model,
+    out_file = pred_file
+  )
+
+  # 4. compare with previous iteration
+  raster_change <- NA_real_
+  if (!is.null(pred_prev)) {
+    raster_change <- mean_abs_raster_change(pred_raster, pred_prev)
+    cat("Mean absolute raster change from previous iteration:", raster_change, "\n")
+  }
+
+  # 5. record model summary
+  iter_summary <- rbind(
+    iter_summary,
+    data.frame(
+      iteration = iter,
+      oob_mse = rf_model$mse[rf_model$ntree],
+      percent_var_explained = rf_model$rsq[rf_model$ntree] * 100,
+      mean_raster_change = raster_change
+    )
+  )
+
+  write.csv(
+    iter_summary,
+    file.path(results_dir, "iterative_rf_summary.csv"),
+    row.names = FALSE
+  )
+
+  # 6. update paths for next iteration
+  if (iter < n_iter) {
+    current_lines_sf <- make_lcp_paths_from_surface(
+      pair_table = G.table,
+      cost_raster = pred_raster,
+      crs_string = crs_geo,
+      n_cores = n_cores
+    )
+
+    st_write(
+      current_lines_sf,
+      file.path(data_dir, "processed", paste0("LC_paths_iter", iter + 1, ".shp")),
+      delete_layer = TRUE,
+      quiet = TRUE
+    )
+  }
+
+  pred_prev <- pred_raster
+}
+```
+
+# 5. Review iteration summaries
+
+``` r
+iter_summary
+
+plot(
+  iter_summary$iteration,
+  iter_summary$percent_var_explained,
+  type = "b",
+  xlab = "Iteration",
+  ylab = "% Variance Explained"
+)
+
+plot(
+  iter_summary$iteration,
+  iter_summary$oob_mse,
+  type = "b",
+  xlab = "Iteration",
+  ylab = "OOB MSE"
+)
+
+plot(
+  iter_summary$iteration,
+  iter_summary$mean_raster_change,
+  type = "b",
+  xlab = "Iteration",
+  ylab = "Mean absolute raster change"
+)
+```
+
+# 6. Notes
+
+1.  Iteration 1 uses the existing lake-avoiding least-cost paths as the
+    starting point.  
+2.  Each subsequent iteration uses the RF-predicted surface from the
+    previous iteration to generate new least-cost paths.  
+3.  Environmental summaries are re-extracted along the updated paths
+    each round.  
+4.  The RF is refit each round using the mean environmental summaries
+    plus path-based geographic distance.  
+5.  The table `iterative_rf_summary.csv` can be used to judge whether
+    the procedure stabilizes before 10 iterations.
+
+# 7. Likely places to adjust
+
+1.  Whether `samp_20km` should be neutralized before projection.  
+2.  Whether you want to keep `pix_dist` as summed path length along the
+    current path each round.  
+3.  Whether you want to parallelize path building or keep it serial for
+    easier debugging.  
+4.  Whether you want an early stopping rule when raster change becomes
+    very small.  
+5.  Whether you want to save only the final iteration or all
+    intermediate products.

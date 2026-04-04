@@ -1,36 +1,27 @@
----
-title: "Least-cost paths avoiding lakes"
-author: "Norah Saarman"
-date: "`r Sys.Date()`"
-output:
-  github_document:
-    toc: true
-knit: (function(input, ...) {
-    rmarkdown::render(
-      input,
-      output_dir = "../scripts_knitted_md", 
-      envir = globalenv()
-    )
-  })
----
+Least-cost paths avoiding lakes
+================
+Norah Saarman
+2026-04-03
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  echo = TRUE,
-  # Saves PNGs to the root /figures folder
-  fig.path = "../figures/knitted_mds/" 
-)
-```
+- [Setup](#setup)
+- [Inputs](#inputs)
+- [Outputs](#outputs)
+- [1. Prepare your cost surface from lake
+  layer](#1-prepare-your-cost-surface-from-lake-layer)
+- [2. Build and save paths as SpatialLines for each
+  pair](#2-build-and-save-paths-as-spatiallines-for-each-pair)
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 4 (up to 32 available)   
+- **Number of cores:** 4 (up to 32 available)  
 - **Account:** saarman-np  
 - **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
-- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)    
+- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding
+half)
 
 # Setup
-```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+
+``` r
 # load only required packages
 library(raster)
 library(gdistance)
@@ -63,17 +54,24 @@ crs_geo <- 4326     # EPSG code for WGS84
 ```
 
 # Inputs
-  - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2) 
-river+lake edge density 
-  - `../data_dir/processed/sample_kernel_density_20km.tif` # 20 km sampling density
-  - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)  
-  
-# Outputs  
-  - `../data_dir/processed/LC_paths.shp`  - Least cost paths spatialLines shapefile
+
+- `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2) river+lake edge density
+- `../data_dir/processed/sample_kernel_density_20km.tif` \# 20 km
+  sampling density
+- `../data_dir/processed/lake_binary.tif` \# binary lake mask (1 =
+  water, 0 = land)
+
+# Outputs
+
+- `../data_dir/processed/LC_paths.shp` - Least cost paths spatialLines
+  shapefile
 
 # 1. Prepare your cost surface from lake layer
+
 Assume lake_binary.tif has 1 = water, 0 = land
-```{r cost}
+
+``` r
 # read your lake mask (0 = land, 1 = lake)
 lakes <- raster(file.path(data_dir, "processed", "lake_binary.tif"))
 
@@ -94,8 +92,10 @@ trCorr <- geoCorrection(tr, type = "c")
 ```
 
 # 2. Build and save paths as SpatialLines for each pair
-** NOTE:** eval = FALSE so that skips on knit
-```{r build_least_cost_paths, warning=FALSE, eval = FALSE}
+
+\*\* NOTE:\*\* eval = FALSE so that skips on knit
+
+``` r
 # assume trCorr (cost transition) and G.table (with long1,lat1,long2,lat2,CSEdistance) exist
 
 # use 4 cores (or however many you want)
@@ -135,8 +135,10 @@ st_write(lines_sf,
 
 lines_sf
 ```
+
 Plot least cost paths with Uganda outline and lakes to check behavior
-```{r plot_least_cost_paths, fig.cap="Least‐cost paths colored by CSE", warning=FALSE}
+
+``` r
 # assumes shape file of lake least-cost paths have already been created
 lines_sf <- st_read(file.path(data_dir,"processed","LC_paths.shp"), quiet=TRUE)
 
@@ -156,7 +158,11 @@ ylim <- c(r_ext@ymin, r_ext@ymax)
 # Natural Earth background
 uganda <- ne_countries(scale = "medium", continent = "Africa", returnclass = "sf") %>% st_transform(4326)
 lakes_ne <- ne_download(scale = 10, type = "lakes", category = "physical", returnclass = "sf") %>% st_transform(4326)
+```
 
+    ## Reading 'ne_10m_lakes.zip' from naturalearth...
+
+``` r
 # Clean up invalid geometries
 lakes_ne <- st_make_valid(lakes_ne)
 
@@ -182,3 +188,10 @@ ggplot() +
     legend.background = element_rect(fill = alpha("white", 0.6), color = NA)
   )
 ```
+
+<figure>
+<img src="../figures/knitted_mds/plot_least_cost_paths-1.png"
+alt="Least‐cost paths colored by CSE" />
+<figcaption aria-hidden="true">Least‐cost paths colored by
+CSE</figcaption>
+</figure>
