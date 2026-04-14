@@ -1,10 +1,11 @@
 Iterative RF model and least-cost path updating
 ================
 Norah Saarman
-2026-04-04
+2026-04-07
 
 - [Setup](#setup)
   - [Directories and inputs](#directories-and-inputs)
+- [Inputs](#inputs)
 - [1. Load environmental rasters](#1-load-environmental-rasters)
 - [2. Starting paths](#2-starting-paths)
 - [3. Helper functions](#3-helper-functions)
@@ -12,7 +13,7 @@ Norah Saarman
   updating](#4-run-iterative-path-extraction-and-model-updating)
 - [5. Review iteration summaries](#5-review-iteration-summaries)
 - [6. Notes](#6-notes)
-- [7. Likely places to adjust](#7-likely-places-to-adjust)
+- [Conclusion:](#conclusion)
 
 RStudio Configuration:  
 - R version: R 4.4.0 (Geospatial packages)  
@@ -65,6 +66,14 @@ n_iter <- 10
 # number of cores
 n_cores <- 4
 ```
+
+# Inputs
+
+- `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance
+  in sum of pixels, and mean, median, mode of each Env parameter  
+- `/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data/processed/LC_paths.shp` -
+  Least costs paths avoiding lakes for first iteration
 
 # 1. Load environmental rasters
 
@@ -138,7 +147,7 @@ env <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster)
 envstack <- stack(envvars, altitude, slope, rivers, kernel, lakeRaster, geo_dist)
 
 # optional: neutralize sampling density before projection if desired
-# envstack$samp_20km <- 1.027064e-11
+envstack$samp_20km <- 1.027064e-11
 ```
 
 # 2. Starting paths
@@ -151,6 +160,13 @@ current_lines_sf <- st_read(
   file.path(data_dir, "processed", "LC_paths.shp"),
   quiet = TRUE
 )
+
+#make sure paths match G.table
+current_lines_sf <- current_lines_sf %>%
+  filter(id %in% G.table$id) %>%
+  slice(match(G.table$id, id))
+
+stopifnot(nrow(G.table) == nrow(current_lines_sf))
 
 # make sure paths are in geographic coordinates
 current_lines_sf <- st_transform(current_lines_sf, crs = st_crs(crs_geo))
@@ -292,33 +308,35 @@ shortest_path_one_pair <- function(tr, x1, y1, x2, y2, crs_string) {
 make_lcp_paths_from_surface <- function(pair_table, cost_raster, crs_string, n_cores = 4) {
   tr <- build_transition_from_cost(cost_raster)
 
-  cl <- makeCluster(n_cores)
-  registerDoParallel(cl)
-  clusterExport(cl, c("tr", "crs_string", "shortest_path_one_pair"), envir = environment())
+  path_list <- vector("list", nrow(pair_table))
 
-  path_list <- foreach(
-    i = seq_len(nrow(pair_table)),
-    .packages = c("gdistance", "sp")
-  ) %dopar% {
-    shortest_path_one_pair(
-      tr = tr,
-      x1 = pair_table$long1[i],
-      y1 = pair_table$lat1[i],
-      x2 = pair_table$long2[i],
-      y2 = pair_table$lat2[i],
-      crs_string = crs_string
+  for (i in seq_len(nrow(pair_table))) {
+    if (i %% 50 == 0) cat("building path", i, "of", nrow(pair_table), "\n")
+
+    pt1 <- SpatialPoints(
+      matrix(c(pair_table$long1[i], pair_table$lat1[i]), ncol = 2),
+      proj4string = CRS(crs_string)
     )
+    pt2 <- SpatialPoints(
+      matrix(c(pair_table$long2[i], pair_table$lat2[i]), ncol = 2),
+      proj4string = CRS(crs_string)
+    )
+
+    path_list[[i]] <- shortestPath(tr, pt1, pt2, output = "SpatialLines")
   }
 
-  stopCluster(cl)
+  # convert each path cleanly to sf, then row-bind
+  path_sf_list <- lapply(seq_along(path_list), function(i) {
+    sf_i <- st_as_sf(path_list[[i]])
+    sf_i$id <- pair_table$id[i]
+    sf_i$Var1 <- pair_table$Var1[i]
+    sf_i$Var2 <- pair_table$Var2[i]
+    st_crs(sf_i) <- 4326
+    sf_i
+  })
 
-  path_sfc <- st_sfc(lapply(path_list, st_as_sfc), crs = st_crs(crs_string))
-  path_sfc <- do.call(c, path_sfc)
-
-  st_sf(
-    id = pair_table$id,
-    geometry = path_sfc
-  )
+  current_lines_sf <- do.call(rbind, path_sf_list)
+  current_lines_sf
 }
 
 mean_abs_raster_change <- function(r1, r2) {
@@ -381,6 +399,21 @@ for (iter in seq_len(n_iter)) {
     out_file = pred_file
   )
 
+  # re-impose lake barrier before path updating
+  if (!compareRaster(pred_raster, lakeRaster,
+                     extent = TRUE, rowcol = TRUE,
+                     crs = TRUE, res = TRUE,
+                     stopiffalse = FALSE)) {
+    lake_mask <- projectRaster(lakeRaster, pred_raster, method = "ngb")
+  } else {
+    lake_mask <- lakeRaster
+  }
+  
+  pred_raster[lake_mask[] == 1] <- max(values(pred_raster), na.rm = TRUE)
+  
+  # optionally overwrite the saved raster with masked version
+  writeRaster(pred_raster, pred_file, format = "GTiff", overwrite = TRUE)
+
   # 4. compare with previous iteration
   raster_change <- NA_real_
   if (!is.null(pred_prev)) {
@@ -429,7 +462,7 @@ for (iter in seq_len(n_iter)) {
 # 5. Review iteration summaries
 
 ``` r
-iter_summary
+iter_summary<- read.csv(file.path(results_dir, "iterative_rf_summary.csv"))
 
 plot(
   iter_summary$iteration,
@@ -438,7 +471,11 @@ plot(
   xlab = "Iteration",
   ylab = "% Variance Explained"
 )
+```
 
+![](../figures/knitted_mds/review-summary-1.png)<!-- -->
+
+``` r
 plot(
   iter_summary$iteration,
   iter_summary$oob_mse,
@@ -446,7 +483,11 @@ plot(
   xlab = "Iteration",
   ylab = "OOB MSE"
 )
+```
 
+![](../figures/knitted_mds/review-summary-2.png)<!-- -->
+
+``` r
 plot(
   iter_summary$iteration,
   iter_summary$mean_raster_change,
@@ -454,6 +495,57 @@ plot(
   xlab = "Iteration",
   ylab = "Mean absolute raster change"
 )
+```
+
+![](../figures/knitted_mds/review-summary-3.png)<!-- -->
+
+``` r
+# Open PDF device
+pdf(file.path(results_dir, "LCP_iterations_fig.pdf"), width = 7, height = 3)
+
+# Set up 1 row, 3 columns
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 1))  # adjust margins if needed
+
+# (a) % Variance Explained
+plot(
+  iter_summary$iteration,
+  iter_summary$percent_var_explained,
+  type = "b",
+  xlab = "Iteration",
+  ylab = "% Variance Explained"
+)
+mtext("(a)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# (b) OOB MSE
+plot(
+  iter_summary$iteration,
+  iter_summary$oob_mse,
+  type = "b",
+  xlab = "Iteration",
+  ylab = "OOB MSE"
+)
+mtext("(b)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# (c) Mean absolute raster change
+plot(
+  iter_summary$iteration,
+  iter_summary$mean_raster_change,
+  type = "b",
+  xlab = "Iteration",
+  ylab = "Mean absolute raster change"
+)
+mtext("(c)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# Close PDF device
+dev.off()
+```
+
+    ## png 
+    ##   2
+
+``` r
+# Reset plotting layout (optional)
+par(mfrow = c(1, 1))
 ```
 
 # 6. Notes
@@ -469,14 +561,14 @@ plot(
 5.  The table `iterative_rf_summary.csv` can be used to judge whether
     the procedure stabilizes before 10 iterations.
 
-# 7. Likely places to adjust
+Overall, I don’t think this added complexity is worth it:  
+- 10× computational cost  
+- Much more complicated methods - No gain in model performance  
+- No major shift in inferred surface
 
-1.  Whether `samp_20km` should be neutralized before projection.  
-2.  Whether you want to keep `pix_dist` as summed path length along the
-    current path each round.  
-3.  Whether you want to parallelize path building or keep it serial for
-    easier debugging.  
-4.  Whether you want an early stopping rule when raster change becomes
-    very small.  
-5.  Whether you want to save only the final iteration or all
-    intermediate products.
+# Conclusion:
+
+Iterative updating of least-cost paths based on model-predicted
+resistance surfaces resulted in minimal changes to model performance and
+predicted connectivity, indicating that the initial lake-constrained
+paths were sufficient.

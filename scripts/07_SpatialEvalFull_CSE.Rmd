@@ -1,0 +1,505 @@
+---
+title: "Spatial Evaluation - Full RF model of raw CSE, alternative km projections"
+author: "Norah Saarman"
+date: "`r Sys.Date()`"
+output:
+  github_document:
+    toc: true
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_dir = "../scripts_knitted_md", 
+      envir = globalenv()
+    )
+  })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  # Saves PNGs to the root /figures folder
+  fig.path = "../figures/knitted_mds/" 
+)
+```
+  
+# Setup  
+
+RStudio Configuration:  
+- **R version:** R 4.4.0 (Geospatial packages)  
+- **Number of cores:** 16 (up to 32 available)   
+- **Account:** saarman-np  
+- **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
+- **Memory per job:** 400G (cluster limit: 1000G total; avoid exceeding half)  
+
+## Load libraries
+```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+# load only required packages
+library(doParallel)
+library(foreach)
+library(raster)
+library(gdistance)
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(randomForest)
+```
+## Inputs
+  - `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with coordinates (long1, lat1, long2, lat2), same input used for building model.
+  - `../results_dir/fullRF_CSE.tif` - Final full model projected estimates of CSE at 1 pixel geodist.
+  - `../data_dir/processed/lake_binary.tif` # binary lake mask (1 = water, 0 = land)   
+  
+## Outputs   
+Major outputs from this script are saved in two locations:  
+**Small text outputs saved to results_dir within git repo:**
+ - `spatial_eval_rawCSE_LCPpred.csv` Pairwise least-cost path summaries for each site pair: LCP_mean, LCP_sum.
+ - `spatial_eval_rawCSE_cber.csv` Pairwise circuit-based effective resistance (CBER) values for each site pair.
+ - `spatial_eval_rawCSE_predictions.csv` Combined pairwise evaluation table containing observed CSE and spatial predictions for each site pair: CSE, LCP_mean, LCP_sum, CBER.
+ - `spatial_eval_rawCSE_eval_metrics.csv` Summary table of evaluation metrics for each spatial summary method (LCP_mean, LCP_sum, CBER): RMSE, R², MSE, MAE, Correlation.
+
+**Large or reusable outputs saved to results_dir_big:**
+ - `least_cost_paths/LC_paths_fullRF_rawCSE.shp` Saved least-cost-path spatial lines for all evaluated site pairs. This is a reusable spatial output and does not need to be recomputed unless the resistance surface changes.
+ - `spatial_eval_rawCSE_LCPpred.csv` Backup copy of least-cost path summaries.
+ - `spatial_eval_rawCSE_cber.csv` Backup copy of circuit-based effective resistance (CBER) results.
+ - `spatial_eval_rawCSE_predictions.rds` R object version of the combined evaluation table (eval_results) for quick reloading in later scripts.
+ - `spatial_eval_rawCSE_predictions.csv` Backup copy of the combined evaluation table saved in the large-results directory.
+ - `spatial_eval_rawCSE_predictions_calibrated.rds` R object version of the evaluation table with calibrated predictions (eval_df), including LCP_mean_cal, LCP_sum_cal, and CBER_cal.
+ - `spatial_eval_rawCSE_eval_metrics.rds` R object version of the evaluation metrics table (metrics_df) for quick reloading in later scripts.
+ - `spatial_eval_rawCSE_eval_metrics.csv` Backup copy of the evaluation metrics table saved in the large-results directory.
+
+# Code outline
+
+Estimate evaluation metrics for multiple projection   
+Sum across least-cost path (sum LCP)  
+
+Metrics to calculate for this screening step: 
+
+Primary metrics:  
+1. correlation (Correlation here answers: does the method recover relative ordering?)
+2. R² (1 − SSE/SST, after correcting for scale mismatch) 
+
+Secondary evaluation metrics:  
+3. RMSE (after correcting for scale mismatch)
+4. MSE (after correcting for scale mismatch) 
+5. MAE(after correcting for scale mismatch) 
+
+NOTE: RMSE, MSE, MAE, and R2 after scaling answer: after correcting for simple scale mismatch, how well does the method recover observed CSE?). These screening metrics are used only to decide which response formulation and spatial summary to carry forward into the final LOPOCV validation framework and permutation-based significance testing.
+
+# Step 1: Inputs
+```{r directories-inputs}
+
+# Define Paths to directories
+input_dir <- "../input"
+data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
+results_dir_big <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/"
+results_dir <- "../results/"
+
+# define coordinate reference system
+crs_geo <- 4326     # EPSG code for WGS84
+
+######################################
+# What surface are you using?
+surf_file  <- file.path(results_dir_big, "fullRF_CSE.tif")
+########################################
+
+lake_file  <- file.path(data_dir, "processed", "lake_binary.tif")
+
+cse_file   <- file.path("..", "input", "Gff_cse_envCostPaths.csv")
+
+# Read pairwise CSE table
+cse_df <- read.csv(cse_file)
+# This was added only after completing LOPOCV...
+# Filter out western outlier "50-KB" 
+cse_df <- cse_df %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB")
+
+# Read projected raw CSE surface
+cse_surface <- raster(surf_file)
+
+# Read lake mask
+lake_mask <- raster(lake_file)
+
+# Load env stack with named layers
+env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+
+# Neutralize sampling layer to average
+env$samp_20km <- 1.027064e-11 #neutralize sampling bias
+
+# Load rdf of final model
+rf_predicted <- readRDS(file.path(results_dir_big, "rf_mean_full_tuned.rds"))
+```
+
+# Step 2. Functions
+
+```{r kdist}
+# --------------------------------------------------
+# Screening: compare projection distances using LCP_sum only
+# --------------------------------------------------
+
+# projection distances to test
+proj_km <- c(1, 2, 5, 10, 20, 50)
+
+# distance layer name in model
+dist_layer <- "geo_dist"
+
+# keep only within-cluster comparisons
+cse_df_eval <- cse_df %>%
+  filter(Pop1_cluster == Pop2_cluster) %>%
+  mutate(
+    id  = paste(Var1, Var2, sep = "_"),
+    CSE = CSEdistance
+  )
+
+# unique site coordinates
+sites_coords <- bind_rows(
+  cse_df_eval %>% dplyr::select(Site = Var1, lon = long1, lat = lat1),
+  cse_df_eval %>% dplyr::select(Site = Var2, lon = long2, lat = lat2)
+) %>%
+  distinct()
+
+# pair table
+site_pairs <- cse_df_eval %>%
+  dplyr::select(Var1, Var2, id, CSE) %>%
+  distinct()
+
+# calibration function
+calibrate_pred <- function(obs, pred) {
+  keep <- complete.cases(obs, pred)
+  df <- data.frame(obs = obs[keep], pred = pred[keep])
+  fit <- lm(obs ~ pred, data = df)
+
+  out <- rep(NA_real_, length(obs))
+  out[keep] <- predict(fit, newdata = data.frame(pred = pred[keep]))
+  out
+}
+
+# metrics function
+# correlation uses raw predictions
+# RSQ and error metrics use calibrated predictions
+calc_metrics <- function(obs, pred_raw, pred_cal) {
+  keep <- complete.cases(obs, pred_raw, pred_cal)
+
+  obs      <- obs[keep]
+  pred_raw <- pred_raw[keep]
+  pred_cal <- pred_cal[keep]
+
+  sse  <- sum((obs - pred_cal)^2)
+  sst  <- sum((obs - mean(obs))^2)
+  mse  <- mean((obs - pred_cal)^2)
+  rmse <- sqrt(mse)
+  mae  <- mean(abs(obs - pred_cal))
+  rsq  <- 1 - (sse / sst)
+  corr <- cor(obs, pred_raw)
+
+  data.frame(
+    n = length(obs),
+    MSE = mse,
+    RMSE = rmse,
+    MAE = mae,
+    RSQ = rsq,
+    Correlation = corr
+  )
+}
+
+# output directory
+screen_dir <- file.path(results_dir_big, "projection_screening_LCPsum")
+dir.create(screen_dir, showWarnings = FALSE, recursive = TRUE)
+
+all_metrics <- list()
+```
+
+# Step 3. Test 1 km versus 5 km
+```{r test}
+kdist <- 1
+env_k1 <- env
+env_k1[["pix_dist"]] <- setValues(env[[1]], kdist)
+
+summary(values(env_k1[["pix_dist"]]))
+pred1 <- predict(env_k1, rf_predicted, type = "response")
+
+kdist <- 5
+env_k5 <- env
+env_k5[["pix_dist"]] <- setValues(env[[1]], kdist)
+
+summary(values(env_k5[["pix_dist"]]))
+pred5 <- predict(env_k5, rf_predicted, type = "response")
+
+cellStats(abs(pred1 - pred5), stat = "max", na.rm = TRUE)
+cellStats(abs(pred1 - pred5), stat = "mean", na.rm = TRUE)
+
+kdist <- 150
+env_k5 <- env
+env_k5[["pix_dist"]] <- setValues(env[[1]], kdist)
+
+summary(values(env_k5[["pix_dist"]]))
+pred5 <- predict(env_k5, rf_predicted, type = "response")
+
+cellStats(abs(pred1 - pred5), stat = "max", na.rm = TRUE)
+cellStats(abs(pred1 - pred5), stat = "mean", na.rm = TRUE)
+```
+
+1 vs 5 are identical. 1 vs 150 km are not. Where is the split?
+
+# Step 4. Find the Split
+```{r find-split}
+kvals <- c(1, 2, 5, 10, 20, 50, 100, 150)
+
+pred_list <- lapply(kvals, function(k) {
+  env_k <- env
+  env_k[["pix_dist"]] <- setValues(env[[1]], k)
+  predict(env_k, rf_predicted, type = "response")
+})
+
+names(pred_list) <- paste0("k", kvals)
+
+expand.grid(i = seq_along(kvals), j = seq_along(kvals)) |>
+  dplyr::filter(i < j) |>
+  dplyr::rowwise() |>
+  dplyr::mutate(
+    k1 = kvals[i],
+    k2 = kvals[j],
+    mean_diff = cellStats(abs(pred_list[[i]] - pred_list[[j]]), stat = "mean", na.rm = TRUE),
+    max_diff  = cellStats(abs(pred_list[[i]] - pred_list[[j]]), stat = "max", na.rm = TRUE)
+  ) |>
+  dplyr::select(k1, k2, mean_diff, max_diff)
+```
+
+1, 2, 5 km are identical
+mean_diff = 0
+max_diff = 0
+→ these produce exactly the same raster
+10 km is barely different
+mean diff ~ 4e-05
+→ essentially negligible
+20 km = small change
+mean diff ~ 3e-04
+→ still tiny
+50+ km = real change
+mean diff jumps to ~ 4e-03 → 1e-02 → 4e-02
+→ now you’re actually moving into different RF partitions
+
+# Step 5. Loop through 1-100 km
+
+```{r loop, eval=FALSE}
+proj_km <- c(1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
+
+n_cores <- 16
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+for (kdist in proj_km) {
+
+  cat("\n----------------------------\n")
+  cat("Running projection at", kdist, "km\n")
+  cat("----------------------------\n")
+
+  # -----------------------------------
+  # Step 1: project surface at kdist
+  # -----------------------------------
+  env_k <- env
+
+  # assign constant raster for projection distance
+  env_k[["pix_dist"]] <- setValues(env[[1]], kdist)
+
+  cse_surface <- predict(env_k, rf_predicted, type = "response")
+
+  # align lake mask if needed
+  if (!compareRaster(cse_surface, lake_mask,
+                     extent = TRUE, rowcol = TRUE,
+                     crs = TRUE, res = TRUE,
+                     stopiffalse = FALSE)) {
+    lake_mask_use <- projectRaster(lake_mask, cse_surface, method = "ngb")
+  } else {
+    lake_mask_use <- lake_mask
+  }
+
+  # assign lakes high cost
+  cse_surface[lake_mask_use[] == 1] <- max(values(cse_surface), na.rm = TRUE)
+
+  # save projected surface
+  writeRaster(
+    cse_surface,
+    filename = file.path(screen_dir, paste0("fullRF_CSE_", kdist, "km.tif")),
+    format = "GTiff",
+    overwrite = TRUE
+  )
+
+  # -----------------------------------
+  # Step 2: prepare sites in raster CRS
+  # -----------------------------------
+  sites_df <- st_as_sf(sites_coords, coords = c("lon", "lat"), crs = crs_geo) %>%
+    st_transform(crs(cse_surface))
+
+  sites_sp <- as(sites_df, "Spatial")
+  site_index <- setNames(seq_len(nrow(sites_df)), sites_coords$Site)
+
+  # -----------------------------------
+  # Step 3: build transition object
+  # -----------------------------------
+  resistance_rast <- cse_surface
+  min_pos <- min(values(resistance_rast)[values(resistance_rast) > 0], na.rm = TRUE)
+  resistance_rast[resistance_rast <= 0] <- min_pos
+
+  conductance_rast <- 1 / resistance_rast
+  tr <- transition(conductance_rast, transitionFunction = mean, directions = 16)
+  tr_lcp <- geoCorrection(tr, type = "c")
+
+  # -----------------------------------
+  # Step 4: recompute least-cost paths
+  # -----------------------------------
+
+  paths_list <- foreach(ii = seq_len(nrow(site_pairs)),
+                        .packages = c("gdistance", "sp", "sf")) %dopar% {
+    i <- site_index[site_pairs$Var1[ii]]
+    j <- site_index[site_pairs$Var2[ii]]
+
+    path <- tryCatch({
+      shortestPath(tr_lcp, sites_sp[i, ], sites_sp[j, ], output = "SpatialLines")
+    }, error = function(e) NULL)
+
+    if (!is.null(path)) {
+      path_sf <- st_as_sf(path)
+      path_sf$id <- site_pairs$id[ii]
+      return(path_sf)
+    } else {
+      return(NULL)
+    }
+  }
+
+  paths_list <- paths_list[!sapply(paths_list, is.null)]
+  paths_sf <- do.call(rbind, paths_list)
+  st_crs(paths_sf) <- st_crs(cse_surface)
+
+  # extract raster values along each path
+  path_vals <- raster::extract(cse_surface, as(paths_sf, "Spatial"))
+
+  lcp_summary <- data.frame(
+    id = paths_sf$id,
+    LCP_sum = sapply(path_vals, function(x) {
+      if (is.null(x) || all(is.na(x))) NA_real_ else sum(x, na.rm = TRUE)
+    })
+  )
+
+  # -----------------------------------
+  # Step 5: combine and calibrate
+  # -----------------------------------
+  eval_results <- site_pairs %>%
+    left_join(lcp_summary, by = "id")
+
+  eval_results$LCP_sum_cal <- calibrate_pred(eval_results$CSE, eval_results$LCP_sum)
+
+  # -----------------------------------
+  # Step 6: calculate metrics
+  # -----------------------------------
+  metrics_k <- calc_metrics(
+    obs = eval_results$CSE,
+    pred_raw = eval_results$LCP_sum,
+    pred_cal = eval_results$LCP_sum_cal
+  ) %>%
+    mutate(
+      projection_km = kdist,
+      method = "LCP_sum"
+    ) %>%
+    dplyr::select(projection_km, method, everything())
+
+  # save outputs
+  write.csv(
+    eval_results,
+    file.path(screen_dir, paste0("eval_results_LCPsum_", kdist, "km.csv")),
+    row.names = FALSE
+  )
+
+  write.csv(
+    metrics_k,
+    file.path(screen_dir, paste0("eval_metrics_LCPsum_", kdist, "km.csv")),
+    row.names = FALSE
+  )
+
+  all_metrics[[paste0("proj_", kdist, "km")]] <- metrics_k
+}
+
+stopCluster(cl)
+
+# bind all metrics
+metrics_all <- bind_rows(all_metrics)
+
+write.csv(
+  metrics_all,
+  file.path(screen_dir, "projection_distance_comparison_metrics_LCPsum.csv"),
+  row.names = FALSE
+)
+
+metrics_all
+```
+
+```{r review-km-projections}
+
+km_summary<- read.csv("/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/projection_screening_LCPsum/projection_distance_comparison_metrics_LCPsum.csv")
+
+plot(
+  km_summary$projection_km,
+  km_summary$RSQ,
+  type = "b",
+  xlab = "Projection Scale in Km",
+  ylab = "% Variance Explained"
+)
+
+plot(
+  km_summary$projection_km,
+  km_summary$MSE,
+  type = "b",
+  xlab = "Projection Scale in Km",
+  ylab = "OOB MSE"
+)
+
+plot(
+  km_summary$projection_km,
+  km_summary$Correlation,
+  type = "b",
+  xlab = "Projection Scale in Km",
+  ylab = "Mean absolute raster change"
+)
+
+# Open PDF device
+pdf("/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/projections_km_fig.pdf", width = 7, height = 3)
+
+# Set up 1 row, 3 columns
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 1))  # adjust margins if needed
+
+# (a) % Variance Explained
+plot(
+  km_summary$projection_km,
+  km_summary$RSQ,
+  type = "b",
+  xlab = "Projection Scale in Km",
+  ylab = "% Variance Explained"
+)
+mtext("(a)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# (b) OOB MSE
+plot(
+  km_summary$projection_km,
+  km_summary$MSE,
+  type = "b",
+  xlab = "Projection Scale in Km",
+  ylab = "OOB MSE"
+)
+mtext("(b)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# (c) Correlation
+plot(
+  km_summary$projection_km,
+  km_summary$Correlation,
+  type = "b",
+  xlab = "Projection Scale in Km",
+  ylab = "Correlation"
+)
+mtext("(c)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# Close PDF device
+dev.off()
+
+# Reset plotting layout (optional)
+par(mfrow = c(1, 1))
+```

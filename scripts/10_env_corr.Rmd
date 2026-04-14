@@ -1,0 +1,156 @@
+---
+title: "Environmental correlations with final model (opening the RF black box)"
+author: "Norah Saarman"
+date: "`r Sys.Date()`"
+output:
+  github_document:
+    toc: true
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_dir = "../scripts_knitted_md", 
+      envir = globalenv()
+    )
+  })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  # Saves PNGs to the root /figures folder
+  fig.path = "../figures/knitted_mds/" 
+)
+```
+  
+# Setup  
+
+RStudio Configuration:  
+- **R version:** R 4.4.0 (Geospatial packages)  
+- **Number of cores:** 16 (up to 32 available)   
+- **Account:** saarman-np  
+- **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
+- **Memory per job:** 400G (cluster limit: 1000G total; avoid exceeding half)  
+
+# Outline:
+
+Pearson's correlation in a sliding window, of the current variable versus full model, add this to figure with direction of change
+
+Top less-correlated predictors:
+BIO3, BIO4, BIO7, BIO11S, BIO13
+
+Figure X. Local Pearson correlations between predicted CSE and selected environmental predictor rasters, calculated in a sliding window with neighborhood size = 21. Positive values indicate local areas where higher predictor values are associated with higher predicted CSE; negative values indicate areas where higher predictor values are associated with lower predicted CSE.
+
+# Color Pallet
+```{r colors}
+# Connectivity (low = yellow, high = dark purple/red)
+connectivity_colors <- colorRampPalette(
+  c("#FFFF00", "#FFA500", "#FF4500", "#700E40", "#2E003E")
+)(100)
+
+# Suitability (low = light, high = dark blue/purple)
+suitability_colors <- colorRampPalette(
+  c("white", "#8db4c9", "#3c94c8", "#55306a")
+)(100)
+
+# Diverging (for correlations or deltas)
+diverging_colors <- colorRampPalette(
+  c("blue4", "deepskyblue3", "white", "gold", "darkorange", "#924532")
+)(100)
+```
+
+# Chunk 1
+
+Reproduce the projected raster from the final tuned mean-based RF model using the same logic as script 07: load the model, load env_stack.grd, neutralize samp_20km, set pix_dist to 1, and predict the raster.
+
+```{r predict-final-cse-raster, warning=FALSE, message=FALSE}
+library(raster)
+library(randomForest)
+
+# paths
+data_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
+results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results"
+
+# load final tuned RF model
+rf_mean_full_tuned <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+
+# load environmental stack
+env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
+
+# neutralize sampling bias layer
+env$samp_20km <- 1.027064e-11
+
+# set projection geographic distance to 1 km
+env$pix_dist <- setValues(env[[1]], 1)
+
+# predict current CSE raster
+predicted_cse <- predict(env, rf_mean_full_tuned, type = "response")
+
+# optional save
+# writeRaster(predicted_cse,
+#             filename = file.path(results_dir, "fullRF_CSE_resistance.tif"),
+#             format = "GTiff",
+#             overwrite = TRUE)
+
+plot(predicted_cse, main = "Predicted CSE")
+
+```
+# Chunk 2
+```{r local-correlation-top-predictors, warning=FALSE, message=FALSE}
+library(raster)
+library(sf)
+
+# select top focal predictors from the same current env stack
+pred_names <- c("BIO3", "BIO4", "BIO7", "BIO11S", "BIO13")
+pred_stack <- env[[pred_names]]
+
+# local Pearson correlations with sliding window
+# Bishop used corLocal() for this kind of post hoc map
+# ngb = 21 matches the neighborhood size described in the Bishop figure caption
+cor_stack <- stack(lapply(pred_names, function(v) {
+  corLocal(predicted_cse, pred_stack[[v]], ngb = 21, method = "pearson")
+}))
+
+names(cor_stack) <- paste0("cor_", pred_names)
+
+# optional summary table for quick interpretation
+cor_summary <- data.frame(
+  variable = pred_names,
+  mean_r = sapply(1:nlayers(cor_stack), function(i) {
+    cellStats(cor_stack[[i]], stat = "mean", na.rm = TRUE)
+  }),
+  median_r = sapply(1:nlayers(cor_stack), function(i) {
+    cellStats(cor_stack[[i]], stat = "median", na.rm = TRUE)
+  })
+)
+
+print(cor_summary)
+
+# diverging palette centered on zero
+cor_cols <- colorRampPalette(c("blue4", "deepskyblue3", "white", "gold", "darkorange", "#924532"))(100)
+
+# plot
+par(mfrow = c(2, 3), mar = c(3, 3, 2, 4))
+
+for (i in 1:nlayers(cor_stack)) {
+  plot(cor_stack[[i]],
+       col = cor_cols,
+       zlim = c(-1, 1),
+       main = gsub("cor_", "", names(cor_stack)[i]),
+       axes = FALSE,
+       box = FALSE,
+       legend.args = list(text = "Pearson's r", side = 4, line = 2, cex = 0.8))
+
+  # add these only if they already exist in your environment
+  if (exists("lakes")) {
+    plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
+  }
+  if (exists("uganda_cropped")) {
+    plot(st_geometry(uganda_cropped), border = "black", lwd = 0.5, add = TRUE)
+  } else if (exists("uganda")) {
+    plot(st_geometry(uganda), border = "black", lwd = 0.5, add = TRUE)
+  }
+}
+
+plot.new()
+par(mfrow = c(1, 1))
+```

@@ -1,35 +1,55 @@
----
-title: "5 RF model full – raw CSE (1st LC lakes paths)"
-author: "Norah Saarman"
-date: "`r Sys.Date()`"
-output:
-  github_document:
-    toc: true
-knit: (function(input, ...) {
-    rmarkdown::render(
-      input,
-      output_dir = "../scripts_knitted_md", 
-      envir = globalenv()
-    )
-  })
----
+5 RF model full – raw CSE (1st LC lakes paths)
+================
+Norah Saarman
+2026-04-13
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  echo = TRUE,
-  # Saves PNGs to the root /figures folder
-  fig.path = "../figures/knitted_mds/" 
-)
-```
-  
+- [Directories](#directories)
+- [Inputs](#inputs)
+- [1. Prepare the data](#1-prepare-the-data)
+- [2. Build full Random Forest model](#2-build-full-random-forest-model)
+- [3. Mean-only pruning](#3-mean-only-pruning)
+  - [Compare mean versus median versus
+    mode:](#compare-mean-versus-median-versus-mode)
+  - [PCA of mean env predictor variables, patterns of
+    autocorrelation?](#pca-of-mean-env-predictor-variables-patterns-of-autocorrelation)
+  - [(Optional) Prune more variables after narrowing to mean
+    only?](#optional-prune-more-variables-after-narrowing-to-mean-only)
+  - [(Optional) Scaling CSE](#optional-scaling-cse)
+- [4. Final full model - (Tune random forest with mean
+  variables)](#4-final-full-model---tune-random-forest-with-mean-variables)
+  - [Choose final predictor
+    variables](#choose-final-predictor-variables)
+  - [Full random forest model with raw
+    CSE](#full-random-forest-model-with-raw-cse)
+    - [Load saved (raw CSE) model](#load-saved-raw-cse-model)
+  - [(Optional) Compare full and full tuned models (mean-only
+    predictors)](#optional-compare-full-and-full-tuned-models-mean-only-predictors)
+- [5. Project predicted values from full CSE
+  model](#5-project-predicted-values-from-full-cse-model)
+  - [Build Projection](#build-projection)
+  - [Plot predicted CSE](#plot-predicted-cse)
+- [6. Scale and plot predicted connectivity (CSE) and
+  SDM](#6-scale-and-plot-predicted-connectivity-cse-and-sdm)
+  - [Scale 0-1, habitat suitability and inverse of predicted
+    connectivity
+    (CSE)](#scale-0-1-habitat-suitability-and-inverse-of-predicted-connectivity-cse)
+  - [Plot scaled predicted CSE and
+    SDM](#plot-scaled-predicted-cse-and-sdm)
+- [6. Variable importance plots](#6-variable-importance-plots)
+  - [Percent Improvement MSE](#percent-improvement-mse)
+  - [Node Purity](#node-purity)
+
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 4 (up to 32 available)   
+- **Number of cores:** 4 (up to 32 available)  
 - **Account:** saarman-np  
-- **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
-- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)    
-# Setup
-```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+- **Partition:** saarman-np (allows multiple simultaneous jobs
+automatically now)  
+- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding
+half)  
+\# Setup
+
+``` r
 # load only required packages
 library(randomForest)
 library(doParallel)
@@ -46,8 +66,10 @@ library(ggplot2)
 library(factoextra)   # for nice PCA plots
 library(ggpubr)
 ```
+
 ## Directories
-```{r input-dir}
+
+``` r
 # base directories
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
 input_dir <- "../input"
@@ -76,13 +98,22 @@ registerDoParallel(cl)
 clusterExport(cl, "get_mode")
 ```
 
-# Inputs  
-  - `../input/Gff_cse_envCostPaths.csv`  - Combined CSE table with coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance in sum of pixels, and mean, median, mode of each Env parameter  
-  
+# Inputs
+
+- `../input/Gff_cse_envCostPaths.csv` - Combined CSE table with
+  coordinates (long1, lat1, long2, lat2), pix_dist = geographic distance
+  in sum of pixels, and mean, median, mode of each Env parameter
+
 # 1. Prepare the data
-```{r prep, warning=FALSE}
+
+``` r
 # Assign input, checking for any rows with NA
 sum(!complete.cases(V.table))  # should return 0
+```
+
+    ## [1] 0
+
+``` r
 rf_data <- na.omit(V.table)    # should omit zero rows
 
 # Confirm that CSEdistance is numeric
@@ -117,17 +148,22 @@ rf_data <- rf_data[, c("CSEdistance", predictor_vars)]
 g <- lm(rf_data$CSEdistance~rf_data$pix_dist)
 plot(rf_data$pix_dist, rf_data$CSEdistance)
 abline(g)
+```
 
+![](../figures/knitted_mds/prep-1.png)<!-- -->
+
+``` r
 # Extract groups of variables by suffix
 mean_vars   <- grep("_mean$", names(rf_data), value = TRUE)
 median_vars <- grep("_median$", names(rf_data), value = TRUE)
 mode_vars   <- grep("_mode$", names(rf_data), value = TRUE)
 ```
-  
-# 2. Build full Random Forest model 
+
+# 2. Build full Random Forest model
 
 Note: Marked eval = FALSE to avoid re-running on knit
-```{r rf-full, warning=FALSE, eval = FALSE}
+
+``` r
 # Build full RF model
 set.seed(1234)  # ensures reproducibility
 rf_full <- randomForest(
@@ -140,14 +176,15 @@ rf_full <- randomForest(
 print(rf_full)
 
 importance(rf_full)
-
 ```
+
 # 3. Mean-only pruning
-  
-## Compare mean versus median versus mode:  
+
+## Compare mean versus median versus mode:
 
 Note: Marked eval = FALSE to avoid re-running on knit
-```{r mean-v-median-v-mode, warning=FALSE, eval = FALSE}
+
+``` r
 # Extract groups of variables by suffix
 mean_vars   <- grep("_mean$", names(rf_data), value = TRUE)
 median_vars <- grep("_median$", names(rf_data), value = TRUE)
@@ -168,22 +205,39 @@ c(mean = rf_mean$rsq[500] * 100,
   mode = rf_mode$rsq[500] * 100)
 ```
 
-Including mean of env variable along least cost paths performs the best, adding median and mode does not greatly improve the model and increases risks of over fitting...
-    
+Including mean of env variable along least cost paths performs the best,
+adding median and mode does not greatly improve the model and increases
+risks of over fitting…
+
 ## PCA of mean env predictor variables, patterns of autocorrelation?
 
-```{r pca-env-vars}
-
-# subset and rename variables before PCA
-rf_subset <- rf_data[mean_vars]
-colnames(rf_subset) <- gsub("_mean$", "", colnames(rf_subset))
-
-# Run PCA
-pca_res <- prcomp(rf_subset, scale. = TRUE)
+``` r
+# Run PCA on the subset of variables
+pca_res <- prcomp(rf_data[mean_vars], scale. = TRUE)
 
 # Quick summary of variance explained
 summary(pca_res)
+```
 
+    ## Importance of components:
+    ##                          PC1    PC2     PC3     PC4     PC5     PC6     PC7
+    ## Standard deviation     3.922 1.8929 1.41176 0.92121 0.82331 0.71845 0.60506
+    ## Proportion of Variance 0.641 0.1493 0.08304 0.03536 0.02824 0.02151 0.01525
+    ## Cumulative Proportion  0.641 0.7903 0.87334 0.90870 0.93694 0.95845 0.97370
+    ##                            PC8     PC9    PC10    PC11    PC12    PC13    PC14
+    ## Standard deviation     0.54540 0.43062 0.31334 0.12881 0.11472 0.10062 0.07217
+    ## Proportion of Variance 0.01239 0.00773 0.00409 0.00069 0.00055 0.00042 0.00022
+    ## Cumulative Proportion  0.98610 0.99382 0.99791 0.99860 0.99915 0.99957 0.99979
+    ##                           PC15    PC16    PC17    PC18    PC19    PC20     PC21
+    ## Standard deviation     0.04574 0.03875 0.02555 0.02099 0.01165 0.01015 0.006646
+    ## Proportion of Variance 0.00009 0.00006 0.00003 0.00002 0.00001 0.00000 0.000000
+    ## Cumulative Proportion  0.99988 0.99994 0.99997 0.99999 0.99999 1.00000 1.000000
+    ##                            PC22      PC23      PC24
+    ## Standard deviation     0.004712 0.0004084 2.354e-07
+    ## Proportion of Variance 0.000000 0.0000000 0.000e+00
+    ## Cumulative Proportion  1.000000 1.0000000 1.000e+00
+
+``` r
 # Scree plot of variance explained
 ve <- (pca_res$sdev^2) / sum(pca_res$sdev^2)
 cumve <- cumsum(ve)
@@ -193,19 +247,25 @@ ggplot(df_ve, aes(PC, Var)) +
   geom_text(aes(label = sprintf("%.1f", Var)), vjust = -0.6, size = 3) +
   labs(x = "Principal component", y = "Variance explained (%)") +
   theme_classic()
+```
 
+![](../figures/knitted_mds/pca-env-vars-1.png)<!-- -->
+
+``` r
 # PCA biplot with individuals (rows) and variables (arrows)
 fviz_pca_biplot(pca_res,
                 repel = TRUE, # avoid text overlap
                 col.var = "steelblue", # variables
                 col.ind = "gray30"    # individuals
 )
+```
 
+![](../figures/knitted_mds/pca-env-vars-2.png)<!-- -->
 
+``` r
 # PCA variables plot (correlation circle)
 load <- as.data.frame(pca_res$rotation[, 1:2])
 load$var <- rownames(load)
-
 # circle helper
 circle <- data.frame(
   x = cos(seq(0, 2*pi, length.out = 200)),
@@ -221,17 +281,23 @@ ggplot() +
   coord_equal(xlim = c(-1,1), ylim = c(-1,1)) +
   labs(x = "PC1", y = "PC2") +
   theme_classic()
+```
 
+![](../figures/knitted_mds/pca-env-vars-3.png)<!-- -->
+
+``` r
 fviz_pca_var(pca_res,
              col.var = "contrib", # color by contribution
              gradient.cols = c("gray70", "steelblue", "darkblue"),
              repel = TRUE
 )
 ```
-    
+
+![](../figures/knitted_mds/pca-env-vars-4.png)<!-- -->
+
 ## (Optional) Prune more variables after narrowing to mean only?
 
-```{r prune-mean, warning=FALSE, eval=FALSE}
+``` r
 # Plot variable importance
 par(mar = c(5, 10, 2, 2))  # bottom, left, top, right
 varImpPlot(rf_mean, main = "Mean Model Importance",cex = 0.6, pch = 19)
@@ -264,21 +330,29 @@ sapply(prune_results, function(mod) {
   c(OOB_MSE = mod$mse[500], VarExpl = mod$rsq[500] * 100)
 })
 ```
-% Variance Explained increases rapidly up to around 18 variables, after which it plateaus.
 
-OOB MSE decreases quickly early on, with minimal gains beyond the top ~18 predictors.
+% Variance Explained increases rapidly up to around 18 variables, after
+which it plateaus.
 
-However, there are not too many more than 18 total, and many of the env variables have similar node purity, so given the special nature of the top 2 (geo dist and sampling density), I will leave all mean env variables.
-  
+OOB MSE decreases quickly early on, with minimal gains beyond the top
+~18 predictors.
+
+However, there are not too many more than 18 total, and many of the env
+variables have similar node purity, so given the special nature of the
+top 2 (geo dist and sampling density), I will leave all mean env
+variables.
+
 ## (Optional) Scaling CSE
 
-Note: I did also try scaling CSE before runnning RF as a different idea, but performance of the full model did not improve, so no need to scale CSE before modeling.
-  
+Note: I did also try scaling CSE before runnning RF as a different idea,
+but performance of the full model did not improve, so no need to scale
+CSE before modeling.
 
 # 4. Final full model - (Tune random forest with mean variables)
 
-## Choose final predictor variables  
-```{r tune_setup}
+## Choose final predictor variables
+
+``` r
 # Load data
 V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
 
@@ -317,7 +391,8 @@ names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
 ```
 
 ## Full random forest model with raw CSE
-```{r tune_run, warning=FALSE, eval = FALSE}
+
+``` r
 # Tune mtry (number of variables tried at each split)
 set.seed(92834567)
 rf_mean_full_tuned <- tuneRF(
@@ -338,26 +413,67 @@ varImpPlot(rf_mean_full_tuned)
 
 # Save the tuned random forest model to disk
 saveRDS(rf_mean_full_tuned, file = file.path(results_dir, "rf_mean_full_tuned.rds"))
-
 ```
+
 FYI: Later, to load the model back into R:
 `rf_mean_full_tuned <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))`
- 
- 
+
 ### Load saved (raw CSE) model
-```{r load-saved}
+
+``` r
 # load saved model
 rf_full <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
 
 #double check they look correct
 print(rf_full)
+```
+
+    ## 
+    ## Call:
+    ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 12
+    ## 
+    ##           Mean of squared residuals: 0.001159808
+    ##                     % Var explained: 85.7
+
+``` r
 print(rf_full$importance)
 ```
 
-## (Optional) Compare full and full tuned models (mean-only predictors)
-Note: eval = FALSE to avoid re-running on knit
-```{r compare, eval=FALSE}
+    ##                %IncMSE IncNodePurity
+    ## BIO1      0.0001632526    0.08260644
+    ## BIO2      0.0003014225    0.13417148
+    ## BIO3      0.0015371814    0.49594070
+    ## BIO4      0.0002384781    0.14142361
+    ## BIO5      0.0001917286    0.09686819
+    ## BIO6      0.0005759119    0.28761449
+    ## BIO7      0.0002275212    0.12205648
+    ## BIO8S     0.0002500370    0.11071230
+    ## BIO9S     0.0003935809    0.16430456
+    ## BIO10S    0.0001925266    0.08892864
+    ## BIO11S    0.0004299928    0.18474855
+    ## BIO12     0.0001587739    0.08642528
+    ## BIO13     0.0003142826    0.16883174
+    ## BIO14     0.0005473538    0.26422377
+    ## BIO15     0.0003653509    0.18748348
+    ## BIO16S    0.0001619166    0.08259274
+    ## BIO17S    0.0003270565    0.11029099
+    ## BIO18S    0.0002432277    0.07294360
+    ## BIO19S    0.0002768421    0.09772391
+    ## slope     0.0001573800    0.10049135
+    ## alt       0.0002650561    0.10772336
+    ## lakes     0.0002521603    0.10792335
+    ## riv_3km   0.0001432166    0.12710960
+    ## samp_20km 0.0015702706    1.28875961
+    ## pix_dist  0.0074908937    4.07276605
 
+## (Optional) Compare full and full tuned models (mean-only predictors)
+
+Note: eval = FALSE to avoid re-running on knit
+
+``` r
 # Build full RF model
 set.seed(10981234)  # ensures reproducibility
 rf_mean_full <- randomForest(
@@ -389,15 +505,19 @@ varImpPlot(rf_mean_full, main = "Full Model Importance",cex = 0.6, pch = 19)
 varImpPlot(rf_mean_full_tuned, main = "Tuned Full Model Importance",cex = 0.6, pch = 19)
 ```
 
-Results from optional comparison:
-The tuned model performs slightly better, but the gain may not be meaningful... however, it does confirm that the model is stable and that the mean-only predictors carry strong signal.
+Results from optional comparison: The tuned model performs slightly
+better, but the gain may not be meaningful… however, it does confirm
+that the model is stable and that the mean-only predictors carry strong
+signal.
 
-Top 18 mean-based predictors retain nearly all the explanatory power of the original full model with 42 predictors.
- 
-# 5. Project predicted values from full CSE model   
+Top 18 mean-based predictors retain nearly all the explanatory power of
+the original full model with 42 predictors.
+
+# 5. Project predicted values from full CSE model
 
 ## Build Projection
-```{r projection, warning=FALSE}
+
+``` r
 # Load env stack with named layers
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
@@ -407,14 +527,28 @@ env$samp_20km <- 1.027064e-11 #neutralize sampling bias
 # Load rdf of final model
 rf_predicted <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
 rf_predicted
+```
+
+    ## 
+    ## Call:
+    ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 12
+    ## 
+    ##           Mean of squared residuals: 0.001159808
+    ##                     % Var explained: 85.7
+
+``` r
 prediction_raster <- predict(env, rf_predicted, type = "response")
 
 # Write Prediction Raster to file
 writeRaster(prediction_raster, file.path(results_dir,"fullRF_CSE.tif"), format = "GTiff", overwrite = TRUE)
 ```
-  
+
 ## Plot predicted CSE
-```{r plot-projection, warning=FALSE}
+
+``` r
 # Create base plot with viridis
 plot(prediction_raster,
      col = viridis::magma(100),
@@ -438,12 +572,13 @@ uganda <- st_intersection(uganda, r_ext) # clip to extent
 plot(st_geometry(uganda), col = NA, border = "black", lwd = 1.2, add = TRUE)
 ```
 
-  
-# 6. Scale and plot predicted connectivity (CSE) and SDM
-    
-## Scale 0-1, habitat suitability and inverse of predicted connectivity (CSE)
-```{r bivmap-scale, warning=FALSE}
+![](../figures/knitted_mds/plot-projection-1.png)<!-- -->
 
+# 6. Scale and plot predicted connectivity (CSE) and SDM
+
+## Scale 0-1, habitat suitability and inverse of predicted connectivity (CSE)
+
+``` r
 # Load raster layers
 con_raster <- rast(file.path(results_dir, "fullRF_CSE.tif"))
 fao <- rast(file.path(data_dir, "FAO_fuscipes_2001.tif"))
@@ -482,9 +617,10 @@ con <- 1 - ((con - con_min) / (con_max - con_min))
 sdm_r <- raster(sdm)
 con_r <- raster(con)
 ```
-  
+
 ## Plot scaled predicted CSE and SDM
-```{r plot-sdm-con, warning=FALSE}
+
+``` r
 # Plot Genetic Connectivity (inverse predicted values)
 plot(con,
      col = rev(viridis::plasma(100)),  # high connectivity = dark
@@ -493,7 +629,11 @@ plot(con,
      legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
+```
 
+![](../figures/knitted_mds/plot-sdm-con-1.png)<!-- -->
+
+``` r
 # Plot Habitat Suitability
 plot(sdm,
      col = viridis::viridis(100),  # high suitability = dark
@@ -502,8 +642,11 @@ plot(sdm,
      legend.args = list(text = "Suitability", side = 2, line = 2.5, cex = 0.8))
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
+```
 
+![](../figures/knitted_mds/plot-sdm-con-2.png)<!-- -->
 
+``` r
 # Plot with custom colors
 
 # Custom palettes based on Bishop et al.
@@ -518,7 +661,11 @@ plot(con,
      legend.args = list(text = "Connectivity", side = 2, line = 2.5, cex = 0.8))
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = 0.25, add = TRUE)
+```
 
+![](../figures/knitted_mds/plot-sdm-con-3.png)<!-- -->
+
+``` r
 # Plot Habitat Suitability with custom colors
 plot(sdm,
      col = suitability_colors,
@@ -528,11 +675,14 @@ plot(sdm,
 plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
 plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
 ```
-  
-# 7. Variable importance plots  
+
+![](../figures/knitted_mds/plot-sdm-con-4.png)<!-- -->
+
+# 6. Variable importance plots
 
 ## Percent Improvement MSE
-```{r variable-imp-mse}
+
+``` r
 library(dplyr)
 library(tibble)
 library(ggplot2)
@@ -593,10 +743,17 @@ ggplot(full_imp, aes(x = variable, y = IncMSE)) +
   scale_x_discrete(labels = label_map) +
   labs(x = NULL, title = "Variable Importance of Raw CSE Model") +
   theme_minimal()
+```
+
+![](../figures/knitted_mds/variable-imp-mse-1.png)<!-- -->
+
+``` r
 #dev.off()
 ```
+
 ## Node Purity
-```{r variable-imp-nodepurity}
+
+``` r
 library(dplyr)
 library(tibble)
 library(ggplot2)
@@ -656,150 +813,4 @@ ggplot(full_imp, aes(x = variable, y = IncNodePurity)) +
   theme_minimal()
 ```
 
-# 8. PCA pruned variables to explore variable importance
-## Run pruned model
-```{r rf-with-pcapruned}
-
-# Load data
-V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
-
-# estimate mean sampling density
-mean(V.table_full$samp_20km_mean, na.rm = TRUE)
-
-# Filter out western outlier "50-KB" 
-V.table <- V.table_full %>%
-  filter(Var1 != "50-KB", Var2 != "50-KB")
-
-# Filter for within-cluster pairs AND geographic distance ≤ 100 km
-#V.table <- V.table_full %>%
-#  filter(Pop1_cluster == Pop2_cluster) %>%
-#  filter(pix_dist <= 100)
-
-# Create unique ID after filtering
-V.table$id <- paste(V.table$Var1, V.table$Var2, sep = "_")
-
-# Define site list
-sites <- sort(unique(c(V.table$Var1, V.table$Var2)))
-
-# How many rows of data for each?
-table(V.table$Pop1_cluster)
-
-# How many unique sites?
-length(sites)
-
-# Choose predictors for RF model (adjust names if necessary)
-predictor_vars <- c("BIO3_mean","BIO4_mean","BIO7_mean", "BIO11S_mean", "BIO13_mean","slope_mean","alt_mean", "lakes_mean","riv_3km_mean", "samp_20km_mean","pix_dist")
-
-# Filter to modeling-relevant columns only
-rf_mean_data <- V.table[, c("CSEdistance", predictor_vars)]
-
-# Rename predictors by removing "_mean" for later projections
-names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
-
-# Tune mtry (number of variables tried at each split)
-set.seed(92834567)
-
-rf_mean_pcapruned_tuned <- tuneRF(
-  x = rf_mean_data[, -1],   # exclude response variable
-  y = rf_mean_data$CSEdistance,
-  ntreeTry = 500,
-  stepFactor = 1.5,         # factor by which mtry is increased/decreased
-  improve = 0.01,           # minimum improvement to continue search
-  trace = TRUE,             # print progress
-  plot = TRUE,              # plot OOB error vs mtry
-  doBest = TRUE,             # return the model with lowest OOB error
-  importance = TRUE
-)
-
-print(rf_mean_pcapruned_tuned)
-importance(rf_mean_pcapruned_tuned)
-varImpPlot(rf_mean_pcapruned_tuned)
-
-#save RDS of pca-pruned model
-saveRDS(rf_mean_pcapruned_tuned, file = file.path(results_dir, "rf_mean_pcapruned_tuned.rds"))
-```
-
-## Variable importance
-```{r plot-pca-pruned}
-# Load pcapruned model
-pcapruned_model <- readRDS(file.path(results_dir, "rf_mean_pcapruned_tuned.rds"))
-
-pcapruned_imp <- importance(pcapruned_model, type = 1) %>%
-  as.data.frame() %>%
-  rownames_to_column("variable") %>%
-  rename(IncMSE = `%IncMSE`) %>%
-  mutate(model = "pcapruned")
-
-# Define custom labels
-label_map <- c(
-  BIO3   = "Isothermality (BIO3)",
-  BIO4   = "Temperature Seasonality (BIO4)",
-  BIO7   = "Temperature Annual Range (BIO7)",
-  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
-  BIO13  = "Precipitation of Wettest Month (BIO13)",
-  slope  = "Slope",
-  alt    = "Altitude",
-  lakes  = "Lake Presence/Absence",
-  riv_3km = "River Kernel Density (3 km bandwidth)",
-  samp_20km = "Sampling Density (20 km bandwidth)",
-  pix_dist = "Geographic Distance (km)"
-)
-
-
-# Order by pcapruned model's %IncMSE (top to bottom)
-pcapruned_order <- pcapruned_imp %>%
-  arrange(desc(IncMSE)) %>%
-  pull(variable)
-
-pcapruned_imp$variable <- factor(pcapruned_imp$variable, levels = rev(pcapruned_order))
-
-# Plot
-# pdf("../figures/VarImpPlot_residModel.pdf",width =6, height=6)
-ggplot(pcapruned_imp, aes(x = variable, y = IncMSE)) +
-  geom_point(data = filter(pcapruned_imp, model == "pcapruned"),
-             color = "black", size = 3) +
-  coord_flip() +
-  scale_y_continuous(name = "%IncMSE") +
-  scale_x_discrete(labels = label_map) +
-  labs(x = NULL, title = "Variable Importance of Raw CSE Model") +
-  theme_minimal()
-#dev.off()
-
-
-pcapruned_imp <- importance(pcapruned_model, type = 2) %>%
-  as.data.frame() %>%
-  rownames_to_column("variable") %>%
-  mutate(model = "pcapruned")
-
-# Define custom labels
-label_map <- c(
-  BIO3   = "Isothermality (BIO3)",
-  BIO4   = "Temperature Seasonality (BIO4)",
-  BIO7   = "Temperature Annual Range (BIO7)",
-  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
-  BIO13  = "Precipitation of Wettest Month (BIO13)",
-  slope  = "Slope",
-  alt    = "Altitude",
-  lakes  = "Lake Presence/Absence",
-  riv_3km = "River Kernel Density (3 km bandwidth)",
-  samp_20km = "Sampling Density (20 km bandwidth)",
-  pix_dist = "Geographic Distance (km)"
-)
-
-# Order variables by node purity
-pcapruned_order <- pcapruned_imp %>%
-  arrange(desc(IncNodePurity)) %>%
-  pull(variable)
-
-pcapruned_imp$variable <- factor(pcapruned_imp$variable, levels = rev(pcapruned_order))
-
-# Plot
-ggplot(pcapruned_imp, aes(x = variable, y = IncNodePurity)) +
-  geom_point(color = "black", size = 3) +
-  coord_flip() +
-  scale_y_continuous(name = "Increase in Node Purity") +
-  scale_x_discrete(labels = label_map) +
-  labs(x = NULL, title = "Variable Importance of Raw CSE Model") +
-  theme_minimal()
-```
-
+![](../figures/knitted_mds/variable-imp-nodepurity-1.png)<!-- -->

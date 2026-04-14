@@ -1,21 +1,25 @@
 ---
-title: "LOPOCV: Spatial Cross-Validation"
+title: "LOPOCV: Random Forest (Internal) Cross-Validation"
 author: "Norah Saarman"
-date: "2025-06-18"
+date: "`r Sys.Date()`"
 output:
   github_document:
     toc: true
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE)
 ```
+  
+# Setup  
+
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 8 (up to 32 available)   
+- **Number of cores:** 16 (up to 32 available)   
 - **Account:** saarman-np  
-- **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
-- **Memory per job:** 200G (cluster limit: 1000G total; avoid exceeding half)    
+- **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
+- **Memory per job:** 400G (cluster limit: 1000G total; avoid exceeding half)  
 
 # Setup
 ```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
