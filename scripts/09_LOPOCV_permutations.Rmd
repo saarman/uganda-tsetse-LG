@@ -100,6 +100,10 @@ dir.create(perm_model_dir, recursive = TRUE, showWarnings = FALSE)
 stopifnot(dir.exists(perm_model_dir))
 stopifnot(file.access(perm_model_dir, 2) == 0)
 
+# High-quality figure output (for manuscript)
+fig_dir <- file.path(results_dir, "figures_pub")
+if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
+
 # define coordinate reference system
 crs_geo <- 4326     # EPSG code for WGS84
 
@@ -333,12 +337,7 @@ metrics_all <- metrics_all[match(rownames(pearson_null), metrics_all$site), ]
 
 pearson_obs <- as.numeric(metrics_all$Pearson)
 
-pearson_null_raw <- read.csv(
-  file.path(results_dir, "pearson_LOPOCV_null_matrix.csv"),
-  row.names = 1,
-  check.names = FALSE
-)
-pearson_null_mat <- as.matrix(pearson_null_raw)
+pearson_null_mat <- as.matrix(pearson_null)
 
 # reorder rows to observed site order if needed
 pearson_null_mat <- pearson_null_mat[match(metrics_all$site, rownames(pearson_null_mat)), ]
@@ -364,7 +363,7 @@ ggplot(plot_df_pearson, aes(x = pearson, fill = type)) +
 ## Chunk 4: Empirical p-value
 GOAL: Calculate an empirical p-value comparing observed vs permuted Pearson's correlation.
 
-```{r empirical-p-lopocv}
+```{r empirical-p-lopocv, warning=FALSE}
 
 # Define region based on SiteMajCluster
 Gff <- read.csv(file.path(input_dir, "Gff_11loci_allsites_indinfo.txt"),
@@ -470,6 +469,10 @@ pearson_plot_df <- rbind(
   pearson_null_long[, c("site", "cluster", "pearson", "type")]
 )
 
+# Run just once to save high quality png for publication
+#png(file.path(fig_dir, "Fig_LOPOCV_obs_vs_permuted.png"), 
+#       width = 7, height = 2.8, units = "in", res = 600) 
+
 # Plot
 ggplot(pearson_plot_df, aes(x = pearson, fill = interaction(type, cluster))) +
   geom_density(
@@ -495,20 +498,24 @@ ggplot(pearson_plot_df, aes(x = pearson, fill = interaction(type, cluster))) +
       "Permuted.south" = "#4e342e"
     ),
     labels = c(
-      "Observed.north" = "Observed North",
-      "Observed.south" = "Observed South",
-      "Permuted.north" = "Permuted North",
-      "Permuted.south" = "Permuted South"
+      "Observed.north" = "North",
+      "Observed.south" = "South",
+      "Permuted.north" = "Permuted (North)",
+      "Permuted.south" = "Permuted (South)"
     )
   ) +
   coord_cartesian(xlim = c(-1, 1)) +
   theme_minimal() +
   labs(
     title = "Observed vs. Permuted Pearson by cluster",
-    x = "Test Pearson (LOPOCV)",
-    y = "Count (permuted scaled by 1/100)"
+    x = "Pearson's r (LOPOCV)",
+    y = "Density"
   )
+
+#dev.off()
 ```
+
+
 # TODO: Spatial Eval, doesn't seem worth too much energy
 
 ## TODO: Chunk 6: Spatial evaluation for permuted LOPOCV models

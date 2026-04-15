@@ -202,8 +202,8 @@ cor_rasters <- readRDS(file.path(results_dir, "cor_rasters_list.rds"))
 predictor_rasters <- readRDS(file.path(results_dir, "predictor_rasters_list.rds"))
 
 # Run just once to save high quality png for publication
-# png(file.path(fig_dir, "Fig_env_raw_and_localcorr.png"), 
-# width = 14, height = 5.6, units = "in", res = 600) 
+#png(file.path(fig_dir, "Fig_env_raw_and_localcorr.png"), 
+#width = 14, height = 5.6, units = "in", res = 600) 
 
 par(mfrow = c(2, length(top_vars)),
     mar = c(1.5, 1.5, 2, 2.5),

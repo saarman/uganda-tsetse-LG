@@ -1,7 +1,7 @@
 LOPOCV: Random Forest (Internal) and Spatial Cross-Validation
 ================
 Norah Saarman
-2026-04-14
+2026-04-15
 
 - [Setup](#setup)
   - [Overview of script](#overview-of-script)
@@ -16,6 +16,8 @@ Norah Saarman
   - [Chunk 3: Compare Distributions](#chunk-3-compare-distributions)
   - [Chunk 5: Visualize permutated vs observed LOPOCV
     side-by-side](#chunk-5-visualize-permutated-vs-observed-lopocv-side-by-side)
+- [TODO: Spatial Eval, doesn’t seem worth too much
+  energy](#todo-spatial-eval-doesnt-seem-worth-too-much-energy)
   - [TODO: Chunk 6: Spatial evaluation for permuted LOPOCV
     models](#todo-chunk-6-spatial-evaluation-for-permuted-lopocv-models)
   - [TODO: Chunk 7: Spatial permutation
@@ -115,6 +117,10 @@ perm_model_dir <- file.path(results_dir, "perm_rds_temp")
 dir.create(perm_model_dir, recursive = TRUE, showWarnings = FALSE)
 stopifnot(dir.exists(perm_model_dir))
 stopifnot(file.access(perm_model_dir, 2) == 0)
+
+# High-quality figure output (for manuscript)
+fig_dir <- file.path(results_dir, "figures_pub")
+if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 
 # define coordinate reference system
 crs_geo <- 4326     # EPSG code for WGS84
@@ -365,12 +371,7 @@ metrics_all <- metrics_all[match(rownames(pearson_null), metrics_all$site), ]
 
 pearson_obs <- as.numeric(metrics_all$Pearson)
 
-pearson_null_raw <- read.csv(
-  file.path(results_dir, "pearson_LOPOCV_null_matrix.csv"),
-  row.names = 1,
-  check.names = FALSE
-)
-pearson_null_mat <- as.matrix(pearson_null_raw)
+pearson_null_mat <- as.matrix(pearson_null)
 
 # reorder rows to observed site order if needed
 pearson_null_mat <- pearson_null_mat[match(metrics_all$site, rownames(pearson_null_mat)), ]
@@ -394,7 +395,7 @@ ggplot(plot_df_pearson, aes(x = pearson, fill = type)) +
   )
 ```
 
-    ## Warning: Removed 6767 rows containing non-finite outside the scale range
+    ## Warning: Removed 6834 rows containing non-finite outside the scale range
     ## (`stat_density()`).
 
 ![](../figures/knitted_mds/plot-pearson-lopocv-1.png)<!-- --> \## Chunk
@@ -462,212 +463,7 @@ obs_mean_south <- mean(obs_south, na.rm = TRUE)
 
 null_mean_north <- apply(null_north_mat, 2, mean, na.rm = TRUE)
 null_mean_south <- apply(null_south_mat, 2, mean, na.rm = TRUE)
-```
 
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-    ## Warning in mean.default(newX[, i], ...): argument is not numeric or logical:
-    ## returning NA
-
-``` r
 p_north <- (sum(null_mean_north >= obs_mean_north) + 1) / (length(null_mean_north) + 1)
 p_south <- (sum(null_mean_south >= obs_mean_south) + 1) / (length(null_mean_south) + 1)
 
@@ -740,6 +536,10 @@ pearson_plot_df <- rbind(
   pearson_null_long[, c("site", "cluster", "pearson", "type")]
 )
 
+# Run just once to save high quality png for publication
+#png(file.path(fig_dir, "Fig_LOPOCV_obs_vs_permuted.png"), 
+#       width = 7, height = 2.8, units = "in", res = 600) 
+
 # Plot
 ggplot(pearson_plot_df, aes(x = pearson, fill = interaction(type, cluster))) +
   geom_density(
@@ -765,23 +565,28 @@ ggplot(pearson_plot_df, aes(x = pearson, fill = interaction(type, cluster))) +
       "Permuted.south" = "#4e342e"
     ),
     labels = c(
-      "Observed.north" = "Observed North",
-      "Observed.south" = "Observed South",
-      "Permuted.north" = "Permuted North",
-      "Permuted.south" = "Permuted South"
+      "Observed.north" = "North",
+      "Observed.south" = "South",
+      "Permuted.north" = "Permuted (North)",
+      "Permuted.south" = "Permuted (South)"
     )
   ) +
   coord_cartesian(xlim = c(-1, 1)) +
   theme_minimal() +
   labs(
     title = "Observed vs. Permuted Pearson by cluster",
-    x = "Test Pearson (LOPOCV)",
-    y = "Count (permuted scaled by 1/100)"
+    x = "Pearson's r (LOPOCV)",
+    y = "Density"
   )
 ```
 
-![](../figures/knitted_mds/plot-side-by-side-1.png)<!-- --> \# TODO:
-Spatial Eval, doesn’t seem worth too much energy
+![](../figures/knitted_mds/plot-side-by-side-1.png)<!-- -->
+
+``` r
+#dev.off()
+```
+
+# TODO: Spatial Eval, doesn’t seem worth too much energy
 
 ## TODO: Chunk 6: Spatial evaluation for permuted LOPOCV models
 
