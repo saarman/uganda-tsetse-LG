@@ -512,7 +512,7 @@ ggplot() +
     values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")
   ) +
   scale_size_continuous(
-  name = "LOPOCV Test\nSpearman",
+  name = "LOPOCV \nSpearman's r",
   limits = c(0.4, 1.0),
   breaks = c(0.4, 0.7, 1.0),
   range = c(2,7)
@@ -520,15 +520,15 @@ ggplot() +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
-  labs(title = "LOPOCV Test Spearman by Sampling Site", x = "Longitude", y = "Latitude")
+  labs(title = "LOPOCV Spearman's r by Sampling Site", x = "Longitude", y = "Latitude")
 
 ggplot(site_metadata, aes(x = Spearman, fill = Subcluster)) +
   geom_density(alpha = 0.5, color = NA) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
   theme_minimal() +
   labs(
-    title = "Distribution of Test Spearman by Subcluster",
-    x = "Test Spearman (LOPOCV)",
+    title = "Distribution of Spearman's r by Subcluster",
+    x = "Spearman's r (LOPOCV)",
     y = "Density"
   )
 
@@ -537,8 +537,8 @@ ggplot(site_metadata, aes(x = Spearman, fill = Subcluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
   theme_minimal() +
   labs(
-    title = "Test Spearman by Subcluster (Scaled by Count)",
-    x = "Test Spearman (LOPOCV)",
+    title = "Spearman's r by Subcluster (Scaled by Count)",
+    x = "Spearman's r (LOPOCV)",
     y = "Count"
   )
 
@@ -563,7 +563,7 @@ ggplot() +
     values = c("north" = "#1f78b4", "south" = "#e66101")
   ) +
   scale_size_continuous(
-  name = "LOPOCV Test\nSpearman",
+  name = "LOPOCV \nSpearman's r",
   limits = c(0.4, 1.0),
   breaks = c(0.4, 0.7, 1.0),
   range = c(2,7)
@@ -571,15 +571,15 @@ ggplot() +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
-  labs(title = "LOPOCV Test Spearman by Site", x = "Longitude", y = "Latitude")
+  labs(title = "LOPOCV Spearman's r by Site", x = "Longitude", y = "Latitude")
 
 ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   geom_density(alpha = 0.5, color = NA) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
   labs(
-    title = "Distribution of Test Spearman by Cluster",
-    x = "Test Spearman (LOPOCV)",
+    title = "Distribution of Spearman's r by Cluster",
+    x = "Spearman's r (LOPOCV)",
     y = "Density"
   )
 
@@ -588,8 +588,8 @@ ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
   labs(
-    title = "Test Spearman by Cluster (Scaled by Count)",
-    x = "Test Spearman (LOPOCV)",
+    title = "Spearman's r by Cluster (Scaled by Count)",
+    x = "Spearman's r (LOPOCV)",
     y = "Count"
   )
 
@@ -1249,7 +1249,7 @@ ggplot() +
     values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")
   ) +
   scale_size_continuous(
-  name = "LOPOCV Test\nSpearman",
+  name = "LOPOCV \nSpearman's r",
   limits = c(0.4, 1.0),
   breaks = c(0.4, 0.7, 1.0),
   range = c(2,7)
@@ -1257,7 +1257,7 @@ ggplot() +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
-  labs(title = "Spatial LOPOCV Test Pearson by Site", x = "Longitude", y = "Latitude")
+  labs(title = "Spatial LOPOCV Pearson's r by Site", x = "Longitude", y = "Latitude")
 
 # Overlapping density plot
 ggplot(site_metadata, aes(x = Pearson, fill = Subcluster)) +
@@ -1276,8 +1276,8 @@ ggplot(site_metadata, aes(x = Pearson, fill = Subcluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
   theme_minimal() +
   labs(
-    title = "Test Pearson by Subcluster (Scaled by Count)",
-    x = "Test Pearson (Spatial LOPOCV)",
+    title = "Pearson's r by Subcluster (Scaled by Count)",
+    x = "Pearson's r (Spatial LOPOCV)",
     y = "Count"
   )
 
@@ -1304,7 +1304,7 @@ ggplot() +
     values = c("north" = "#1f78b4", "south" = "#e66101")
   ) +
   scale_size_continuous(
-  name = "LOPOCV Test\nSpearman",
+  name = "LOPOCV \nSpearman's r",
   limits = c(0.4, 1.0),
   breaks = c(0.4, 0.7, 1.0),
   range = c(2,7)
@@ -1321,7 +1321,7 @@ ggplot(site_metadata, aes(x = Pearson, fill = Cluster)) +
   theme_minimal() +
   labs(
     title = "Distribution of Test Pearson by Cluster",
-    x = "Test Pearson (Spatial LOPOCV)",
+    x = "Pearson's r (Spatial LOPOCV)",
     y = "Density"
   )
 
@@ -1331,8 +1331,8 @@ ggplot(site_metadata, aes(x = Pearson, fill = Cluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
   labs(
-    title = "Test Pearson by Cluster (Scaled by Count)",
-    x = "Test Pearson (Spatial LOPOCV)",
+    title = "Pearson's r by Cluster (Scaled by Count)",
+    x = "Pearson's r (Spatial LOPOCV)",
     y = "Count"
   )
 
