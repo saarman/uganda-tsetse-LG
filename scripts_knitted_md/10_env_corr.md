@@ -1,54 +1,81 @@
----
-title: "Environmental correlations with final model (opening the RF black box)"
-author: "Norah Saarman"
-date: "`r Sys.Date()`"
-output:
-  github_document:
-    toc: true
-knit: (function(input, ...) {
-    rmarkdown::render(
-      input,
-      output_dir = "../scripts_knitted_md", 
-      envir = globalenv()
-    )
-  })
----
+Environmental correlations with final model (opening the RF black box)
+================
+Norah Saarman
+2026-04-15
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  echo = TRUE,
-  # Saves PNGs to the root /figures folder
-  fig.path = "../figures/knitted_mds/" 
-)
-```
+- [Setup](#setup)
+- [Overview](#overview)
+  - [Chunk 1: Directories, objects, color
+    palettes](#chunk-1-directories-objects-color-palettes)
+  - [Chunk 2: Load data (rasters, objects,
+    etc)](#chunk-2-load-data-rasters-objects-etc)
+  - [Chunk 3: extract selected predictors and calculate local
+    correlations](#chunk-3-extract-selected-predictors-and-calculate-local-correlations)
+  - [Chunk 4: Plot raw env predictors (top) and local Pearson
+    correlations
+    (bottom)](#chunk-4-plot-raw-env-predictors-top-and-local-pearson-correlations-bottom)
 
-# Setup  
+# Setup
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 16 (up to 32 available)   
+- **Number of cores:** 16 (up to 32 available)  
 - **Account:** saarman-np  
-- **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
-- **Memory per job:** 400G (cluster limit: 1000G total; avoid exceeding half)  
+- **Partition:** saarman-np (allows multiple simultaneous jobs
+automatically now)  
+- **Memory per job:** 400G (cluster limit: 1000G total; avoid exceeding
+half)
 
 # Overview
 
-Pearson's correlation in a sliding window, of the current variable versus full model, add this to figure with direction of change
+Pearson’s correlation in a sliding window, of the current variable
+versus full model, add this to figure with direction of change
 
-Top less-correlated predictors:
-BIO3, BIO4, BIO7, BIO11S, BIO13
+Top less-correlated predictors: BIO3, BIO4, BIO7, BIO11S, BIO13
 
-Figure X. Local Pearson correlations between predicted CSE and selected environmental predictor rasters, calculated in a sliding window with neighborhood size = 21. Positive values indicate local areas where higher predictor values are associated with higher predicted CSE; negative values indicate areas where higher predictor values are associated with lower predicted CSE.
+Figure X. Local Pearson correlations between predicted CSE and selected
+environmental predictor rasters, calculated in a sliding window with
+neighborhood size = 21. Positive values indicate local areas where
+higher predictor values are associated with higher predicted CSE;
+negative values indicate areas where higher predictor values are
+associated with lower predicted CSE.
 
 ## Chunk 1: Directories, objects, color palettes
 
-```{r 1-setup}
+``` r
 # Libraries
 library(raster)
+```
+
+    ## Loading required package: sp
+
+``` r
 library(sf)
+```
+
+    ## Linking to GEOS 3.10.2, GDAL 3.4.1, PROJ 8.2.1; sf_use_s2() is TRUE
+
+``` r
 library(ggplot2)
 library(dplyr)
+```
 
+    ## 
+    ## Attaching package: 'dplyr'
+
+    ## The following objects are masked from 'package:raster':
+    ## 
+    ##     intersect, select, union
+
+    ## The following objects are masked from 'package:stats':
+    ## 
+    ##     filter, lag
+
+    ## The following objects are masked from 'package:base':
+    ## 
+    ##     intersect, setdiff, setequal, union
+
+``` r
 # Directories
 project_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG"
 data_dir    <- file.path(project_dir, "data")
@@ -89,8 +116,10 @@ make_diverging_palette <- function(zmin, zmax, n = 100) {
   }
 }
 ```
+
 ## Chunk 2: Load data (rasters, objects, etc)
-```{r 2-rasters-key-objects}
+
+``` r
 # Load connectivity model output
 cse_surface <- raster(file.path(results_dir, "fullRF_CSE.tif"))
 
@@ -131,11 +160,9 @@ cse_max <- cellStats(cse, stat = "max", na.rm = TRUE)
 conn <- 1 - ((cse - cse_min) / (cse_max - cse_min))
 ```
 
-
 ## Chunk 3: extract selected predictors and calculate local correlations
 
-```{r 3-env-correlations, eval = FALSE}
-
+``` r
 # Load env stack with named layers
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
@@ -187,10 +214,10 @@ cor_rasters <- lapply(cor_rasters, function(r) {
 # Save correlation rasters
 saveRDS(cor_rasters, file = file.path(results_dir, "cor_rasters_list.rds"))
 ```
-  
+
 ## Chunk 4: Plot raw env predictors (top) and local Pearson correlations (bottom)
 
-```{r 4-plots}
+``` r
 # Load env stack with named layers
 env <- stack(file.path(data_dir, "processed", "env_stack.grd"))
 
@@ -253,8 +280,10 @@ for (v in top_vars) {
   plot(st_geometry(lakes), col = "black", border = NA, add = TRUE)
   plot(st_geometry(uganda), border = "grey20", lwd = 0.3, add = TRUE)
 }
-
-#dev.off()
 ```
 
+![](../figures/knitted_mds/4-plots-1.png)<!-- -->
 
+``` r
+#dev.off()
+```
