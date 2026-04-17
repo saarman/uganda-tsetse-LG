@@ -559,7 +559,7 @@ ggplot() +
     shape = 21, color = "black", size = 1, stroke = 0.3
   ) +
   scale_fill_manual(
-    name = "Cluster",
+    name = "Group",
     values = c("north" = "#1f78b4", "south" = "#e66101")
   ) +
   scale_size_continuous(
@@ -1300,7 +1300,7 @@ ggplot() +
     shape = 21, color = "black", size = 1, stroke = 0.3
   ) +
   scale_fill_manual(
-    name = "Cluster",
+    name = "Group",
     values = c("north" = "#1f78b4", "south" = "#e66101")
   ) +
   scale_size_continuous(
