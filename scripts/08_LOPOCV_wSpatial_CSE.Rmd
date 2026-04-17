@@ -1102,7 +1102,7 @@ Calculate metrics: Why Spearman instead of RSQ?
 Fold-specific RSQ values were unstable because several held-out sites exhibited limited variance in observed CSE, making the denominator of RSQ (total sum of squares) small and sensitive to minor prediction error. In contrast, Spearman’s rank correlation provides a scale-independent measure of association and more robustly captures whether the model preserves relative differences among site pairs under these conditions. This is particularly relevant for resistance-based distance models, where relative ordering of pairwise connectivity is often more important than absolute prediction accuracy.
 
 ```{r 9-fold-metrics, eval = FALSE}
-
+kdist = 1
 for (fold_idx in seq_along(sites)) {
 
   site <- sites[fold_idx]
@@ -1196,8 +1196,12 @@ print(pooled_summary_spatial)
 ```{r 10-visualize-spatial-LCPsum}
 # Load Spatial LOPOCV summary
 metrics_all <- read.csv(file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_summary.csv"))
-head(metrics_all)
+print(metrics_all)
 summary(metrics_all$Pearson)
+
+# Load Spatial Poooled Stats
+pooled_summary_spatial <- read.csv(file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_pooled_summary.csv"))
+print(pooled_summary_spatial)
 
 # Load raster for extent
 altitude <- raster::raster(file.path(

@@ -1,7 +1,7 @@
 LOPOCV: Random Forest (Internal) and Spatial Cross-Validation
 ================
 Norah Saarman
-2026-04-14
+2026-04-17
 
 - [Setup](#setup)
   - [Overview of script](#overview-of-script)
@@ -603,7 +603,7 @@ ggplot() +
     values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")
   ) +
   scale_size_continuous(
-  name = "LOPOCV Test\nSpearman",
+  name = "LOPOCV \nSpearman's r",
   limits = c(0.4, 1.0),
   breaks = c(0.4, 0.7, 1.0),
   range = c(2,7)
@@ -611,7 +611,7 @@ ggplot() +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
-  labs(title = "LOPOCV Test Spearman by Sampling Site", x = "Longitude", y = "Latitude")
+  labs(title = "LOPOCV Spearman's r by Sampling Site", x = "Longitude", y = "Latitude")
 ```
 
 ![](../figures/knitted_mds/5-viz-spearman-1.png)<!-- -->
@@ -622,8 +622,8 @@ ggplot(site_metadata, aes(x = Spearman, fill = Subcluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
   theme_minimal() +
   labs(
-    title = "Distribution of Test Spearman by Subcluster",
-    x = "Test Spearman (LOPOCV)",
+    title = "Distribution of Spearman's r by Subcluster",
+    x = "Spearman's r (LOPOCV)",
     y = "Density"
   )
 ```
@@ -636,8 +636,8 @@ ggplot(site_metadata, aes(x = Spearman, fill = Subcluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
   theme_minimal() +
   labs(
-    title = "Test Spearman by Subcluster (Scaled by Count)",
-    x = "Test Spearman (LOPOCV)",
+    title = "Spearman's r by Subcluster (Scaled by Count)",
+    x = "Spearman's r (LOPOCV)",
     y = "Count"
   )
 ```
@@ -662,11 +662,11 @@ ggplot() +
     shape = 21, color = "black", size = 1, stroke = 0.3
   ) +
   scale_fill_manual(
-    name = "Cluster",
+    name = "Group",
     values = c("north" = "#1f78b4", "south" = "#e66101")
   ) +
   scale_size_continuous(
-  name = "LOPOCV Test\nSpearman",
+  name = "LOPOCV \nSpearman's r",
   limits = c(0.4, 1.0),
   breaks = c(0.4, 0.7, 1.0),
   range = c(2,7)
@@ -674,7 +674,7 @@ ggplot() +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
-  labs(title = "LOPOCV Test Spearman by Site", x = "Longitude", y = "Latitude")
+  labs(title = "LOPOCV Spearman's r by Site", x = "Longitude", y = "Latitude")
 ```
 
 ![](../figures/knitted_mds/5-viz-spearman-4.png)<!-- -->
@@ -685,8 +685,8 @@ ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
   labs(
-    title = "Distribution of Test Spearman by Cluster",
-    x = "Test Spearman (LOPOCV)",
+    title = "Distribution of Spearman's r by Cluster",
+    x = "Spearman's r (LOPOCV)",
     y = "Density"
   )
 ```
@@ -699,8 +699,8 @@ ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
   labs(
-    title = "Test Spearman by Cluster (Scaled by Count)",
-    x = "Test Spearman (LOPOCV)",
+    title = "Spearman's r by Cluster (Scaled by Count)",
+    x = "Spearman's r (LOPOCV)",
     y = "Count"
   )
 ```
@@ -1248,6 +1248,7 @@ distance models, where relative ordering of pairwise connectivity is
 often more important than absolute prediction accuracy.
 
 ``` r
+kdist = 1
 for (fold_idx in seq_along(sites)) {
 
   site <- sites[fold_idx]
@@ -1341,23 +1342,145 @@ print(pooled_summary_spatial)
 ``` r
 # Load Spatial LOPOCV summary
 metrics_all <- read.csv(file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_summary.csv"))
-head(metrics_all)
+print(metrics_all)
 ```
 
-    ##     site projection_km  method  n         MSE       RMSE        MAE   Pearson
-    ## 1 01-AIN             1 LCP_sum 34 0.003843591 0.06199670 0.05239148 0.8617210
-    ## 2 02-GAN             1 LCP_sum 34 0.003132155 0.05596566 0.04422107 0.8667188
-    ## 3 03-DUK             1 LCP_sum 34 0.002709665 0.05205445 0.04412794 0.8243442
-    ## 4 07-OSG             1 LCP_sum 34 0.001924589 0.04387014 0.03421054 0.7977330
-    ## 5  08-MY             1 LCP_sum 34 0.003063888 0.05535240 0.04558687 0.7798523
-    ## 6 09-ORB             1 LCP_sum 34 0.001751627 0.04185244 0.03327633 0.8395910
-    ##    Spearman
-    ## 1 0.8252101
-    ## 2 0.8212376
-    ## 3 0.7103132
-    ## 4 0.7087853
-    ## 5 0.6855615
-    ## 6 0.8071811
+    ##      site projection_km  method  n         MSE       RMSE        MAE   Pearson
+    ## 1  01-AIN             1 LCP_sum 34 0.003843591 0.06199670 0.05239148 0.8617210
+    ## 2  02-GAN             1 LCP_sum 34 0.003132155 0.05596566 0.04422107 0.8667188
+    ## 3  03-DUK             1 LCP_sum 34 0.002709665 0.05205445 0.04412794 0.8243442
+    ## 4  07-OSG             1 LCP_sum 34 0.001924589 0.04387014 0.03421054 0.7977330
+    ## 5   08-MY             1 LCP_sum 34 0.003063888 0.05535240 0.04558687 0.7798523
+    ## 6  09-ORB             1 LCP_sum 34 0.001751627 0.04185244 0.03327633 0.8395910
+    ## 7  10-PAG             1 LCP_sum 34 0.001241094 0.03522916 0.02785642 0.8933229
+    ## 8  12-OLO             1 LCP_sum 34 0.001140869 0.03377675 0.02682173 0.8722050
+    ## 9  14-OKS             1 LCP_sum 34 0.002045662 0.04522900 0.03893983 0.9027847
+    ## 10 15-NGO             1 LCP_sum 34 0.001550066 0.03937088 0.02744220 0.7764778
+    ## 11 17-LAG             1 LCP_sum 34 0.001650230 0.04062303 0.03428387 0.8907716
+    ## 12 18-BOL             1 LCP_sum 34 0.002470688 0.04970601 0.04144486 0.8286751
+    ## 13 19-KTC             1 LCP_sum 34 0.001240438 0.03521985 0.02843296 0.8886503
+    ## 14 20-TUM             1 LCP_sum 34 0.002080619 0.04561380 0.03787773 0.8328793
+    ## 15  21-KT             1 LCP_sum 34 0.003069589 0.05540388 0.04918261 0.8093904
+    ## 16 22-OMI             1 LCP_sum 34 0.001383317 0.03719297 0.03202972 0.8749602
+    ## 17 24-KIL             1 LCP_sum 34 0.002406838 0.04905954 0.04357598 0.8157516
+    ## 18 25-CHU             1 LCP_sum 34 0.003442569 0.05867341 0.05037092 0.8130497
+    ## 19  26-OG             1 LCP_sum 34 0.004029817 0.06348084 0.05528035 0.7863525
+    ## 20 27-OCA             1 LCP_sum 34 0.002326296 0.04823169 0.04100922 0.8068565
+    ## 21 28-AKA             1 LCP_sum 34 0.002459216 0.04959048 0.04295016 0.8521116
+    ## 22 30-OLE             1 LCP_sum 34 0.002616217 0.05114896 0.04583953 0.8344487
+    ## 23 31-ACA             1 LCP_sum 34 0.001857831 0.04310256 0.03337214 0.7446083
+    ## 24 32-APU             1 LCP_sum 34 0.003394618 0.05826335 0.04978838 0.8243721
+    ## 25  33-AP             1 LCP_sum 34 0.001388579 0.03726364 0.02900522 0.8223463
+    ## 26 36-UGT             1 LCP_sum 34 0.002402521 0.04901552 0.03881062 0.8388714
+    ## 27  37-OT             1 LCP_sum 34 0.001445999 0.03802629 0.03130043 0.8322606
+    ## 28 38-OCU             1 LCP_sum 34 0.002567059 0.05066615 0.04306817 0.7589280
+    ## 29 40-KAG             1 LCP_sum 34 0.002327657 0.04824580 0.04182709 0.7995743
+    ## 30  43-OS             1 LCP_sum 34 0.001836375 0.04285295 0.03510637 0.7976722
+    ## 31  44-MK             1 LCP_sum 34 0.003334831 0.05774799 0.05148174 0.8796988
+    ## 32 45-BKD             1 LCP_sum 34 0.001100764 0.03317776 0.02752184 0.9053937
+    ## 33  46-PT             1 LCP_sum 34 0.002212532 0.04703756 0.03669759 0.8428693
+    ## 34  47-BK             1 LCP_sum 34 0.003161987 0.05623155 0.04258631 0.8515937
+    ## 35  48-BN             1 LCP_sum 34 0.008893827 0.09430709 0.08098099 0.7597233
+    ## 36  51-MF             1 LCP_sum 31 0.004081878 0.06388958 0.05487373 0.7631684
+    ## 37  52-KR             1 LCP_sum 31 0.002388137 0.04886857 0.04066011 0.8039985
+    ## 38  54-MS             1 LCP_sum 31 0.008389312 0.09159319 0.08318529 0.8473597
+    ## 39 55-KAF             1 LCP_sum 31 0.005857431 0.07653386 0.06520697 0.8010143
+    ## 40  56-MA             1 LCP_sum 31 0.005194584 0.07207346 0.05516732 0.7982472
+    ## 41  57-KG             1 LCP_sum 31 0.005873403 0.07663813 0.06085051 0.8173543
+    ## 42  58-SS             1 LCP_sum 31 0.004870259 0.06978724 0.05332003 0.7585191
+    ## 43  59-EB             1 LCP_sum 31 0.001678769 0.04097278 0.03351986 0.9077015
+    ## 44  60-NA             1 LCP_sum 31 0.003379256 0.05813137 0.04553291 0.8826762
+    ## 45  61-KO             1 LCP_sum 31 0.004138632 0.06433220 0.04954832 0.9020261
+    ## 46  62-NS             1 LCP_sum 31 0.003623972 0.06019943 0.04836145 0.8994828
+    ## 47  63-DB             1 LCP_sum 31 0.003692895 0.06076919 0.04737781 0.9018345
+    ## 48  64-KL             1 LCP_sum 31 0.002569070 0.05068600 0.04090446 0.9143163
+    ## 49  65-BZ             1 LCP_sum 31 0.003764721 0.06135732 0.05527847 0.7442803
+    ## 50  66-BY             1 LCP_sum 31 0.004914680 0.07010478 0.06109800 0.7096671
+    ## 51  68-LI             1 LCP_sum 31 0.004454891 0.06674497 0.05505736 0.7804667
+    ## 52  69-BV             1 LCP_sum 31 0.002820504 0.05310842 0.04612787 0.8447135
+    ## 53 70-MGG             1 LCP_sum 31 0.004257916 0.06525271 0.05443401 0.8042054
+    ## 54  71-BD             1 LCP_sum 31 0.002641179 0.05139241 0.04497501 0.8479577
+    ## 55  72-JN             1 LCP_sum 31 0.002030184 0.04505757 0.03473423 0.6405413
+    ## 56 73-IGG             1 LCP_sum 31 0.003710537 0.06091418 0.05151280 0.7950704
+    ## 57 74-NAM             1 LCP_sum 31 0.002665907 0.05163242 0.04379976 0.7689024
+    ## 58  76-TB             1 LCP_sum 31 0.005013931 0.07080912 0.05989106 0.5934319
+    ## 59  78-OK             1 LCP_sum 31 0.004079953 0.06387451 0.05272814 0.6640783
+    ## 60  79-BU             1 LCP_sum 31 0.004797222 0.06926198 0.05924316 0.5977669
+    ## 61 81-BUD             1 LCP_sum 31 0.005001718 0.07072282 0.06255776 0.8617711
+    ## 62 82-BON             1 LCP_sum 31 0.007579524 0.08706046 0.07945100 0.8427461
+    ## 63  83-ND             1 LCP_sum 31 0.004141087 0.06435128 0.04320117 0.7110836
+    ## 64 84-MAN             1 LCP_sum 31 0.005495843 0.07413395 0.06779857 0.8717776
+    ## 65 85-KSS             1 LCP_sum 31 0.006579793 0.08111592 0.07546441 0.8362678
+    ## 66 86-SUB             1 LCP_sum 31 0.010216663 0.10107751 0.09248045 0.8283309
+    ## 67 87-KAR             1 LCP_sum 31 0.004877399 0.06983838 0.06228944 0.8654663
+    ##     Spearman
+    ## 1  0.8252101
+    ## 2  0.8212376
+    ## 3  0.7103132
+    ## 4  0.7087853
+    ## 5  0.6855615
+    ## 6  0.8071811
+    ## 7  0.8600458
+    ## 8  0.7347594
+    ## 9  0.8157372
+    ## 10 0.7805959
+    ## 11 0.8728801
+    ## 12 0.7662338
+    ## 13 0.8814362
+    ## 14 0.7842628
+    ## 15 0.8108480
+    ## 16 0.8634072
+    ## 17 0.8203209
+    ## 18 0.7937357
+    ## 19 0.7818182
+    ## 20 0.8041253
+    ## 21 0.8355997
+    ## 22 0.8194041
+    ## 23 0.7423988
+    ## 24 0.8108480
+    ## 25 0.8242934
+    ## 26 0.8469060
+    ## 27 0.8487395
+    ## 28 0.7790680
+    ## 29 0.8181818
+    ## 30 0.8774637
+    ## 31 0.8979374
+    ## 32 0.8982429
+    ## 33 0.8707410
+    ## 34 0.8539343
+    ## 35 0.7961803
+    ## 36 0.5512097
+    ## 37 0.6318548
+    ## 38 0.5979839
+    ## 39 0.6241935
+    ## 40 0.6947581
+    ## 41 0.7733871
+    ## 42 0.6572581
+    ## 43 0.8584677
+    ## 44 0.8758065
+    ## 45 0.9044355
+    ## 46 0.9064516
+    ## 47 0.9072581
+    ## 48 0.9149194
+    ## 49 0.8169355
+    ## 50 0.7608871
+    ## 51 0.8754032
+    ## 52 0.8774194
+    ## 53 0.8810484
+    ## 54 0.8846774
+    ## 55 0.5794355
+    ## 56 0.8169355
+    ## 57 0.7983871
+    ## 58 0.6237903
+    ## 59 0.6943548
+    ## 60 0.5798387
+    ## 61 0.7729839
+    ## 62 0.8068548
+    ## 63 0.6572581
+    ## 64 0.9008065
+    ## 65 0.8504032
+    ## 66 0.8072581
+    ## 67 0.7903226
 
 ``` r
 summary(metrics_all$Pearson)
@@ -1365,6 +1488,15 @@ summary(metrics_all$Pearson)
 
     ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
     ##  0.5934  0.7907  0.8283  0.8166  0.8636  0.9143
+
+``` r
+# Load Spatial Poooled Stats
+pooled_summary_spatial <- read.csv(file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_pooled_summary.csv"))
+print(pooled_summary_spatial)
+```
+
+    ##      n pooled_R2 pooled_Pearson pooled_Spearman pooled_RMSE pooled_MAE
+    ## 1 2182 0.5782235      0.7605472       0.7850421   0.0584843 0.04740392
 
 ``` r
 # Load raster for extent
@@ -1421,7 +1553,7 @@ ggplot() +
     values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")
   ) +
   scale_size_continuous(
-  name = "LOPOCV Test\nSpearman",
+  name = "LOPOCV \nSpearman's r",
   limits = c(0.4, 1.0),
   breaks = c(0.4, 0.7, 1.0),
   range = c(2,7)
@@ -1429,7 +1561,7 @@ ggplot() +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
-  labs(title = "Spatial LOPOCV Test Pearson by Site", x = "Longitude", y = "Latitude")
+  labs(title = "Spatial LOPOCV Pearson's r by Site", x = "Longitude", y = "Latitude")
 ```
 
 ![](../figures/knitted_mds/10-visualize-spatial-LCPsum-1.png)<!-- -->
@@ -1456,8 +1588,8 @@ ggplot(site_metadata, aes(x = Pearson, fill = Subcluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
   theme_minimal() +
   labs(
-    title = "Test Pearson by Subcluster (Scaled by Count)",
-    x = "Test Pearson (Spatial LOPOCV)",
+    title = "Pearson's r by Subcluster (Scaled by Count)",
+    x = "Pearson's r (Spatial LOPOCV)",
     y = "Count"
   )
 ```
@@ -1484,11 +1616,11 @@ ggplot() +
     shape = 21, color = "black", size = 1, stroke = 0.3
   ) +
   scale_fill_manual(
-    name = "Cluster",
+    name = "Group",
     values = c("north" = "#1f78b4", "south" = "#e66101")
   ) +
   scale_size_continuous(
-  name = "LOPOCV Test\nSpearman",
+  name = "LOPOCV \nSpearman's r",
   limits = c(0.4, 1.0),
   breaks = c(0.4, 0.7, 1.0),
   range = c(2,7)
@@ -1509,7 +1641,7 @@ ggplot(site_metadata, aes(x = Pearson, fill = Cluster)) +
   theme_minimal() +
   labs(
     title = "Distribution of Test Pearson by Cluster",
-    x = "Test Pearson (Spatial LOPOCV)",
+    x = "Pearson's r (Spatial LOPOCV)",
     y = "Density"
   )
 ```
@@ -1523,8 +1655,8 @@ ggplot(site_metadata, aes(x = Pearson, fill = Cluster)) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
   labs(
-    title = "Test Pearson by Cluster (Scaled by Count)",
-    x = "Test Pearson (Spatial LOPOCV)",
+    title = "Pearson's r by Cluster (Scaled by Count)",
+    x = "Pearson's r (Spatial LOPOCV)",
     y = "Count"
   )
 ```
