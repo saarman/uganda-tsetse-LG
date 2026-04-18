@@ -14,7 +14,7 @@ knit: (function(input, ...) {
   })
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, eval=TRUE}
 knitr::opts_chunk$set(
   echo = TRUE,
   # Saves PNGs to the root /figures folder
@@ -69,7 +69,7 @@ column = pooled_Pearson
   
   
 ## Libraries
-```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
+```{r libraries, warning=FALSE, results=FALSE, message=FALSE, eval=TRUE}
 # load only required packages
 library(doParallel)
 library(foreach)
@@ -88,7 +88,7 @@ library(reshape2)
 ```
 
 ## Define Paths to Directories
-```{r general-dir-set-up}
+```{r general-dir-set-up, eval=TRUE}
 
 # Define paths
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
@@ -130,10 +130,10 @@ GOAL: Create a 67 x 100 matrix where each cell is the Pearson's correlation for 
 
 ## Chunk 1: LOPOCV on permuted models
 
-Run models and save rds
-```{r permutation-LOPOCV-models, eval = FALSE}
-# Chunk 1: setup + data + helpers + run permuted LOPOCV models and save .rds files
+helpers:
+```{r 1a-helpers-permutation-LOPOCV-models, eval = TRUE}
 
+# Chunk 1: setup + data + helpers 
 
 # Load required packages
 library(dplyr)
@@ -166,6 +166,10 @@ predictor_vars <- c(
 
 # Modeling table
 V.model <- V.table[, c("CSEdistance", predictor_vars)]
+```
+1b run the permutations and save .rds files
+```{r 1b-permutation-LOPOCV-models, eval = FALSE}
+#run permuted LOPOCV models and save .rds files
 
 # Set number of permutations
 n_perm <- 100
@@ -222,7 +226,7 @@ stopCluster(cl)
 ```
 ## Chunk 2: Calculate the metrics
 ```{r permutation-LOPOCV-metrics, eval = FALSE}
-# Chunk 2: calculate Pearson null matrix from saved permutation models
+# Chunk 2: calculate Spearman null matrix from saved permutation models
 
 # Helper for calibration
 calibrate_pred <- function(obs_train, pred_train, pred_test) {
@@ -240,9 +244,9 @@ calibrate_pred <- function(obs_train, pred_train, pred_test) {
 n_perm <- 100
 
 # Preallocate matrix for results
-pearson_null <- matrix(NA_real_, nrow = length(sites), ncol = n_perm)
-rownames(pearson_null) <- sites
-colnames(pearson_null) <- paste0("perm_", seq_len(n_perm))
+spearman_null <- matrix(NA_real_, nrow = length(sites), ncol = n_perm)
+rownames(spearman_null) <- sites
+colnames(spearman_null) <- paste0("perm_", seq_len(n_perm))
 
 for (p in seq_len(n_perm)) {
   set.seed(500 + p)
@@ -251,19 +255,19 @@ for (p in seq_len(n_perm)) {
   V.model_perm <- V.model
   V.model_perm$CSEdistance <- sample(V.model_perm$CSEdistance)
 
-  pearson_perm <- numeric(length(sites))
+  spearman_perm <- numeric(length(sites))
 
   for (i in seq_along(sites)) {
     site <- sites[i]
 
     fold_model_file <- file.path(
-  perm_model_dir,
-  sprintf("rf_model_perm_%02d_fold_%02d.rds", p, i)
-)
+      perm_model_dir,
+      sprintf("rf_model_perm_%02d_fold_%02d.rds", p, i)
+    )
 
     if (!file.exists(fold_model_file)) {
       warning(sprintf("Missing model file: %s", fold_model_file))
-      pearson_perm[i] <- NA_real_
+      spearman_perm[i] <- NA_real_
       next
     }
 
@@ -301,110 +305,114 @@ for (p in seq_len(n_perm)) {
 
     keep <- complete.cases(test_obs, pred_test_cal)
 
-    pearson_perm[i] <- cor(
+    spearman_perm[i] <- cor(
       test_obs[keep],
       pred_test_cal[keep],
-      method = "pearson"
+      method = "spearman"
     )
   }
 
-  pearson_null[, p] <- pearson_perm
+  spearman_null[, p] <- spearman_perm
 }
 
 # Save matrix to file for later use
 write.csv(
-  pearson_null,
-  file.path(results_dir, "pearson_LOPOCV_null_matrix.csv"),
+  spearman_null,
+  file.path(results_dir, "spearman_LOPOCV_null_matrix.csv"),
   row.names = TRUE
 )
 
-print(pearson_null)
-message("Permutation Pearson null matrix created and saved.")
+print(spearman_null)
+message("Permutation Spearman null matrix created and saved.")
 ```
   
-## Chunk 3: Compare Distributions
-
-Compare observed vs permuted LOPOCV Pearson:
-```{r plot-pearson-lopocv}
+## Chunk 3: Compare observed vs permuted LOPOCV Spearman
+```{r plot-spearman-lopocv,eval=TRUE}
 # observed LOPOCV summary from the true data
 metrics_all <- read.csv(file.path(results_dir, "LOPOCV_summary.csv"))
 
 # permutation matrix
-pearson_null <- read.csv(file.path(results_dir, "pearson_LOPOCV_null_matrix.csv"))
-  
+spearman_null <- read.csv(
+  file.path(results_dir, "spearman_LOPOCV_null_matrix.csv"),
+  row.names = 1,
+  check.names = FALSE
+)
+
 # make sure site order matches the permutation matrix
-metrics_all <- metrics_all[match(rownames(pearson_null), metrics_all$site), ]
+metrics_all <- metrics_all[match(rownames(spearman_null), metrics_all$site), ]
 
-pearson_obs <- as.numeric(metrics_all$Pearson)
+spearman_obs <- as.numeric(metrics_all$Spearman)
 
-pearson_null_mat <- as.matrix(pearson_null)
+spearman_null_mat <- as.matrix(spearman_null)
 
 # reorder rows to observed site order if needed
-pearson_null_mat <- pearson_null_mat[match(metrics_all$site, rownames(pearson_null_mat)), ]
+spearman_null_mat <- spearman_null_mat[match(metrics_all$site, rownames(spearman_null_mat)), ]
 
-plot_df_pearson <- data.frame(
-  pearson = c(pearson_obs, as.numeric(pearson_null_mat)),
+plot_df_spearman <- data.frame(
+  spearman = c(spearman_obs, as.numeric(spearman_null_mat)),
   type = c(
-    rep("Observed", length(pearson_obs)),
-    rep("Permuted", length(as.numeric(pearson_null_mat)))
+    rep("Observed", length(spearman_obs)),
+    rep("Permuted", length(as.numeric(spearman_null_mat)))
   )
 )
 
-ggplot(plot_df_pearson, aes(x = pearson, fill = type)) +
+ggplot(plot_df_spearman, aes(x = spearman, fill = type)) +
   geom_density(alpha = 0.5, color = NA) +
   coord_cartesian(xlim = c(-1, 1)) +
   theme_minimal() +
   labs(
-    title = "Observed vs. Permuted Pearson Correlation (LOPOCV)",
-    x = "Pearson Correlation",
+    title = "Observed vs. Permuted Spearman Correlation (LOPOCV)",
+    x = "Spearman Correlation",
     y = "Density"
   )
 ```
-## Chunk 4: Empirical p-value
-GOAL: Calculate an empirical p-value comparing observed vs permuted Pearson's correlation.
 
-```{r empirical-p-lopocv, warning=FALSE}
+## Chunk 4: Empirical p-value
+
+GOAL: Calculate an empirical p-value comparing observed vs permuted Spearman correlation.
+
+```{r empirical-p-lopocv, warning=FALSE, eval=TRUE}
 
 # Define region based on SiteMajCluster
 Gff <- read.csv(file.path(input_dir, "Gff_11loci_allsites_indinfo.txt"),
                 header = TRUE, sep = "\t")
 north_sites <- unique(Gff$SiteCode[Gff$SiteMajCluster == "north"])
 
-# Load observed Pearson
+# Load observed Spearman
 metrics_all <- read.csv(file.path(results_dir, "LOPOCV_summary.csv"))
-pearson_obs_df <- data.frame(
+spearman_obs_df <- data.frame(
   site = metrics_all$site,
-  pearson = metrics_all$Pearson
+  spearman = metrics_all$Spearman
 )
-pearson_obs_df$cluster <- ifelse(pearson_obs_df$site %in% north_sites, "north", "south")
-pearson_obs_df$type <- "Observed"
+spearman_obs_df$cluster <- ifelse(spearman_obs_df$site %in% north_sites, "north", "south")
+spearman_obs_df$type <- "Observed"
 
-pearson_null_raw <- read.csv(
-  file.path(results_dir, "pearson_LOPOCV_null_matrix.csv"),
+spearman_null_raw <- read.csv(
+  file.path(results_dir, "spearman_LOPOCV_null_matrix.csv"),
   row.names = 1,
   check.names = FALSE
 )
-pearson_null_mat <- as.matrix(pearson_null_raw)
+spearman_null_mat <- as.matrix(spearman_null_raw)
 
 # align rows to observed site order
-pearson_null_mat <- pearson_null_mat[match(metrics_all$site, rownames(pearson_null_mat)), ]
+spearman_null_mat <- spearman_null_mat[match(metrics_all$site, rownames(spearman_null_mat)), ]
 
-obs_mean_pearson <- mean(pearson_obs, na.rm = TRUE)
-null_mean_pearson <- apply(pearson_null_mat, 2, mean, na.rm = TRUE)
+obs_mean_spearman <- mean(spearman_obs_df$spearman, na.rm = TRUE)
+null_mean_spearman <- apply(spearman_null_mat, 2, mean, na.rm = TRUE)
 
-# one-sided empirical p-value: observed mean Pearson greater than null
-p_empirical <- (sum(null_mean_pearson >= obs_mean_pearson, na.rm = TRUE) + 1) /
-  (sum(!is.na(null_mean_pearson)) + 1)
+# one-sided empirical p-value: observed mean Spearman greater than null
+p_empirical <- (sum(null_mean_spearman >= obs_mean_spearman, na.rm = TRUE) + 1) /
+  (sum(!is.na(null_mean_spearman)) + 1)
 
-cat("Observed mean Pearson:", round(obs_mean_pearson, 4), "\n")
-cat("Null mean Pearson range:", round(range(null_mean_pearson, na.rm = TRUE), 4), "\n")
+cat("Observed mean Spearman:", round(obs_mean_spearman, 4), "\n")
+cat("Null mean Spearman range:", round(range(null_mean_spearman, na.rm = TRUE), 4), "\n")
 cat("Empirical one-sided p-value:", round(p_empirical, 4), "\n\n")
 
-obs_north <- pearson_obs_df$pearson[pearson_obs_df$cluster == "north"]
-obs_south <- pearson_obs_df$pearson[pearson_obs_df$cluster == "south"]
+obs_north <- spearman_obs_df$spearman[spearman_obs_df$cluster == "north"]
+obs_south <- spearman_obs_df$spearman[spearman_obs_df$cluster == "south"]
 
-null_north_mat <- as.matrix(pearson_null[rownames(pearson_null) %in% north_sites, ])
-null_south_mat <- as.matrix(pearson_null[!rownames(pearson_null) %in% north_sites, ])
+null_north_mat <- spearman_null_mat[rownames(spearman_null_mat) %in% north_sites, , drop = FALSE]
+null_south_mat <- spearman_null_mat[!rownames(spearman_null_mat) %in% north_sites, , drop = FALSE]
 
 obs_mean_north <- mean(obs_north, na.rm = TRUE)
 obs_mean_south <- mean(obs_south, na.rm = TRUE)
@@ -412,78 +420,80 @@ obs_mean_south <- mean(obs_south, na.rm = TRUE)
 null_mean_north <- apply(null_north_mat, 2, mean, na.rm = TRUE)
 null_mean_south <- apply(null_south_mat, 2, mean, na.rm = TRUE)
 
-p_north <- (sum(null_mean_north >= obs_mean_north) + 1) / (length(null_mean_north) + 1)
-p_south <- (sum(null_mean_south >= obs_mean_south) + 1) / (length(null_mean_south) + 1)
+p_north <- (sum(null_mean_north >= obs_mean_north, na.rm = TRUE) + 1) /
+  (sum(!is.na(null_mean_north)) + 1)
+p_south <- (sum(null_mean_south >= obs_mean_south, na.rm = TRUE) + 1) /
+  (sum(!is.na(null_mean_south)) + 1)
 
-cat("Observed mean Pearson, north:", round(obs_mean_north, 4), "\n")
+cat("Observed mean Spearman, north:", round(obs_mean_north, 4), "\n")
 cat("Empirical p-value, north:", round(p_north, 4), "\n\n")
 
-cat("Observed mean Pearson, south:", round(obs_mean_south, 4), "\n")
+cat("Observed mean Spearman, south:", round(obs_mean_south, 4), "\n")
 cat("Empirical p-value, south:", round(p_south, 4), "\n")
 ```
-  
+
 ## Chunk 5: Visualize permutated vs observed LOPOCV side-by-side
 
-```{r plot-side-by-side}
+```{r plot-side-by-side, eval=TRUE}
+
+# Run just once to save high quality png for publication
+#png(file.path(fig_dir, "Fig_LOPOCV_obs_vs_permuted.png"),
+#    width = 7, height = 2.8, units = "in", res = 600)
 
 # Define region based on SiteMajCluster
 Gff <- read.csv(file.path(input_dir, "Gff_11loci_allsites_indinfo.txt"),
                 header = TRUE, sep = "\t")
 north_sites <- unique(Gff$SiteCode[Gff$SiteMajCluster == "north"])
 
-# Load observed Pearson
+# Load observed Spearman
 metrics_all <- read.csv(file.path(results_dir, "LOPOCV_summary.csv"))
-pearson_obs_df <- data.frame(
+spearman_obs_df <- data.frame(
   site = metrics_all$site,
-  pearson = metrics_all$Pearson
+  spearman = metrics_all$Spearman
 )
-pearson_obs_df$cluster <- ifelse(pearson_obs_df$site %in% north_sites, "north", "south")
-pearson_obs_df$type <- "Observed"
+spearman_obs_df$cluster <- ifelse(spearman_obs_df$site %in% north_sites, "north", "south")
+spearman_obs_df$type <- "Observed"
 
-# Load permuted Pearson matrix
-pearson_null <- read.csv(
-  file.path(results_dir, "pearson_LOPOCV_null_matrix.csv"),
+# Load permuted Spearman matrix
+spearman_null <- read.csv(
+  file.path(results_dir, "spearman_LOPOCV_null_matrix.csv"),
   row.names = 1,
   check.names = FALSE
 )
 
-pearson_null_df <- data.frame(
-  site = rownames(pearson_null),
-  cluster = ifelse(rownames(pearson_null) %in% north_sites, "north", "south"),
-  pearson_null,
+spearman_null_df <- data.frame(
+  site = rownames(spearman_null),
+  cluster = ifelse(rownames(spearman_null) %in% north_sites, "north", "south"),
+  spearman_null,
   check.names = FALSE
 )
 
 # Stack all permutation columns
-pearson_null_long <- reshape2::melt(
-  pearson_null_df,
+spearman_null_long <- reshape2::melt(
+  spearman_null_df,
   id.vars = c("site", "cluster"),
   variable.name = "perm",
-  value.name = "pearson"
+  value.name = "spearman"
 )
-pearson_null_long$type <- "Permuted"
+spearman_null_long$type <- "Permuted"
 
 # Combine
-pearson_plot_df <- rbind(
-  pearson_obs_df[, c("site", "cluster", "pearson", "type")],
-  pearson_null_long[, c("site", "cluster", "pearson", "type")]
+spearman_plot_df <- rbind(
+  spearman_obs_df[, c("site", "cluster", "spearman", "type")],
+  spearman_null_long[, c("site", "cluster", "spearman", "type")]
 )
 
-# Run just once to save high quality png for publication
-#png(file.path(fig_dir, "Fig_LOPOCV_obs_vs_permuted.png"), 
-#       width = 7, height = 2.8, units = "in", res = 600) 
-
 # Plot
-ggplot(pearson_plot_df, aes(x = pearson, fill = interaction(type, cluster))) +
+ggplot(spearman_plot_df, aes(x = spearman, fill = interaction(type, cluster))) +
   geom_density(
-    data = subset(pearson_plot_df, type == "Observed"),
+    data = subset(spearman_plot_df, type == "Observed"),
     aes(y = after_stat(count)),
     alpha = 0.6,
     color = NA,
     position = "identity"
   ) +
   geom_density(
-    data = subset(pearson_plot_df, type == "Permuted"),
+    data = subset(spearman_plot_df, type == "Permuted"),
     aes(y = after_stat(count / 100)),
     alpha = 0.3,
     color = NA,
@@ -507,8 +517,8 @@ ggplot(pearson_plot_df, aes(x = pearson, fill = interaction(type, cluster))) +
   coord_cartesian(xlim = c(-1, 1)) +
   theme_minimal() +
   labs(
-    title = "Observed vs. Permuted Pearson by cluster",
-    x = "Pearson's r (LOPOCV)",
+    title = "Observed vs. Permuted Spearman by cluster",
+    x = "Spearman's r (LOPOCV)",
     y = "Density"
   )
 

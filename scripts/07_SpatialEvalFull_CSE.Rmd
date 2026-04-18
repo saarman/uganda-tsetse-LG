@@ -190,7 +190,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
   rmse <- sqrt(mse)
   mae  <- mean(abs(obs - pred_cal))
   rsq  <- 1 - (sse / sst)
-  corr <- cor(obs, pred_raw)
+  corr <- cor(obs, pred_raw, method="spearman")
 
   data.frame(
     n = length(obs),
@@ -198,7 +198,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
     RMSE = rmse,
     MAE = mae,
     RSQ = rsq,
-    Correlation = corr
+    Pearson = corr
   )
 }
 
@@ -455,7 +455,7 @@ plot(
 
 plot(
   km_summary$projection_km,
-  km_summary$Correlation,
+  km_summary$Pearson,
   type = "b",
   xlab = "Projection Scale in Km",
   ylab = "Mean absolute raster change"
@@ -487,13 +487,13 @@ plot(
 )
 mtext("(b)", side = 3, adj = 0, line = 0.5, font = 2)
 
-# (c) Correlation
+# (c) Pearson
 plot(
   km_summary$projection_km,
-  km_summary$Correlation,
+  km_summary$Pearson,
   type = "b",
   xlab = "Projection Scale in Km",
-  ylab = "Correlation"
+  ylab = "Pearson's Correlation"
 )
 mtext("(c)", side = 3, adj = 0, line = 0.5, font = 2)
 

@@ -1,10 +1,11 @@
 LOPOCV: Random Forest (Internal) and Spatial Cross-Validation
 ================
 Norah Saarman
-2026-04-17
+2026-04-18
 
 - [Setup](#setup)
   - [Overview of script](#overview-of-script)
+    - [Notes from Jun 20, 2025](#notes-from-jun-20-2025)
   - [Inputs](#inputs)
   - [Outputs](#outputs)
   - [Libraries](#libraries)
@@ -30,8 +31,8 @@ Norah Saarman
   - [Chunk 8: Spatial eval. on existing
     LOPOCV](#chunk-8-spatial-eval-on-existing-lopocv)
   - [Chunk 9: Evaluative metrics](#chunk-9-evaluative-metrics)
-  - [Chunk 10: Visualize spatial eval of
-    LOPOCV](#chunk-10-visualize-spatial-eval-of-lopocv)
+  - [Chunk 10: Plot spatial eval of
+    LOPOCV](#chunk-10-plot-spatial-eval-of-lopocv)
 
 # Setup
 
@@ -51,7 +52,13 @@ based on full-model performance (RSQ), during LOPOCV, some held-out
 folds exhibited limited variance in observed CSE, making fold-specific
 RSQ unstable. We therefore report fold-level performance using Spearman
 and Pearson correlation alongside RMSE and MAE, which provide more
-robust summaries under these conditions. \### Notes from Jun 20, 2025
+robust summaries under these conditions.
+
+Emphasis should be on Spearman’s Correlation because it weighs correct
+ranking more heavily than Pearsons, as it is calculated based on the
+rank order of data points rather than their raw numerical values.
+
+### Notes from Jun 20, 2025
 
 My notes from my analysis on Model Design and Diagnostic Attempts Jun
 20, 2025, when using RSQ per fold:
@@ -1337,7 +1344,7 @@ write.csv(
 print(pooled_summary_spatial)
 ```
 
-## Chunk 10: Visualize spatial eval of LOPOCV
+## Chunk 10: Plot spatial eval of LOPOCV
 
 ``` r
 # Load Spatial LOPOCV summary
@@ -1483,11 +1490,11 @@ print(metrics_all)
     ## 67 0.7903226
 
 ``` r
-summary(metrics_all$Pearson)
+summary(metrics_all$Spearman)
 ```
 
     ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-    ##  0.5934  0.7907  0.8283  0.8166  0.8636  0.9143
+    ##  0.5512  0.7636  0.8108  0.7929  0.8617  0.9149
 
 ``` r
 # Load Spatial Poooled Stats
@@ -1518,8 +1525,8 @@ site_metadata <- V.table %>%
   distinct() %>%
   left_join(site_clusters, by = "Site") %>%
   left_join(metrics_all, by = c("Site" = "site")) %>%
-  mutate(Symbol = ifelse(Pearson < 0.3, "low", "circle")) %>%
-  arrange(desc(Pearson))
+  mutate(Symbol = ifelse(Spearman < 0.3, "low", "circle")) %>%
+  arrange(desc(Spearman))
 
 # Extract map extent
 r_ext <- extent(altitude)
@@ -1534,13 +1541,13 @@ lakes <- ne_download(scale = 10, type = "lakes", category = "physical", returncl
     ## Reading 'ne_10m_lakes.zip' from naturalearth...
 
 ``` r
-# Plot Spatial LOPOCV Pearson by site
+# Plot Spatial LOPOCV Spearman by site
 ggplot() +
   geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.1) +
   geom_sf(data = lakes, fill = "black", color = NA) +
   geom_point(
     data = filter(site_metadata, Symbol == "circle"),
-    aes(x = Longitude, y = Latitude, size = Pearson, fill = Subcluster),
+    aes(x = Longitude, y = Latitude, size = Spearman, fill = Subcluster),
     shape = 21, color = "black", stroke = 0.3
   ) +
   geom_point(
@@ -1561,20 +1568,20 @@ ggplot() +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
-  labs(title = "Spatial LOPOCV Pearson's r by Site", x = "Longitude", y = "Latitude")
+  labs(title = "Spatial LOPOCV Spearman's r by Site", x = "Longitude", y = "Latitude")
 ```
 
 ![](../figures/knitted_mds/10-visualize-spatial-LCPsum-1.png)<!-- -->
 
 ``` r
 # Overlapping density plot
-ggplot(site_metadata, aes(x = Pearson, fill = Subcluster)) +
+ggplot(site_metadata, aes(x = Spearman, fill = Subcluster)) +
   geom_density(alpha = 0.5, color = NA) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
   theme_minimal() +
   labs(
-    title = "Distribution of Test Pearson by Subcluster",
-    x = "Test Pearson (Spatial LOPOCV)",
+    title = "Distribution of Spearman's r by Subcluster",
+    x = "Spearman's r (Spatial LOPOCV)",
     y = "Density"
   )
 ```
@@ -1583,13 +1590,13 @@ ggplot(site_metadata, aes(x = Pearson, fill = Subcluster)) +
 
 ``` r
 # Overlapping count plot
-ggplot(site_metadata, aes(x = Pearson, fill = Subcluster)) +
+ggplot(site_metadata, aes(x = Spearman, fill = Subcluster)) +
   geom_density(alpha = 0.5, color = NA, position = "identity", aes(y = after_stat(count))) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101", "west" = "#39005A")) +
   theme_minimal() +
   labs(
-    title = "Pearson's r by Subcluster (Scaled by Count)",
-    x = "Pearson's r (Spatial LOPOCV)",
+    title = "Spearman's r by Subcluster (Scaled by Count)",
+    x = "Spearman's r (Spatial LOPOCV)",
     y = "Count"
   )
 ```
@@ -1601,13 +1608,13 @@ ggplot(site_metadata, aes(x = Pearson, fill = Subcluster)) +
 site_metadata$Cluster <- site_metadata$Subcluster
 site_metadata$Cluster[site_metadata$Subcluster == "west"] <- "south"
 
-# Plot Spatial LOPOCV Pearson by site just N/S
+# Plot Spatial LOPOCV Spearman by site just N/S
 ggplot() +
   geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.1) +
   geom_sf(data = lakes, fill = "black", color = NA) +
   geom_point(
     data = filter(site_metadata, Symbol == "circle"),
-    aes(x = Longitude, y = Latitude, size = Pearson, fill = Cluster),
+    aes(x = Longitude, y = Latitude, size = Spearman, fill = Cluster),
     shape = 21, color = "black", stroke = 0.3
   ) +
   geom_point(
@@ -1628,20 +1635,20 @@ ggplot() +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
-  labs(title = "Spatial LOPOCV Test Pearson by Site", x = "Longitude", y = "Latitude")
+  labs(title = "Spatial LOPOCV Spearman's r by Site", x = "Longitude", y = "Latitude")
 ```
 
 ![](../figures/knitted_mds/10-visualize-spatial-LCPsum-4.png)<!-- -->
 
 ``` r
 # Overlapping density plot just S/N
-ggplot(site_metadata, aes(x = Pearson, fill = Cluster)) +
+ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   geom_density(alpha = 0.5, color = NA) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
   labs(
-    title = "Distribution of Test Pearson by Cluster",
-    x = "Pearson's r (Spatial LOPOCV)",
+    title = "Distribution of Spearman's r by Cluster",
+    x = "Spearman's r (Spatial LOPOCV)",
     y = "Density"
   )
 ```
@@ -1650,13 +1657,13 @@ ggplot(site_metadata, aes(x = Pearson, fill = Cluster)) +
 
 ``` r
 # Overlapping count plot just S/N
-ggplot(site_metadata, aes(x = Pearson, fill = Cluster)) +
+ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   geom_density(alpha = 0.5, color = NA, position = "identity", aes(y = after_stat(count))) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
   theme_minimal() +
   labs(
-    title = "Pearson's r by Cluster (Scaled by Count)",
-    x = "Pearson's r (Spatial LOPOCV)",
+    title = "Spearman's r by Cluster (Scaled by Count)",
+    x = "Spearman's r (Spatial LOPOCV)",
     y = "Count"
   )
 ```
