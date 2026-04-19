@@ -1,7 +1,7 @@
-LOPOCV: Random Forest (Internal) and Spatial Cross-Validation
+LOPOCV with permutated data as Null
 ================
 Norah Saarman
-2026-04-18
+2026-04-20
 
 - [Setup](#setup)
   - [Overview of script](#overview-of-script)
@@ -18,14 +18,10 @@ Norah Saarman
   - [Chunk 4: Empirical p-value](#chunk-4-empirical-p-value)
   - [Chunk 5: Visualize permutated vs observed LOPOCV
     side-by-side](#chunk-5-visualize-permutated-vs-observed-lopocv-side-by-side)
-- [TODO: Spatial Eval, doesn’t seem worth too much
-  energy](#todo-spatial-eval-doesnt-seem-worth-too-much-energy)
-  - [TODO: Chunk 6: Spatial evaluation for permuted LOPOCV
-    models](#todo-chunk-6-spatial-evaluation-for-permuted-lopocv-models)
-  - [TODO: Chunk 7: Spatial permutation
-    plots](#todo-chunk-7-spatial-permutation-plots)
-  - [TODO: Chunk 8: Delete RDS when completely
-    done](#todo-chunk-8-delete-rds-when-completely-done)
+  - [Chunk 6: Spatial included, all
+    side-by-side](#chunk-6-spatial-included-all-side-by-side)
+  - [TODO: Chunk 7: Delete RDS when completely
+    done](#todo-chunk-7-delete-rds-when-completely-done)
 
 # Setup
 
@@ -504,10 +500,6 @@ cat("Empirical p-value, south:", round(p_south, 4), "\n")
 ## Chunk 5: Visualize permutated vs observed LOPOCV side-by-side
 
 ``` r
-# Run just once to save high quality png for publication
-#png(file.path(fig_dir, "Fig_LOPOCV_obs_vs_permuted.png"),
-#    width = 7, height = 2.8, units = "in", res = 600)
-
 # Define region based on SiteMajCluster
 Gff <- read.csv(file.path(input_dir, "Gff_11loci_allsites_indinfo.txt"),
                 header = TRUE, sep = "\t")
@@ -572,8 +564,10 @@ ggplot(spearman_plot_df, aes(x = spearman, fill = interaction(type, cluster))) +
     values = c(
       "Observed.north" = "#1f78b4",
       "Observed.south" = "#e66101",
-      "Permuted.north" = "#2c3e50",
-      "Permuted.south" = "#4e342e"
+      "Permuted.north" = "#4A545E",
+      "Permuted.south" = "#5A4F49"
+      #"Permuted.north" = "#2c3e50",
+      #"Permuted.south" = "#4e342e"
     ),
     labels = c(
       "Observed.north" = "North",
@@ -593,316 +587,156 @@ ggplot(spearman_plot_df, aes(x = spearman, fill = interaction(type, cluster))) +
 
 ![](../figures/knitted_mds/plot-side-by-side-1.png)<!-- -->
 
-``` r
-#dev.off()
-```
+## Chunk 6: Spatial included, all side-by-side
 
-# TODO: Spatial Eval, doesn’t seem worth too much energy
-
-## TODO: Chunk 6: Spatial evaluation for permuted LOPOCV models
+Now with the Spatial Spearman’s R included… “north” = “\#2A4F6E” “south”
+= “\#7A4A2A”
 
 ``` r
-# where to save spatial permutation outputs
-spatial_output_dir <- file.path(results_dir, "lopocv_spatial_perm_LCPsum_k1")
-dir.create(spatial_output_dir, showWarnings = FALSE, recursive = TRUE)
+results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/"
+input_dir <- "../input"
+fig_dir <- file.path(results_dir, "figures_pub")
 
-# where to find saved permuted .rds files
-perm_model_dir <- file.path(results_dir, "perm_rds_temp")
+# Run just once to save high quality png for publication
+png(file.path(fig_dir, "Fig_LOPOCV_obs_vs_permuted.png"),
+    width = 7, height = 2.8, units = "in", res = 600)
 
-# use same fixed projection distance as working script
-kdist <- 1
+# Define region based on SiteMajCluster
+Gff <- read.csv(
+  file.path(input_dir, "Gff_11loci_allsites_indinfo.txt"),
+  header = TRUE, sep = "\t"
+)
+north_sites <- unique(Gff$SiteCode[Gff$SiteMajCluster == "north"])
 
-# helper
-calibrate_pred <- function(obs_train, pred_train, pred_test) {
-  keep <- complete.cases(obs_train, pred_train)
-  df <- data.frame(obs = obs_train[keep], pred = pred_train[keep])
-  fit <- lm(obs ~ pred, data = df)
+# 1. Non-spatial LOPOCV Spearman
+metrics_obs <- read.csv(file.path(results_dir, "LOPOCV_summary.csv"))
 
-  out <- rep(NA_real_, length(pred_test))
-  keep_test <- complete.cases(pred_test)
-  out[keep_test] <- predict(fit, newdata = data.frame(pred = pred_test[keep_test]))
-  out
-}
+obs_df <- data.frame(
+  site = metrics_obs$site,
+  cluster = ifelse(metrics_obs$site %in% north_sites, "north", "south"),
+  spearman = metrics_obs$Spearman,
+  method = "Observed"
+)
 
-calc_metrics <- function(obs, pred) {
-  keep <- complete.cases(obs, pred)
+# 2. Null LOPOCV Spearman from permutations
+spearman_null <- read.csv(
+  file.path(results_dir, "spearman_LOPOCV_null_matrix.csv"),
+  row.names = 1,
+  check.names = FALSE
+)
 
-  obs  <- obs[keep]
-  pred <- pred[keep]
+perm_df <- data.frame(
+  site = rownames(spearman_null),
+  cluster = ifelse(rownames(spearman_null) %in% north_sites, "north", "south"),
+  spearman_null,
+  check.names = FALSE
+)
 
-  mse      <- mean((obs - pred)^2)
-  rmse     <- sqrt(mse)
-  mae      <- mean(abs(obs - pred))
-  pearson  <- cor(obs, pred, method = "pearson")
-  spearman <- cor(obs, pred, method = "spearman")
+perm_long <- reshape2::melt(
+  perm_df,
+  id.vars = c("site", "cluster"),
+  variable.name = "perm",
+  value.name = "spearman"
+) %>%
+  mutate(method = "Permuted")
 
-  data.frame(
-    n = length(obs),
-    MSE = mse,
-    RMSE = rmse,
-    MAE = mae,
-    Pearson = pearson,
-    Spearman = spearman
-  )
-}
+# 3. Spatial LOPOCV Spearman
+metrics_spatial <- read.csv(
+  file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_summary.csv")
+)
 
-# use one level of parallel only: over permutations
-n_cores <- 8
-cl <- makeCluster(n_cores)
-registerDoParallel(cl)
+spatial_df <- data.frame(
+  site = metrics_spatial$site,
+  cluster = ifelse(metrics_spatial$site %in% north_sites, "north", "south"),
+  spearman = metrics_spatial$Spearman,
+  method = "Spatial"
+)
 
-n_perm <- 100
+# Combine all three
+plot_df <- bind_rows(
+  obs_df[, c("site", "cluster", "spearman", "method")],
+  perm_long[, c("site", "cluster", "spearman", "method")],
+  spatial_df[, c("site", "cluster", "spearman", "method")]
+)
 
-foreach(
-  p = seq_len(n_perm),
-  .packages = c("raster", "gdistance", "sf", "sp", "dplyr", "randomForest")
-) %dopar% {
+# Set method and cluster order for legend/display
+plot_df$method <- factor(
+  plot_df$method,
+  levels = c("Observed", "Spatial", "Permuted")
+)
 
-  perm_file <- file.path(
-    spatial_output_dir,
-    sprintf("spatial_perm_LCPsum_k1_%03d.csv", p)
-  )
+plot_df$cluster <- factor(
+  plot_df$cluster,
+  levels = c("north", "south")
+)
 
-  if (file.exists(perm_file)) {
-    return(NULL)
-  }
+# Plot
+ggplot(plot_df, aes(x = spearman, fill = interaction(method, cluster, sep = "."))) +
 
-  set.seed(500 + p)
+  geom_density(
+    data = subset(plot_df, method == "Observed"),
+    aes(y = after_stat(count)),
+    alpha = 0.6,
+    color = NA,
+    position = "identity"
+  ) +
 
-  # recreate permuted response exactly as in chunk 1 and 2
-  V.model_perm <- V.model
-  V.model_perm$CSEdistance <- sample(V.model_perm$CSEdistance)
+  geom_density(
+    data = subset(plot_df, method == "Spatial"),
+    aes(y = after_stat(count)),
+    alpha = 0.5,
+    color = NA,
+    position = "identity"
+  ) +
 
-  V.table_perm <- V.table
-  V.table_perm$CSEdistance <- V.model_perm$CSEdistance
+  geom_density(
+    data = subset(plot_df, method == "Permuted"),
+    aes(y = after_stat(count / 100)),
+    alpha = 0.3,
+    color = NA,
+    position = "identity"
+  ) +
 
-  # pair table used in spatial evaluation
-  site_pairs_perm <- V.table_perm %>%
-    dplyr::select(id, Var1, Var2, CSE = CSEdistance) %>%
-    distinct()
-
-  perm_metrics <- vector("list", length(sites))
-
-  for (fold_idx in seq_along(sites)) {
-
-    site <- sites[fold_idx]
-
-    fold_model_file <- file.path(
-      perm_model_dir,
-      sprintf("rf_model_perm_%02d_fold_%02d.rds", p, fold_idx)
-    )
-
-    if (!file.exists(fold_model_file)) {
-      perm_metrics[[fold_idx]] <- data.frame(
-        permutation = p,
-        site = site,
-        projection_km = kdist,
-        method = "LCP_sum",
-        n = NA_real_,
-        MSE = NA_real_,
-        RMSE = NA_real_,
-        MAE = NA_real_,
-        Pearson = NA_real_,
-        Spearman = NA_real_
-      )
-      next
-    }
-
-    rf_model <- readRDS(fold_model_file)
-
-    # Step 1: project surface at kdist = 1
-    env_k <- env
-    env_k[["pix_dist"]] <- setValues(env[[1]], kdist)
-
-    rf_vars <- attr(rf_model$terms, "term.labels")
-    env_k <- env_k[[rf_vars]]
-
-    stopifnot(identical(names(env_k), rf_vars))
-
-    cse_surface <- raster::predict(env_k, rf_model, type = "response")
-
-    # align lake mask if needed
-    if (!compareRaster(cse_surface, lake_mask,
-                       extent = TRUE, rowcol = TRUE,
-                       crs = TRUE, res = TRUE,
-                       stopiffalse = FALSE)) {
-      lake_mask_use <- projectRaster(lake_mask, cse_surface, method = "ngb")
-    } else {
-      lake_mask_use <- lake_mask
-    }
-
-    # assign lakes high cost
-    cse_surface[lake_mask_use[] == 1] <- max(values(cse_surface), na.rm = TRUE)
-
-    # Step 2: prepare sites in raster CRS
-    sites_df <- st_as_sf(sites_coords, coords = c("lon", "lat"), crs = crs_geo) %>%
-      st_transform(crs(cse_surface))
-
-    sites_sp <- as(sites_df, "Spatial")
-    site_index <- setNames(seq_len(nrow(sites_df)), sites_coords$Site)
-
-    # Step 3: build transition object
-    resistance_rast <- cse_surface
-    min_pos <- min(values(resistance_rast)[values(resistance_rast) > 0], na.rm = TRUE)
-    resistance_rast[resistance_rast <= 0] <- min_pos
-
-    conductance_rast <- 1 / resistance_rast
-    tr <- transition(conductance_rast, transitionFunction = mean, directions = 16)
-    tr_lcp <- geoCorrection(tr, type = "c")
-
-    # Step 4: recompute least-cost paths
-    paths_list <- vector("list", nrow(site_pairs_perm))
-
-    for (ii in seq_len(nrow(site_pairs_perm))) {
-      i <- site_index[site_pairs_perm$Var1[ii]]
-      j <- site_index[site_pairs_perm$Var2[ii]]
-
-      path <- tryCatch(
-        shortestPath(tr_lcp, sites_sp[i, ], sites_sp[j, ], output = "SpatialLines"),
-        error = function(e) NULL
-      )
-
-      if (!is.null(path)) {
-        path_sf <- st_as_sf(path)
-        path_sf$id <- site_pairs_perm$id[ii]
-        paths_list[[ii]] <- path_sf
-      }
-    }
-
-    paths_list <- paths_list[!sapply(paths_list, is.null)]
-
-    if (length(paths_list) == 0) {
-      perm_metrics[[fold_idx]] <- data.frame(
-        permutation = p,
-        site = site,
-        projection_km = kdist,
-        method = "LCP_sum",
-        n = NA_real_,
-        MSE = NA_real_,
-        RMSE = NA_real_,
-        MAE = NA_real_,
-        Pearson = NA_real_,
-        Spearman = NA_real_
-      )
-      next
-    }
-
-    paths_sf <- do.call(rbind, paths_list)
-    st_crs(paths_sf) <- st_crs(cse_surface)
-
-    # extract raster values along each path
-    path_vals <- raster::extract(cse_surface, as(paths_sf, "Spatial"))
-
-    lcp_summary <- data.frame(
-      id = paths_sf$id,
-      LCP_sum = sapply(path_vals, function(x) {
-        if (is.null(x) || all(is.na(x))) NA_real_ else sum(x, na.rm = TRUE)
-      })
-    )
-
-    # Step 5: combine and calibrate
-    eval_results <- site_pairs_perm %>%
-      left_join(lcp_summary, by = "id")
-
-    test_ids <- eval_results$id[eval_results$Var1 == site | eval_results$Var2 == site]
-    train_df <- eval_results[!eval_results$id %in% test_ids, ]
-    test_df  <- eval_results[eval_results$id %in% test_ids, ]
-
-    test_df$LCP_sum_cal <- calibrate_pred(
-      obs_train = train_df$CSE,
-      pred_train = train_df$LCP_sum,
-      pred_test = test_df$LCP_sum
-    )
-
-    metrics_k <- calc_metrics(
-      obs = test_df$CSE,
-      pred = test_df$LCP_sum_cal
-    ) %>%
-      mutate(
-        permutation = p,
-        site = site,
-        projection_km = kdist,
-        method = "LCP_sum"
-      ) %>%
-      dplyr::select(permutation, site, projection_km, method, everything())
-
-    perm_metrics[[fold_idx]] <- metrics_k
-  }
-
-  perm_metrics_df <- bind_rows(perm_metrics)
-  write.csv(perm_metrics_df, perm_file, row.names = FALSE)
-
-  NULL
-}
-
-stopCluster(cl)
-
-# combine permutation outputs into null matrices
-metric_names <- c("Pearson", "Spearman", "RMSE", "MAE")
-
-for (metric_name in metric_names) {
-  metric_null <- matrix(NA_real_, nrow = length(sites), ncol = n_perm)
-  rownames(metric_null) <- sites
-  colnames(metric_null) <- paste0("perm_", seq_len(n_perm))
-
-  for (p in seq_len(n_perm)) {
-    perm_file <- file.path(
-      spatial_output_dir,
-      sprintf("spatial_perm_LCPsum_k1_%03d.csv", p)
-    )
-
-    if (!file.exists(perm_file)) next
-
-    df <- read.csv(perm_file)
-    df <- df[match(sites, df$site), ]
-
-    metric_null[, p] <- df[[metric_name]]
-  }
-
-  write.csv(
-    metric_null,
-    file.path(
-      results_dir,
-      sprintf("%s_spatial_LOPOCV_LCPsum_k1_null_matrix.csv", tolower(metric_name))
+  scale_fill_manual(
+    name = "Prediction type",
+    breaks = c(
+      "Observed.north", "Observed.south",
+      "Spatial.north",  "Spatial.south",
+      "Permuted.north", "Permuted.south"
     ),
-    row.names = TRUE
-  )
-}
-```
-
-## TODO: Chunk 7: Spatial permutation plots
-
-Use this only after the spatial permutation chunk has finished.
-
-``` r
-rsq_null_raw <- read.csv(
-  file.path(results_dir, "rsq_spatial_LOPOCV_LCPsum_k1_null_matrix.csv"),
-  row.names = 1
-)
-
-rsq_null_mat <- as.matrix(rsq_null_raw)
-rsq_null_long <- as.numeric(as.vector(rsq_null_mat))
-
-metrics_all <- read.csv(file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_summary.csv"))
-rsq_obs <- as.numeric(metrics_all$RSQ)
-
-plot_df_rsq <- data.frame(
-  rsq = c(rsq_obs, rsq_null_long),
-  type = c(rep("Observed", length(rsq_obs)),
-           rep("Permuted", length(rsq_null_long)))
-)
-
-ggplot(plot_df_rsq, aes(x = rsq, fill = type)) +
-  geom_density(alpha = 0.5, color = NA) +
-  scale_fill_manual(values = c("Observed" = "#1f78b4", "Permuted" = "gray70")) +
-  xlim(-1, 1) +
+    values = c(
+      "Observed.north" = "#1f78b4",
+      "Observed.south" = "#e66101",
+      "Spatial.north"  = "#2A4F6E",
+      "Spatial.south"  = "#7A4A2A",
+      "Permuted.north" = "#4A545E",
+      "Permuted.south" = "#5A4F49"
+    ),
+    labels = c(
+      "Observed.north" = "RF-predicted North",
+      "Observed.south" = "RF-predicted South",
+      "Spatial.north"  = "LCP-predicted North",
+      "Spatial.south"  = "LCP-predicted South",
+      "Permuted.north" = "Null-predicted North",
+      "Permuted.south" = "Null-predicted South"
+    )
+  ) +
+  coord_cartesian(xlim = c(-1, 1)) +
   theme_minimal() +
-  labs(title = "Observed vs. Permuted R² (Spatial LOPOCV)",
-       x = "Test R²",
-       y = "Density")
+  labs(
+    title = "Fold-level LOPOCV Spearman by prediction type and cluster",
+    x = "Spearman's r",
+    y = "Count"
+  )
+
+
+dev.off()
 ```
 
-## TODO: Chunk 8: Delete RDS when completely done
+    ## png 
+    ##   2
+
+## TODO: Chunk 7: Delete RDS when completely done
 
 ``` r
 unlink(perm_model_dir, recursive = TRUE)

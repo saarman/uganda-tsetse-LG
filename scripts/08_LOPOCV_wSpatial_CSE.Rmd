@@ -461,7 +461,7 @@ write.csv(pooled_summary, file.path(results_dir, "LOPOCV_pooled_summary.csv"), r
 
 print(pooled_summary)
 ```
-## Chunk 5: Pooled and Fold-level Metrics (Spearman instead of RSQ)
+## Chunk 5: Visualize Pooled and Fold-level Metrics (Spearman instead of RSQ)
 ```{r 5-viz-spearman, warning = FALSE, eval = TRUE}
 pooled_summary <- read.csv(file.path(results_dir, "LOPOCV_pooled_summary.csv"))
 
@@ -554,12 +554,12 @@ ggplot() +
   geom_point(
     data = filter(site_metadata, Symbol == "circle"),
     aes(x = Longitude, y = Latitude, size = Spearman, fill = Cluster),
-    shape = 21, color = "black", stroke = 0.3
+    shape = 21, color = "black", stroke = 0.3, alpha = 0.4
   ) +
   geom_point(
     data = filter(site_metadata, Symbol == "low"),
     aes(x = Longitude, y = Latitude, fill = Cluster),
-    shape = 21, color = "black", size = 1, stroke = 0.3
+    shape = 21, color = "black", size = 1, stroke = 0.3, alpha = 0.3
   ) +
   scale_fill_manual(
     name = "Group",
@@ -634,6 +634,11 @@ ggplot(data.frame(obs = obs_all, pred = pred_all), aes(x = obs, y = pred)) +
 ```{r 7-variable-imp-mse-plus-pca-pruned, eval = TRUE}
 # Load full model
 full_model <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+
+print(full_model)
+importance(full_model)
+varImpPlot(full_model)
+
 full_imp <- importance(full_model, type = 1) %>%
   as.data.frame() %>%
   rownames_to_column("variable") %>%
@@ -655,6 +660,11 @@ lopocv_imp <- map_df(1:67, function(fold_idx) {
 
 # Load PCA-pruned model
 pruned_model <- readRDS(file.path(results_dir, "rf_mean_pcapruned_tuned.rds"))
+
+print(pruned_model)
+importance(pruned_model)
+varImpPlot(pruned_model)
+
 pruned_imp <- importance(pruned_model, type = 1) %>%
   as.data.frame() %>%
   rownames_to_column("variable") %>%
@@ -1197,12 +1207,14 @@ print(pooled_summary_spatial)
 ## Chunk 10: Plot spatial eval of LOPOCV
 
 ```{r 10-visualize-spatial-LCPsum, eval = TRUE}
+results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/"
+
 # Load Spatial LOPOCV summary
 metrics_all <- read.csv(file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_summary.csv"))
 print(metrics_all)
 summary(metrics_all$Spearman)
 
-# Load Spatial Poooled Stats
+# Load Spatial Pooled Stats
 pooled_summary_spatial <- read.csv(file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_pooled_summary.csv"))
 print(pooled_summary_spatial)
 
@@ -1320,6 +1332,39 @@ ggplot() +
   theme_minimal() +
   theme(panel.grid = element_blank()) +
   labs(title = "Spatial LOPOCV Spearman's r by Site", x = "Longitude", y = "Latitude")
+
+
+# Plot Spatial LOPOCV Spearman by site just N/S with shaded colors
+ggplot() +
+  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.1) +
+  geom_sf(data = lakes, fill = "black", color = NA) +
+  geom_point(
+    data = filter(site_metadata, Symbol == "circle"),
+    aes(x = Longitude, y = Latitude, size = Spearman, fill = Cluster),
+    shape = 21, color = "black", stroke = 0.3, alpha = 0.4
+  ) +
+  geom_point(
+    data = filter(site_metadata, Symbol == "low"),
+    aes(x = Longitude, y = Latitude, fill = Cluster),
+    shape = 21, color = "black", size = 1, stroke = 0.3, alpha = 0.4
+  ) +
+  scale_fill_manual(
+    name = "Group",
+    #values = c("north" = "#2c3e50", "south" = "#4e342e")
+    values = c("north" = "#2A4F6E", "south" = "#7A4A2A")
+    #values = c("north" = "#2E8BC6", "south" = "#FFA64D")
+  ) +
+  scale_size_continuous(
+  name = "LOPOCV \nSpearman's r",
+  limits = c(0.4, 1.0),
+  breaks = c(0.4, 0.7, 1.0),
+  range = c(2,7)
+) +
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
+  theme_minimal() +
+  theme(panel.grid = element_blank()) +
+  labs(title = "Spatial LOPOCV Spearman's r by Site", x = "Longitude", y = "Latitude")
+
 
 # Overlapping density plot just S/N
 ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +

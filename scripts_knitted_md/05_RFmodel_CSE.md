@@ -1,7 +1,7 @@
 5 RF model full – raw CSE (1st LC lakes paths)
 ================
 Norah Saarman
-2026-04-13
+2026-04-20
 
 - [Directories](#directories)
 - [Inputs](#inputs)
@@ -35,9 +35,13 @@ Norah Saarman
     (CSE)](#scale-0-1-habitat-suitability-and-inverse-of-predicted-connectivity-cse)
   - [Plot scaled predicted CSE and
     SDM](#plot-scaled-predicted-cse-and-sdm)
-- [6. Variable importance plots](#6-variable-importance-plots)
+- [7. Variable importance plots](#7-variable-importance-plots)
   - [Percent Improvement MSE](#percent-improvement-mse)
   - [Node Purity](#node-purity)
+- [8. PCA pruned variables to explore variable
+  importance](#8-pca-pruned-variables-to-explore-variable-importance)
+  - [Run pruned model](#run-pruned-model)
+  - [Variable importance](#variable-importance)
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
@@ -212,8 +216,12 @@ risks of over fitting…
 ## PCA of mean env predictor variables, patterns of autocorrelation?
 
 ``` r
-# Run PCA on the subset of variables
-pca_res <- prcomp(rf_data[mean_vars], scale. = TRUE)
+# subset and rename variables before PCA
+rf_subset <- rf_data[mean_vars]
+colnames(rf_subset) <- gsub("_mean$", "", colnames(rf_subset))
+
+# Run PCA
+pca_res <- prcomp(rf_subset, scale. = TRUE)
 
 # Quick summary of variance explained
 summary(pca_res)
@@ -266,6 +274,7 @@ fviz_pca_biplot(pca_res,
 # PCA variables plot (correlation circle)
 load <- as.data.frame(pca_res$rotation[, 1:2])
 load$var <- rownames(load)
+
 # circle helper
 circle <- data.frame(
   x = cos(seq(0, 2*pi, length.out = 200)),
@@ -358,7 +367,11 @@ V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
 
 # estimate mean sampling density
 mean(V.table_full$samp_20km_mean, na.rm = TRUE)
+```
 
+    ## [1] 1.027064e-11
+
+``` r
 # Filter out western outlier "50-KB" 
 V.table <- V.table_full %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
@@ -376,10 +389,20 @@ sites <- sort(unique(c(V.table$Var1, V.table$Var2)))
 
 # How many rows of data for each?
 table(V.table$Pop1_cluster)
+```
 
+    ## 
+    ## north south 
+    ##   595   496
+
+``` r
 # How many unique sites?
 length(sites)
+```
 
+    ## [1] 67
+
+``` r
 # Choose predictors for RF model (adjust names if necessary)
 predictor_vars <- c("BIO1_mean","BIO2_mean","BIO3_mean","BIO4_mean", "BIO5_mean","BIO6_mean","BIO7_mean", "BIO8S_mean", "BIO9S_mean","BIO10S_mean", "BIO11S_mean","BIO12_mean", "BIO13_mean","BIO14_mean","BIO15_mean","BIO16S_mean","BIO17S_mean", "BIO18S_mean","BIO19S_mean","slope_mean","alt_mean", "lakes_mean","riv_3km_mean", "samp_20km_mean","pix_dist")
 
@@ -678,7 +701,7 @@ plot(st_geometry(uganda), border = "black", lwd = .25, add = TRUE)
 
 ![](../figures/knitted_mds/plot-sdm-con-4.png)<!-- -->
 
-# 6. Variable importance plots
+# 7. Variable importance plots
 
 ## Percent Improvement MSE
 
@@ -814,3 +837,222 @@ ggplot(full_imp, aes(x = variable, y = IncNodePurity)) +
 ```
 
 ![](../figures/knitted_mds/variable-imp-nodepurity-1.png)<!-- -->
+
+# 8. PCA pruned variables to explore variable importance
+
+## Run pruned model
+
+``` r
+# Load data
+V.table_full <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"))
+
+# estimate mean sampling density
+mean(V.table_full$samp_20km_mean, na.rm = TRUE)
+```
+
+    ## [1] 1.027064e-11
+
+``` r
+# Filter out western outlier "50-KB" 
+V.table <- V.table_full %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB")
+
+# Filter for within-cluster pairs AND geographic distance ≤ 100 km
+#V.table <- V.table_full %>%
+#  filter(Pop1_cluster == Pop2_cluster) %>%
+#  filter(pix_dist <= 100)
+
+# Create unique ID after filtering
+V.table$id <- paste(V.table$Var1, V.table$Var2, sep = "_")
+
+# Define site list
+sites <- sort(unique(c(V.table$Var1, V.table$Var2)))
+
+# How many rows of data for each?
+table(V.table$Pop1_cluster)
+```
+
+    ## 
+    ## north south 
+    ##   595   496
+
+``` r
+# How many unique sites?
+length(sites)
+```
+
+    ## [1] 67
+
+``` r
+# Choose predictors for RF model (adjust names if necessary)
+predictor_vars <- c("BIO3_mean","BIO4_mean","BIO7_mean", "BIO11S_mean", "BIO13_mean","slope_mean","alt_mean", "lakes_mean","riv_3km_mean", "samp_20km_mean","pix_dist")
+
+# Filter to modeling-relevant columns only
+rf_mean_data <- V.table[, c("CSEdistance", predictor_vars)]
+
+# Rename predictors by removing "_mean" for later projections
+names(rf_mean_data) <- gsub("_mean$", "", names(rf_mean_data))
+
+# Tune mtry (number of variables tried at each split)
+set.seed(92834567)
+
+rf_mean_pcapruned_tuned <- tuneRF(
+  x = rf_mean_data[, -1],   # exclude response variable
+  y = rf_mean_data$CSEdistance,
+  ntreeTry = 500,
+  stepFactor = 1.5,         # factor by which mtry is increased/decreased
+  improve = 0.01,           # minimum improvement to continue search
+  trace = TRUE,             # print progress
+  plot = TRUE,              # plot OOB error vs mtry
+  doBest = TRUE,             # return the model with lowest OOB error
+  importance = TRUE
+)
+```
+
+    ## mtry = 3  OOB error = 0.001201753 
+    ## Searching left ...
+    ## mtry = 2     OOB error = 0.001266155 
+    ## -0.05358984 0.01 
+    ## Searching right ...
+    ## mtry = 4     OOB error = 0.001182687 
+    ## 0.01586495 0.01 
+    ## mtry = 6     OOB error = 0.001164252 
+    ## 0.01558754 0.01 
+    ## mtry = 9     OOB error = 0.001199824 
+    ## -0.03055359 0.01
+
+![](../figures/knitted_mds/rf-with-pcapruned-1.png)<!-- -->
+
+``` r
+print(rf_mean_pcapruned_tuned)
+```
+
+    ## 
+    ## Call:
+    ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 6
+    ## 
+    ##           Mean of squared residuals: 0.001177704
+    ##                     % Var explained: 85.48
+
+``` r
+importance(rf_mean_pcapruned_tuned)
+```
+
+    ##            %IncMSE IncNodePurity
+    ## BIO3      31.09694     0.6633338
+    ## BIO4      29.00780     0.3260843
+    ## BIO7      36.76577     0.3491370
+    ## BIO11S    30.06047     0.4480731
+    ## BIO13     30.33539     0.3133014
+    ## slope     21.14116     0.1822154
+    ## alt       28.60231     0.3312492
+    ## lakes     12.25125     0.1550735
+    ## riv_3km   20.83758     0.2063074
+    ## samp_20km 30.48908     1.6003861
+    ## pix_dist  99.75679     4.1926504
+
+``` r
+varImpPlot(rf_mean_pcapruned_tuned)
+```
+
+![](../figures/knitted_mds/rf-with-pcapruned-2.png)<!-- -->
+
+``` r
+#save RDS of pca-pruned model
+saveRDS(rf_mean_pcapruned_tuned, file = file.path(results_dir, "rf_mean_pcapruned_tuned.rds"))
+```
+
+## Variable importance
+
+``` r
+# Load pcapruned model
+pcapruned_model <- readRDS(file.path(results_dir, "rf_mean_pcapruned_tuned.rds"))
+
+pcapruned_imp <- importance(pcapruned_model, type = 1) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  rename(IncMSE = `%IncMSE`) %>%
+  mutate(model = "pcapruned")
+
+# Define custom labels
+label_map <- c(
+  BIO3   = "Isothermality (BIO3)",
+  BIO4   = "Temperature Seasonality (BIO4)",
+  BIO7   = "Temperature Annual Range (BIO7)",
+  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
+  BIO13  = "Precipitation of Wettest Month (BIO13)",
+  slope  = "Slope",
+  alt    = "Altitude",
+  lakes  = "Lake Presence/Absence",
+  riv_3km = "River Kernel Density (3 km bandwidth)",
+  samp_20km = "Sampling Density (20 km bandwidth)",
+  pix_dist = "Geographic Distance (km)"
+)
+
+
+# Order by pcapruned model's %IncMSE (top to bottom)
+pcapruned_order <- pcapruned_imp %>%
+  arrange(desc(IncMSE)) %>%
+  pull(variable)
+
+pcapruned_imp$variable <- factor(pcapruned_imp$variable, levels = rev(pcapruned_order))
+
+# Plot
+# pdf("../figures/VarImpPlot_residModel.pdf",width =6, height=6)
+ggplot(pcapruned_imp, aes(x = variable, y = IncMSE)) +
+  geom_point(data = filter(pcapruned_imp, model == "pcapruned"),
+             color = "black", size = 3) +
+  coord_flip() +
+  scale_y_continuous(name = "%IncMSE") +
+  scale_x_discrete(labels = label_map) +
+  labs(x = NULL, title = "Variable Importance of Raw CSE Model") +
+  theme_minimal()
+```
+
+![](../figures/knitted_mds/plot-pca-pruned-1.png)<!-- -->
+
+``` r
+#dev.off()
+
+
+pcapruned_imp <- importance(pcapruned_model, type = 2) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  mutate(model = "pcapruned")
+
+# Define custom labels
+label_map <- c(
+  BIO3   = "Isothermality (BIO3)",
+  BIO4   = "Temperature Seasonality (BIO4)",
+  BIO7   = "Temperature Annual Range (BIO7)",
+  BIO11S = "Mean Temp of Coldest Season (BIO11S)",
+  BIO13  = "Precipitation of Wettest Month (BIO13)",
+  slope  = "Slope",
+  alt    = "Altitude",
+  lakes  = "Lake Presence/Absence",
+  riv_3km = "River Kernel Density (3 km bandwidth)",
+  samp_20km = "Sampling Density (20 km bandwidth)",
+  pix_dist = "Geographic Distance (km)"
+)
+
+# Order variables by node purity
+pcapruned_order <- pcapruned_imp %>%
+  arrange(desc(IncNodePurity)) %>%
+  pull(variable)
+
+pcapruned_imp$variable <- factor(pcapruned_imp$variable, levels = rev(pcapruned_order))
+
+# Plot
+ggplot(pcapruned_imp, aes(x = variable, y = IncNodePurity)) +
+  geom_point(color = "black", size = 3) +
+  coord_flip() +
+  scale_y_continuous(name = "Increase in Node Purity") +
+  scale_x_discrete(labels = label_map) +
+  labs(x = NULL, title = "Variable Importance of Raw CSE Model") +
+  theme_minimal()
+```
+
+![](../figures/knitted_mds/plot-pca-pruned-2.png)<!-- -->

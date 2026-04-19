@@ -61,6 +61,32 @@ V.table <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"),
 V.table <- V.table %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
 
+library(dplyr)
+library(readr)
+
+# read full pairwise table used downstream
+cse_raw <- read_csv("../input/Gff_cse_envCostPaths.csv")
+
+# final CSE table used in modeling
+cse_final <- cse_raw %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB") %>%
+  filter(Pop1_cluster == Pop2_cluster) %>%
+  transmute(
+    site1    = Var1,
+    site2    = Var2,
+    CSE      = CSEdistance,
+    lat1     = lat1,
+    long1    = long1,
+    lat2     = lat2,
+    long2    = long2,
+    cluster1 = Pop1_cluster,
+    cluster2 = Pop2_cluster
+  ) %>%
+  arrange(cluster1, site1, site2)
+
+write_csv(cse_final, "../data/final_CSE_table.csv")
+
+
 # define coordinate reference system
 crs_geo <- 4326     # EPSG code for WGS84
 

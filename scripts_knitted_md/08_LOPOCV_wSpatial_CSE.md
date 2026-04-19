@@ -1,7 +1,7 @@
 LOPOCV: Random Forest (Internal) and Spatial Cross-Validation
 ================
 Norah Saarman
-2026-04-18
+2026-04-20
 
 - [Setup](#setup)
   - [Overview of script](#overview-of-script)
@@ -19,8 +19,9 @@ Norah Saarman
   - [Chunk 3: RF models for each fold of
     LOPOCV](#chunk-3-rf-models-for-each-fold-of-lopocv)
   - [Chunk 4: Calculate metrics](#chunk-4-calculate-metrics)
-  - [Chunk 5: Pooled and Fold-level Metrics (Spearman instead of
-    RSQ)](#chunk-5-pooled-and-fold-level-metrics-spearman-instead-of-rsq)
+  - [Chunk 5: Visualize Pooled and Fold-level Metrics (Spearman instead
+    of
+    RSQ)](#chunk-5-visualize-pooled-and-fold-level-metrics-spearman-instead-of-rsq)
   - [Chunk 6: Plot Full Model: Predicted vs
     Observed](#chunk-6-plot-full-model-predicted-vs-observed)
   - [Chunk 7: Variable importance with pca-pruned env. variable
@@ -537,7 +538,7 @@ write.csv(pooled_summary, file.path(results_dir, "LOPOCV_pooled_summary.csv"), r
 print(pooled_summary)
 ```
 
-## Chunk 5: Pooled and Fold-level Metrics (Spearman instead of RSQ)
+## Chunk 5: Visualize Pooled and Fold-level Metrics (Spearman instead of RSQ)
 
 ``` r
 pooled_summary <- read.csv(file.path(results_dir, "LOPOCV_pooled_summary.csv"))
@@ -661,12 +662,12 @@ ggplot() +
   geom_point(
     data = filter(site_metadata, Symbol == "circle"),
     aes(x = Longitude, y = Latitude, size = Spearman, fill = Cluster),
-    shape = 21, color = "black", stroke = 0.3
+    shape = 21, color = "black", stroke = 0.3, alpha = 0.4
   ) +
   geom_point(
     data = filter(site_metadata, Symbol == "low"),
     aes(x = Longitude, y = Latitude, fill = Cluster),
-    shape = 21, color = "black", size = 1, stroke = 0.3
+    shape = 21, color = "black", size = 1, stroke = 0.3, alpha = 0.3
   ) +
   scale_fill_manual(
     name = "Group",
@@ -764,6 +765,58 @@ ggplot(data.frame(obs = obs_all, pred = pred_all), aes(x = obs, y = pred)) +
 ``` r
 # Load full model
 full_model <- readRDS(file.path(results_dir, "rf_mean_full_tuned.rds"))
+
+print(full_model)
+```
+
+    ## 
+    ## Call:
+    ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 12
+    ## 
+    ##           Mean of squared residuals: 0.001159808
+    ##                     % Var explained: 85.7
+
+``` r
+importance(full_model)
+```
+
+    ##             %IncMSE IncNodePurity
+    ## BIO1      15.402725    0.08260644
+    ## BIO2      13.973900    0.13417148
+    ## BIO3      20.081142    0.49594070
+    ## BIO4      19.971111    0.14142361
+    ## BIO5      14.729129    0.09686819
+    ## BIO6      18.780347    0.28761449
+    ## BIO7      21.588124    0.12205648
+    ## BIO8S     17.780629    0.11071230
+    ## BIO9S     16.876518    0.16430456
+    ## BIO10S    18.009074    0.08892864
+    ## BIO11S    19.622665    0.18474855
+    ## BIO12     14.317559    0.08642528
+    ## BIO13     19.728394    0.16883174
+    ## BIO14     14.588808    0.26422377
+    ## BIO15     16.386966    0.18748348
+    ## BIO16S    16.439604    0.08259274
+    ## BIO17S    11.566631    0.11029099
+    ## BIO18S     7.346078    0.07294360
+    ## BIO19S    10.219341    0.09772391
+    ## slope     16.515957    0.10049135
+    ## alt       17.359818    0.10772336
+    ## lakes      9.130651    0.10792335
+    ## riv_3km   17.252330    0.12710960
+    ## samp_20km 23.662285    1.28875961
+    ## pix_dist  87.248679    4.07276605
+
+``` r
+varImpPlot(full_model)
+```
+
+![](../figures/knitted_mds/7-variable-imp-mse-plus-pca-pruned-1.png)<!-- -->
+
+``` r
 full_imp <- importance(full_model, type = 1) %>%
   as.data.frame() %>%
   rownames_to_column("variable") %>%
@@ -785,6 +838,44 @@ lopocv_imp <- map_df(1:67, function(fold_idx) {
 
 # Load PCA-pruned model
 pruned_model <- readRDS(file.path(results_dir, "rf_mean_pcapruned_tuned.rds"))
+
+print(pruned_model)
+```
+
+    ## 
+    ## Call:
+    ##  randomForest(x = x, y = y, mtry = res[which.min(res[, 2]), 1],      importance = TRUE) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 6
+    ## 
+    ##           Mean of squared residuals: 0.001177704
+    ##                     % Var explained: 85.48
+
+``` r
+importance(pruned_model)
+```
+
+    ##            %IncMSE IncNodePurity
+    ## BIO3      31.09694     0.6633338
+    ## BIO4      29.00780     0.3260843
+    ## BIO7      36.76577     0.3491370
+    ## BIO11S    30.06047     0.4480731
+    ## BIO13     30.33539     0.3133014
+    ## slope     21.14116     0.1822154
+    ## alt       28.60231     0.3312492
+    ## lakes     12.25125     0.1550735
+    ## riv_3km   20.83758     0.2063074
+    ## samp_20km 30.48908     1.6003861
+    ## pix_dist  99.75679     4.1926504
+
+``` r
+varImpPlot(pruned_model)
+```
+
+![](../figures/knitted_mds/7-variable-imp-mse-plus-pca-pruned-2.png)<!-- -->
+
+``` r
 pruned_imp <- importance(pruned_model, type = 1) %>%
   as.data.frame() %>%
   rownames_to_column("variable") %>%
@@ -881,7 +972,7 @@ ggplot(all_imp, aes(x = variable, y = IncMSE)) +
   theme_minimal()
 ```
 
-![](../figures/knitted_mds/7-variable-imp-mse-plus-pca-pruned-1.png)<!-- -->
+![](../figures/knitted_mds/7-variable-imp-mse-plus-pca-pruned-3.png)<!-- -->
 
 ``` r
 #dev.off()
@@ -1347,6 +1438,8 @@ print(pooled_summary_spatial)
 ## Chunk 10: Plot spatial eval of LOPOCV
 
 ``` r
+results_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/"
+
 # Load Spatial LOPOCV summary
 metrics_all <- read.csv(file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_summary.csv"))
 print(metrics_all)
@@ -1497,7 +1590,7 @@ summary(metrics_all$Spearman)
     ##  0.5512  0.7636  0.8108  0.7929  0.8617  0.9149
 
 ``` r
-# Load Spatial Poooled Stats
+# Load Spatial Pooled Stats
 pooled_summary_spatial <- read.csv(file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_pooled_summary.csv"))
 print(pooled_summary_spatial)
 ```
@@ -1641,6 +1734,41 @@ ggplot() +
 ![](../figures/knitted_mds/10-visualize-spatial-LCPsum-4.png)<!-- -->
 
 ``` r
+# Plot Spatial LOPOCV Spearman by site just N/S with shaded colors
+ggplot() +
+  geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.1) +
+  geom_sf(data = lakes, fill = "black", color = NA) +
+  geom_point(
+    data = filter(site_metadata, Symbol == "circle"),
+    aes(x = Longitude, y = Latitude, size = Spearman, fill = Cluster),
+    shape = 21, color = "black", stroke = 0.3, alpha = 0.4
+  ) +
+  geom_point(
+    data = filter(site_metadata, Symbol == "low"),
+    aes(x = Longitude, y = Latitude, fill = Cluster),
+    shape = 21, color = "black", size = 1, stroke = 0.3, alpha = 0.4
+  ) +
+  scale_fill_manual(
+    name = "Group",
+    #values = c("north" = "#2c3e50", "south" = "#4e342e")
+    values = c("north" = "#2A4F6E", "south" = "#7A4A2A")
+    #values = c("north" = "#2E8BC6", "south" = "#FFA64D")
+  ) +
+  scale_size_continuous(
+  name = "LOPOCV \nSpearman's r",
+  limits = c(0.4, 1.0),
+  breaks = c(0.4, 0.7, 1.0),
+  range = c(2,7)
+) +
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
+  theme_minimal() +
+  theme(panel.grid = element_blank()) +
+  labs(title = "Spatial LOPOCV Spearman's r by Site", x = "Longitude", y = "Latitude")
+```
+
+![](../figures/knitted_mds/10-visualize-spatial-LCPsum-5.png)<!-- -->
+
+``` r
 # Overlapping density plot just S/N
 ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   geom_density(alpha = 0.5, color = NA) +
@@ -1653,7 +1781,7 @@ ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   )
 ```
 
-![](../figures/knitted_mds/10-visualize-spatial-LCPsum-5.png)<!-- -->
+![](../figures/knitted_mds/10-visualize-spatial-LCPsum-6.png)<!-- -->
 
 ``` r
 # Overlapping count plot just S/N
@@ -1668,7 +1796,7 @@ ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   )
 ```
 
-![](../figures/knitted_mds/10-visualize-spatial-LCPsum-6.png)<!-- -->
+![](../figures/knitted_mds/10-visualize-spatial-LCPsum-7.png)<!-- -->
 
 ``` r
 # write.csv(site_metadata, file.path(results_dir, "site_metadata_spatial.csv"), row.names = FALSE)

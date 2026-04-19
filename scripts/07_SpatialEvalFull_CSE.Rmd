@@ -242,7 +242,7 @@ cellStats(abs(pred1 - pred5), stat = "mean", na.rm = TRUE)
 1 vs 5 are identical. 1 vs 150 km are not. Where is the split?
 
 # Step 4. Find the Split
-```{r find-split}
+```{r find-split, eval = FALSE}
 kvals <- c(1, 2, 5, 10, 20, 50, 100, 150)
 
 pred_list <- lapply(kvals, function(k) {
@@ -281,7 +281,7 @@ mean diff jumps to ~ 4e-03 → 1e-02 → 4e-02
 
 # Step 5. Loop through 1-100 km
 
-```{r loop, eval=FALSE}
+```{r loop, eval = FALSE}
 proj_km <- c(1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
 
 n_cores <- 16
@@ -433,9 +433,10 @@ write.csv(
 metrics_all
 ```
 
+# Step 6. Visualize
 ```{r review-km-projections}
-
 km_summary<- read.csv("/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/projection_screening_LCPsum/projection_distance_comparison_metrics_LCPsum.csv")
+print(km_summary)
 
 plot(
   km_summary$projection_km,

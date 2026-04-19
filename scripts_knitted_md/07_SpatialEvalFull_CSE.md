@@ -2,7 +2,7 @@ Spatial Evaluation - Full RF model of raw CSE, alternative km
 projections
 ================
 Norah Saarman
-2026-04-07
+2026-04-19
 
 - [Setup](#setup)
   - [Load libraries](#load-libraries)
@@ -14,6 +14,7 @@ Norah Saarman
 - [Step 3. Test 1 km versus 5 km](#step-3-test-1-km-versus-5-km)
 - [Step 4. Find the Split](#step-4-find-the-split)
 - [Step 5. Loop through 1-100 km](#step-5-loop-through-1-100-km)
+- [Step 6. Visualize](#step-6-visualize)
 
 # Setup
 
@@ -211,7 +212,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
   rmse <- sqrt(mse)
   mae  <- mean(abs(obs - pred_cal))
   rsq  <- 1 - (sse / sst)
-  corr <- cor(obs, pred_raw)
+  corr <- cor(obs, pred_raw, method="spearman")
 
   data.frame(
     n = length(obs),
@@ -219,7 +220,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
     RMSE = rmse,
     MAE = mae,
     RSQ = rsq,
-    Correlation = corr
+    Pearson = corr
   )
 }
 
@@ -321,22 +322,6 @@ expand.grid(i = seq_along(kvals), j = seq_along(kvals)) |>
   ) |>
   dplyr::select(k1, k2, mean_diff, max_diff)
 ```
-
-    ## # A tibble: 28 × 4
-    ## # Rowwise: 
-    ##       k1    k2 mean_diff max_diff
-    ##    <dbl> <dbl>     <dbl>    <dbl>
-    ##  1     1     2 0         0       
-    ##  2     1     5 0         0       
-    ##  3     2     5 0         0       
-    ##  4     1    10 0.0000405 0.000413
-    ##  5     2    10 0.0000405 0.000413
-    ##  6     5    10 0.0000405 0.000413
-    ##  7     1    20 0.000366  0.00359 
-    ##  8     2    20 0.000366  0.00359 
-    ##  9     5    20 0.000366  0.00359 
-    ## 10    10    20 0.000382  0.00351 
-    ## # ℹ 18 more rows
 
 1, 2, 5 km are identical mean_diff = 0 max_diff = 0 → these produce
 exactly the same raster 10 km is barely different mean diff ~ 4e-05 →
@@ -498,9 +483,39 @@ write.csv(
 metrics_all
 ```
 
+# Step 6. Visualize
+
 ``` r
 km_summary<- read.csv("/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/projection_screening_LCPsum/projection_distance_comparison_metrics_LCPsum.csv")
+print(km_summary)
+```
 
+    ##    projection_km  method    n         MSE       RMSE        MAE       RSQ
+    ## 1              1 LCP_sum 1091 0.003114932 0.05581158 0.04540066 0.6158928
+    ## 2             10 LCP_sum 1091 0.003114990 0.05581209 0.04539899 0.6158858
+    ## 3             20 LCP_sum 1091 0.003119840 0.05585553 0.04543554 0.6152877
+    ## 4             30 LCP_sum 1091 0.003122253 0.05587712 0.04544221 0.6149901
+    ## 5             40 LCP_sum 1091 0.003123029 0.05588407 0.04544022 0.6148944
+    ## 6             50 LCP_sum 1091 0.003127945 0.05592803 0.04547172 0.6142883
+    ## 7             60 LCP_sum 1091 0.003124711 0.05589911 0.04539231 0.6146871
+    ## 8             70 LCP_sum 1091 0.003122812 0.05588213 0.04538309 0.6149212
+    ## 9             80 LCP_sum 1091 0.003126951 0.05591914 0.04542788 0.6144108
+    ## 10            90 LCP_sum 1091 0.003132463 0.05596841 0.04546973 0.6137311
+    ## 11           100 LCP_sum 1091 0.003150079 0.05612557 0.04559611 0.6115588
+    ##    Correlation
+    ## 1    0.7847884
+    ## 2    0.7847839
+    ## 3    0.7844028
+    ## 4    0.7842131
+    ## 5    0.7841520
+    ## 6    0.7837654
+    ## 7    0.7840198
+    ## 8    0.7841691
+    ## 9    0.7838436
+    ## 10   0.7834099
+    ## 11   0.7820223
+
+``` r
 plot(
   km_summary$projection_km,
   km_summary$RSQ,
@@ -527,7 +542,7 @@ plot(
 ``` r
 plot(
   km_summary$projection_km,
-  km_summary$Correlation,
+  km_summary$Pearson,
   type = "b",
   xlab = "Projection Scale in Km",
   ylab = "Mean absolute raster change"
@@ -563,13 +578,13 @@ plot(
 )
 mtext("(b)", side = 3, adj = 0, line = 0.5, font = 2)
 
-# (c) Correlation
+# (c) Pearson
 plot(
   km_summary$projection_km,
-  km_summary$Correlation,
+  km_summary$Pearson,
   type = "b",
   xlab = "Projection Scale in Km",
-  ylab = "Correlation"
+  ylab = "Pearson's Correlation"
 )
 mtext("(c)", side = 3, adj = 0, line = 0.5, font = 2)
 
