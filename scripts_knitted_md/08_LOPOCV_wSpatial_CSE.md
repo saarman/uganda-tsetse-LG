@@ -1,16 +1,14 @@
 LOPOCV: Random Forest (Internal) and Spatial Cross-Validation
 ================
 Norah Saarman
-2026-04-20
+2026-04-27
 
 - [Setup](#setup)
   - [Overview of script](#overview-of-script)
-    - [Notes from Jun 20, 2025](#notes-from-jun-20-2025)
   - [Inputs](#inputs)
   - [Outputs](#outputs)
   - [Libraries](#libraries)
   - [Directory Paths](#directory-paths)
-    - [LOPOCV directories](#lopocv-directories)
 - [LOPOCV](#lopocv)
   - [Chunk 1: Set up folds of the cross
     validation](#chunk-1-set-up-folds-of-the-cross-validation)
@@ -59,37 +57,6 @@ Emphasis should be on Spearman’s Correlation because it weighs correct
 ranking more heavily than Pearsons, as it is calculated based on the
 rank order of data points rather than their raw numerical values.
 
-### Notes from Jun 20, 2025
-
-My notes from my analysis on Model Design and Diagnostic Attempts Jun
-20, 2025, when using RSQ per fold:
-
-I tried removing sampling effort as a predictor:  
-- Result: Worsened performance in west, no benefit in north/south.
-
-I tried subdividing by subclusters (K=3):  
-- Result: Lower R² overall due to smaller training sets.
-
-I tried filtering by geographic distance:  
-- Result: Worsened performance due to fewer training pairs.
-
-I tested exclusion of site 50-KB:  
-- Result: **Improved** performance in west.
-
-I also tested removing site 54-MS:  
-- Result: No benefit, and it actually reduced accuracy in neighboring
-KAF.
-
-Final decision:  
-- Stick with K=2 major clusters (north / south).  
-- Keep all intra-cluster pairs (no geodist pruning).  
-- Just exclude 50-KB as a clear spatial outlier.  
-- Use subclusters only for interpretation, not model restriction.
-
-(In contrast, model configuration and projection parameters were
-selected based on full-model performance (RSQ) becaues in these cases,
-variance in CSE was sufficiently large for stable estimation.)
-
 ## Inputs
 
 - `../input/Gff_11loci_68sites_cse.csv` - Combined CSE table with
@@ -133,7 +100,7 @@ library(reshape2)
 
 ## Directory Paths
 
-### LOPOCV directories
+LOPOCV directories
 
 ``` r
 input_dir <- "../input"
@@ -346,7 +313,7 @@ improvement) - Plots and summarizes metrics
 Helpers:
 
 ``` r
-calibrate_pred <- function(obs_train, pred_train, pred_test) {
+calibrate_pred <- function(obs_train, pred_train, pred_test, return_fit = FALSE) {
   keep <- complete.cases(obs_train, pred_train)
   df <- data.frame(obs = obs_train[keep], pred = pred_train[keep])
   fit <- lm(obs ~ pred, data = df)
@@ -354,7 +321,15 @@ calibrate_pred <- function(obs_train, pred_train, pred_test) {
   out <- rep(NA_real_, length(pred_test))
   keep_test <- complete.cases(pred_test)
   out[keep_test] <- predict(fit, newdata = data.frame(pred = pred_test[keep_test]))
-  out
+
+  if (return_fit) {
+    list(
+      pred_cal = out,
+      fit = fit
+    )
+  } else {
+    out
+  }
 }
 
 calc_metrics <- function(obs, pred) {
@@ -390,7 +365,10 @@ for (i in seq_along(sites)) {
 
   site <- sites[i]
 
-  fold_eval_file  <- file.path(results_dir, sprintf("lopocv_eval_fold_%02d.csv", i))
+  # original
+  # fold_eval_file  <- file.path(results_dir, sprintf("lopocv_eval_fold_%02d.csv", i))
+  fold_eval_file  <- file.path(results_dir, sprintf("lopocv_eval_fold_%02d_v2.csv", i))
+
   fold_model_file <- file.path(output_dir, sprintf("rf_model_%02d.rds", i))
 
   if (!file.exists(fold_model_file)) {
@@ -415,11 +393,11 @@ for (i in seq_along(sites)) {
   train_df <- train_df %>% dplyr::select(-CSEdistance)
   test_df  <- test_df %>% dplyr::select(-CSEdistance)
 
-  names(train_df) <- paste0(names(train_df), "_mean")
-  names(test_df)  <- paste0(names(test_df), "_mean")
-
-  names(train_df)[names(train_df) == "pix_dist_mean"] <- "pix_dist"
-  names(test_df)[names(test_df) == "pix_dist_mean"] <- "pix_dist"
+  # This code only needed if there are "_mean" remaining in the model predictor variable names
+  #names(train_df) <- paste0(names(train_df), "_mean")
+  #names(test_df)  <- paste0(names(test_df), "_mean")
+  #names(train_df)[names(train_df) == "pix_dist_mean"] <- "pix_dist"
+  #names(test_df)[names(test_df) == "pix_dist_mean"] <- "pix_dist"
 
   stopifnot(identical(names(train_df), attr(rf_model$terms, "term.labels")))
   stopifnot(identical(names(test_df), attr(rf_model$terms, "term.labels")))
@@ -427,11 +405,15 @@ for (i in seq_along(sites)) {
   pred_train <- predict(rf_model, newdata = train_df)
   pred_test  <- predict(rf_model, newdata = test_df)
 
-  pred_test_cal <- calibrate_pred(
+  cal_obj <- calibrate_pred(
     obs_train = train_obs,
     pred_train = pred_train,
-    pred_test = pred_test
+    pred_test = pred_test,
+    return_fit = TRUE
   )
+
+  pred_test_cal <- cal_obj$pred_cal
+  cal_coef <- coef(cal_obj$fit)
 
   eval_df <- data.frame(
     Var1 = test_rows$Var1,
@@ -439,7 +421,9 @@ for (i in seq_along(sites)) {
     id = test_rows$id,
     CSE = test_obs,
     pred_raw = pred_test,
-    pred_cal = pred_test_cal
+    pred_cal = pred_test_cal,
+    cal_intercept = unname(cal_coef[1]),
+    cal_slope = unname(cal_coef[2])
   )
 
   write.csv(eval_df, fold_eval_file, row.names = FALSE)
@@ -452,8 +436,14 @@ for (i in seq_along(sites)) {
 
   site <- sites[i]
 
-  fold_eval_file    <- file.path(results_dir, sprintf("lopocv_eval_fold_%02d.csv", i))
-  fold_metrics_file <- file.path(results_dir, sprintf("metrics_fold_%02d.csv", i))
+  # original
+  # fold_eval_file    <- file.path(results_dir, sprintf("lopocv_eval_fold_%02d.csv", i))
+  fold_eval_file    <- file.path(results_dir, sprintf("lopocv_eval_fold_%02d_v2.csv", i))
+
+  # original
+  # fold_metrics_file <- file.path(results_dir, sprintf("metrics_fold_%02d.csv", i))
+  fold_metrics_file <- file.path(results_dir, sprintf("metrics_fold_%02d_v2.csv", i))
+
   fold_model_file   <- file.path(output_dir, sprintf("rf_model_%02d.rds", i))
 
   if (!file.exists(fold_eval_file)) {
@@ -473,8 +463,13 @@ for (i in seq_along(sites)) {
     obs = df$CSE,
     pred = df$pred_cal
   ) %>%
-    mutate(site = site) %>%
-    dplyr::select(site, everything())
+    mutate(
+      site = site,
+      cal_intercept = df$cal_intercept[1],
+      cal_slope = df$cal_slope[1],
+      mean_residual = mean(df$CSE - df$pred_cal, na.rm = TRUE)
+    ) %>%
+    dplyr::select(site, cal_intercept, cal_slope, mean_residual, everything())
 
   imp <- as.data.frame(importance(rf_model))
   imp_mse <- setNames(as.list(imp[, "%IncMSE"]), paste0("IncMSE_", rownames(imp)))
@@ -494,7 +489,7 @@ for (i in seq_along(sites)) {
 # -----------------------------------
 metric_files <- list.files(
   results_dir,
-  pattern = "^metrics_fold_[0-9]{2}\\.csv$",
+  pattern = "^metrics_fold_[0-9]{2}_v2\\.csv$",
   full.names = TRUE
 )
 
@@ -502,7 +497,9 @@ metrics_all <- bind_rows(lapply(metric_files, read.csv)) %>%
   mutate(site = factor(site, levels = sites)) %>%
   arrange(site)
 
-write.csv(metrics_all, file.path(results_dir, "LOPOCV_summary.csv"), row.names = FALSE)
+# original
+# write.csv(metrics_all, file.path(results_dir, "LOPOCV_summary.csv"), row.names = FALSE)
+write.csv(metrics_all, file.path(results_dir, "LOPOCV_summary_v2.csv"), row.names = FALSE)
 
 print(metrics_all)
 
@@ -511,7 +508,7 @@ print(metrics_all)
 # -----------------------------------
 eval_files <- list.files(
   results_dir,
-  pattern = "^lopocv_eval_fold_[0-9]{2}\\.csv$",
+  pattern = "^lopocv_eval_fold_[0-9]{2}_v2\\.csv$",
   full.names = TRUE
 )
 
@@ -533,21 +530,55 @@ pooled_summary <- data.frame(
   pooled_MAE = mean(abs(obs_all - pred_all))
 )
 
-write.csv(pooled_summary, file.path(results_dir, "LOPOCV_pooled_summary.csv"), row.names = FALSE)
+# original
+# write.csv(pooled_summary, file.path(results_dir, "LOPOCV_pooled_summary.csv"), row.names = FALSE)
+write.csv(pooled_summary, file.path(results_dir, "LOPOCV_pooled_summary_v2.csv"), row.names = FALSE)
 
 print(pooled_summary)
+
+# -----------------------------------
+# Step 5: summarize calibration slopes and intercepts
+# -----------------------------------
+calibration_summary <- metrics_all %>%
+  summarise(
+    slope_mean = mean(cal_slope, na.rm = TRUE),
+    slope_sd   = sd(cal_slope, na.rm = TRUE),
+    slope_min  = min(cal_slope, na.rm = TRUE),
+    slope_max  = max(cal_slope, na.rm = TRUE),
+    int_mean   = mean(cal_intercept, na.rm = TRUE),
+    int_sd     = sd(cal_intercept, na.rm = TRUE),
+    int_min    = min(cal_intercept, na.rm = TRUE),
+    int_max    = max(cal_intercept, na.rm = TRUE)
+  )
+
+write.csv(
+  calibration_summary,
+  file.path(results_dir, "LOPOCV_calibration_summary_v2.csv"),
+  row.names = FALSE
+)
+
+print(calibration_summary)
 ```
 
 ## Chunk 5: Visualize Pooled and Fold-level Metrics (Spearman instead of RSQ)
 
 ``` r
 pooled_summary <- read.csv(file.path(results_dir, "LOPOCV_pooled_summary.csv"))
-
 print(pooled_summary)
 ```
 
     ##      n pooled_R2 pooled_Pearson pooled_Spearman pooled_RMSE pooled_MAE
     ## 1 2182 0.8041449      0.8968776       0.8903838  0.03985341 0.03062131
+
+``` r
+calibration_summary <- read.csv(file.path(results_dir, "LOPOCV_calibration_summary_v2.csv"))
+print(calibration_summary)
+```
+
+    ##   slope_mean    slope_sd slope_min slope_max    int_mean      int_sd
+    ## 1   1.060963 0.001597395  1.056195  1.063753 -0.02438989 0.000622406
+    ##       int_min     int_max
+    ## 1 -0.02534978 -0.02249327
 
 ``` r
 metrics_all <- read.csv(file.path(results_dir, "LOPOCV_summary.csv"))
@@ -656,7 +687,7 @@ ggplot(site_metadata, aes(x = Spearman, fill = Subcluster)) +
 site_metadata$Cluster <- site_metadata$Subcluster
 site_metadata$Cluster[site_metadata$Subcluster == "west"] <- "south"
 
-ggplot() +
+p_lopocv_map <- ggplot() +
   geom_sf(data = uganda, fill = NA, color = "black", linewidth = 0.1) +
   geom_sf(data = lakes, fill = "black", color = NA) +
   geom_point(
@@ -670,24 +701,51 @@ ggplot() +
     shape = 21, color = "black", size = 1, stroke = 0.3, alpha = 0.3
   ) +
   scale_fill_manual(
-    name = "Group",
-    values = c("north" = "#1f78b4", "south" = "#e66101")
+    name = "Genetic Cluster",
+    values = c("north" = "#1f78b4", "south" = "#e66101"),
+    labels = c("north" = "North", "south" = "South")
   ) +
   scale_size_continuous(
-  name = "LOPOCV \nSpearman's r",
-  limits = c(0.4, 1.0),
-  breaks = c(0.4, 0.7, 1.0),
-  range = c(2,7)
-) +
+    name = "LOPOCV \nSpearman's r",
+    limits = c(0.4, 1.0),
+    breaks = c(0.4, 0.7, 1.0),
+    range = c(2, 7)
+  ) +
+  guides(
+    fill = guide_legend(
+      override.aes = list(size = 5, alpha = 0.7)
+    )
+  ) +
   coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
   theme_minimal() +
+    theme(
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.background = element_rect(fill = "white", color = NA),
+    legend.key = element_rect(fill = "white", color = NA)
+  ) +
   theme(panel.grid = element_blank()) +
   labs(title = "LOPOCV Spearman's r by Site", x = "Longitude", y = "Latitude")
+
+p_lopocv_map
 ```
 
 ![](../figures/knitted_mds/5-viz-spearman-4.png)<!-- -->
 
 ``` r
+fig_dir <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results//figures_pub"
+
+ggsave(
+  filename = file.path(fig_dir, "Fig_LOPOCV_fullRF_Spearman_map.png"),
+  plot = p_lopocv_map,
+  width = 5,
+  height = 6,
+  units = "in",
+  dpi = 600,
+  bg = "white"
+)
+
 ggplot(site_metadata, aes(x = Spearman, fill = Cluster)) +
   geom_density(alpha = 0.5, color = NA) +
   scale_fill_manual(values = c("north" = "#1f78b4", "south" = "#e66101")) +
@@ -976,7 +1034,24 @@ ggplot(all_imp, aes(x = variable, y = IncMSE)) +
 
 ``` r
 #dev.off()
+
+ggplot(all_imp, aes(x = variable, y = IncMSE)) +
+  geom_point(data = filter(all_imp, model != "full" & model != "pruned"),
+             aes(group = model),
+             color = "grey70", alpha = 0.4, size = 2) +
+  geom_point(data = filter(all_imp, model == "full"),
+             color = "black", size = 3) +
+  geom_point(data = filter(all_imp, model == "pruned"),
+             shape = 17, size = 3.5, color = "grey70") +
+  coord_flip() +
+  scale_y_continuous(name = "%IncMSE") +
+  scale_x_discrete(labels = label_map_abrev) +
+  labs(x = NULL,
+       title = "Variable Importance") +
+  theme_minimal()
 ```
+
+![](../figures/knitted_mds/7-variable-imp-mse-plus-pca-pruned-4.png)<!-- -->
 
 ### NodePurity
 
@@ -1093,7 +1168,7 @@ only - saves per-fold outputs
 Helpers
 
 ``` r
-calibrate_pred <- function(obs_train, pred_train, pred_test) {
+calibrate_pred <- function(obs_train, pred_train, pred_test, return_fit = FALSE) {
   keep <- complete.cases(obs_train, pred_train)
   df <- data.frame(obs = obs_train[keep], pred = pred_train[keep])
   fit <- lm(obs ~ pred, data = df)
@@ -1101,7 +1176,15 @@ calibrate_pred <- function(obs_train, pred_train, pred_test) {
   out <- rep(NA_real_, length(pred_test))
   keep_test <- complete.cases(pred_test)
   out[keep_test] <- predict(fit, newdata = data.frame(pred = pred_test[keep_test]))
-  out
+
+  if (return_fit) {
+    list(
+      pred_cal = out,
+      fit = fit
+    )
+  } else {
+    out
+  }
 }
 
 calc_metrics <- function(obs, pred) {
@@ -1196,8 +1279,11 @@ for (fold_idx in seq_along(sites)) {
   # existing saved LOPOCV model
   fold_model_file <- file.path(output_dir, sprintf("rf_model_%02d.rds", fold_idx))
 
-  # new spatial outputs
-  fold_eval_file <- file.path(spatial_output_dir, sprintf("spatial_eval_fold_%02d.csv", fold_idx))
+  # new spatial outputs: write v2 so original files remain untouched
+  fold_eval_file <- file.path(
+    spatial_output_dir,
+    sprintf("spatial_eval_fold_%02d_v2.csv", fold_idx)
+  )
 
   if (!file.exists(fold_model_file)) {
     warning(sprintf("Missing saved LOPOCV model: %s", fold_model_file))
@@ -1205,7 +1291,7 @@ for (fold_idx in seq_along(sites)) {
   }
 
   # skip completed folds
-  if (file.exists(fold_eval_file) && file.exists(fold_metrics_file)) {
+  if (file.exists(fold_eval_file)) {
     next
   }
 
@@ -1216,14 +1302,14 @@ for (fold_idx in seq_along(sites)) {
   # -----------------------------------
   env_k <- env
   env_k[["pix_dist"]] <- setValues(env[[1]], kdist)
-  
-  # force raster names to match the saved RF model   exactly
+
+  # force raster names to match the saved RF model exactly
   rf_vars <- attr(rf_model$terms, "term.labels")
   names(env_k) <- rf_vars
-  
+
   # sanity check
   stopifnot(identical(names(env_k), rf_vars))
-  
+
   cse_surface <- predict(env_k, rf_model, type = "response")
 
   # align lake mask if needed
@@ -1268,11 +1354,11 @@ for (fold_idx in seq_along(sites)) {
   ) %dopar% {
     i <- site_index[site_pairs$Var1[ii]]
     j <- site_index[site_pairs$Var2[ii]]
-  
+
     path <- tryCatch({
-      shortestPath(tr_lcp, sites_sp[i, ], sites_sp[j, ], output =   "SpatialLines")
+      shortestPath(tr_lcp, sites_sp[i, ], sites_sp[j, ], output = "SpatialLines")
     }, error = function(e) NULL)
-  
+
     if (!is.null(path)) {
       path_sf <- st_as_sf(path)
       path_sf$id <- site_pairs$id[ii]
@@ -1288,7 +1374,7 @@ for (fold_idx in seq_along(sites)) {
     warning(sprintf("No paths recovered for fold %02d", fold_idx))
     next
   }
-  
+
   paths_sf <- do.call(rbind, paths_list)
   st_crs(paths_sf) <- st_crs(cse_surface)
 
@@ -1312,12 +1398,19 @@ for (fold_idx in seq_along(sites)) {
   train_df <- eval_results[!eval_results$id %in% test_ids, ]
   test_df  <- eval_results[eval_results$id %in% test_ids, ]
 
-  test_df$LCP_sum_cal <- calibrate_pred(
+  cal_obj <- calibrate_pred(
     obs_train = train_df$CSE,
     pred_train = train_df$LCP_sum,
-    pred_test = test_df$LCP_sum
+    pred_test = test_df$LCP_sum,
+    return_fit = TRUE
   )
-  
+
+  test_df$LCP_sum_cal <- cal_obj$pred_cal
+  cal_coef <- coef(cal_obj$fit)
+
+  test_df$cal_intercept <- unname(cal_coef[1])
+  test_df$cal_slope <- unname(cal_coef[2])
+
   # save outputs
   write.csv(test_df, fold_eval_file, row.names = FALSE)
 }
@@ -1346,19 +1439,28 @@ distance models, where relative ordering of pairwise connectivity is
 often more important than absolute prediction accuracy.
 
 ``` r
+## Chunk 9: Evaluative metrics
+
 kdist = 1
 for (fold_idx in seq_along(sites)) {
 
   site <- sites[fold_idx]
 
+  # use new v2 spatial eval files written by Chunk 8c
   fold_eval_file <- file.path(
     spatial_output_dir,
-    sprintf("spatial_eval_fold_%02d.csv", fold_idx)
+    sprintf("spatial_eval_fold_%02d_v2.csv", fold_idx)
   )
+
+  # original
+  # fold_metrics_file <- file.path(
+  #   spatial_output_dir,
+  #   sprintf("spatial_metrics_fold_%02d.csv", fold_idx)
+  # )
 
   fold_metrics_file <- file.path(
     spatial_output_dir,
-    sprintf("spatial_metrics_fold_%02d.csv", fold_idx)
+    sprintf("spatial_metrics_fold_%02d_v2.csv", fold_idx)
   )
 
   if (!file.exists(fold_eval_file)) {
@@ -1375,9 +1477,16 @@ for (fold_idx in seq_along(sites)) {
     mutate(
       site = site,
       projection_km = kdist,
-      method = "LCP_sum"
+      method = "LCP_sum",
+      mean_residual = mean(test_df$CSE - test_df$LCP_sum_cal, na.rm = TRUE),
+      cal_intercept = test_df$cal_intercept[1],
+      cal_slope = test_df$cal_slope[1]
     ) %>%
-    dplyr::select(site, projection_km, method, everything())
+    dplyr::select(
+      site, projection_km, method,
+      cal_intercept, cal_slope, mean_residual,
+      everything()
+    )
 
   write.csv(metrics_k, fold_metrics_file, row.names = FALSE)
 }
@@ -1385,7 +1494,7 @@ for (fold_idx in seq_along(sites)) {
 # combine all fold metrics
 metric_files <- list.files(
   spatial_output_dir,
-  pattern = "^spatial_metrics_fold_[0-9]{2}\\.csv$",
+  pattern = "^spatial_metrics_fold_[0-9]{2}_v2\\.csv$",
   full.names = TRUE
 )
 
@@ -1393,9 +1502,16 @@ metrics_all_spatial <- bind_rows(lapply(metric_files, read.csv)) %>%
   mutate(site = factor(site, levels = sites)) %>%
   arrange(site)
 
+# original
+# write.csv(
+#   metrics_all_spatial,
+#   file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_summary.csv"),
+#   row.names = FALSE
+# )
+
 write.csv(
   metrics_all_spatial,
-  file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_summary.csv"),
+  file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_summary_v2.csv"),
   row.names = FALSE
 )
 
@@ -1404,7 +1520,7 @@ print(metrics_all_spatial)
 # pooled out-of-fold predictive R2 across all folds
 eval_files <- list.files(
   spatial_output_dir,
-  pattern = "^spatial_eval_fold_[0-9]{2}\\.csv$",
+  pattern = "^spatial_eval_fold_[0-9]{2}_v2\\.csv$",
   full.names = TRUE
 )
 
@@ -1426,13 +1542,43 @@ pooled_summary_spatial <- data.frame(
   pooled_MAE = mean(abs(obs_all - pred_all))
 )
 
+# original
+# write.csv(
+#   pooled_summary_spatial,
+#   file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_pooled_summary.csv"),
+#   row.names = FALSE
+# )
+
 write.csv(
   pooled_summary_spatial,
-  file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_pooled_summary.csv"),
+  file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_pooled_summary_v2.csv"),
   row.names = FALSE
 )
 
 print(pooled_summary_spatial)
+
+# -----------------------------------
+# NEW: summarize spatial calibration slopes and intercepts
+# -----------------------------------
+spatial_calibration_summary <- metrics_all_spatial %>%
+  summarise(
+    slope_mean = mean(cal_slope, na.rm = TRUE),
+    slope_sd   = sd(cal_slope, na.rm = TRUE),
+    slope_min  = min(cal_slope, na.rm = TRUE),
+    slope_max  = max(cal_slope, na.rm = TRUE),
+    int_mean   = mean(cal_intercept, na.rm = TRUE),
+    int_sd     = sd(cal_intercept, na.rm = TRUE),
+    int_min    = min(cal_intercept, na.rm = TRUE),
+    int_max    = max(cal_intercept, na.rm = TRUE)
+  )
+
+write.csv(
+  spatial_calibration_summary,
+  file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_calibration_summary_v2.csv"),
+  row.names = FALSE
+)
+
+print(spatial_calibration_summary)
 ```
 
 ## Chunk 10: Plot spatial eval of LOPOCV
@@ -1597,6 +1743,19 @@ print(pooled_summary_spatial)
 
     ##      n pooled_R2 pooled_Pearson pooled_Spearman pooled_RMSE pooled_MAE
     ## 1 2182 0.5782235      0.7605472       0.7850421   0.0584843 0.04740392
+
+``` r
+# NEW: load spatial calibration summary
+spatial_calibration_summary <- read.csv(
+  file.path(results_dir, "spatial_LOPOCV_LCPsum_k1_calibration_summary_v2.csv")
+)
+print(spatial_calibration_summary)
+```
+
+    ##    slope_mean     slope_sd   slope_min   slope_max int_mean      int_sd
+    ## 1 0.001420555 2.836345e-05 0.001314133 0.001485161 0.302026 0.001672321
+    ##     int_min   int_max
+    ## 1 0.2983355 0.3053339
 
 ``` r
 # Load raster for extent

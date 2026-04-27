@@ -17,19 +17,19 @@ knit: (function(input, ...) {
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   echo = TRUE,
-  warning = FALSE,
-  message = FALSE,
-  fig.path = "../figures/knitted_mds/"
+  # Saves PNGs to the root /figures folder
+  fig.path = "../figures/knitted_mds/" 
 )
 ```
 
 RStudio Configuration:  
-- R version: R 4.4.0 (Geospatial packages)  
-- Number of cores: 4 (up to 32 available)   
-- Account: saarman-np  
-- Partition: saarman-np or saarman-shared-np  
-- Memory per job: 100G  
-
+   - **R version:** R 4.4.0 (Geospatial packages)  
+   - **Number of cores:** 4 (up to 32 available)   
+   - **Account:** saarman-np  
+   - **Partition:** saarman-np (now auto allows multiple simultaneous jobs)  
+   - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)
+  
+  
 # Setup
 
 ```{r libraries}

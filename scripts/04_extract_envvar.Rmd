@@ -23,12 +23,13 @@ knitr::opts_chunk$set(
 ```
 
 RStudio Configuration:  
-- **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 4 (up to 32 available)   
-- **Account:** saarman-np  
-- **Partition:** saarman-shared-np (allows multiple simultaneous jobs)  
-- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)    
-
+   - **R version:** R 4.4.0 (Geospatial packages)  
+   - **Number of cores:** 4 (up to 32 available)   
+   - **Account:** saarman-np  
+   - **Partition:** saarman-np (now auto allows multiple simultaneous jobs)  
+   - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)
+  
+  
 # Setup
 ```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
 # load only required packages

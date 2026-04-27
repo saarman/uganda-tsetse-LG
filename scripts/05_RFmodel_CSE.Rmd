@@ -21,13 +21,15 @@ knitr::opts_chunk$set(
   fig.path = "../figures/knitted_mds/" 
 )
 ```
-  
+
 RStudio Configuration:  
-- **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 4 (up to 32 available)   
-- **Account:** saarman-np  
-- **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
-- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)    
+   - **R version:** R 4.4.0 (Geospatial packages)  
+   - **Number of cores:** 4 (up to 32 available)   
+   - **Account:** saarman-np  
+   - **Partition:** saarman-np (now auto allows multiple simultaneous jobs)  
+   - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)
+  
+  
 # Setup
 ```{r libraries, warning=FALSE, results=FALSE, message=FALSE}
 # load only required packages
@@ -315,7 +317,7 @@ mean(V.table_full$samp_20km_mean, na.rm = TRUE)
 V.table <- V.table_full %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
 
-# Filter for within-cluster pairs AND geographic distance ≤ 100 km
+# Filter for within-cluster pairs AND geographic distance <= 100 km
 #V.table <- V.table_full %>%
 #  filter(Pop1_cluster == Pop2_cluster) %>%
 #  filter(pix_dist <= 100)
@@ -696,7 +698,7 @@ mean(V.table_full$samp_20km_mean, na.rm = TRUE)
 V.table <- V.table_full %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
 
-# Filter for within-cluster pairs AND geographic distance ≤ 100 km
+# Filter for within-cluster pairs AND geographic distance <= 100 km
 #V.table <- V.table_full %>%
 #  filter(Pop1_cluster == Pop2_cluster) %>%
 #  filter(pix_dist <= 100)

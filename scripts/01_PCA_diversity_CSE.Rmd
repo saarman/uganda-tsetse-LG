@@ -28,7 +28,8 @@ RStudio Configuration:
    - **Account:** saarman-np  
    - **Partition:** saarman-np (now auto allows multiple simultaneous jobs)  
    - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)
-  
+   
+
 **Inputs**  
 - `../input/Gff_11loci_allsites_genepop.gen`  
 - `../input/Gff_11loci_allsites_indinfo.txt`  
@@ -284,7 +285,7 @@ Gff_rf <- Gff_filt[Gff_filt$SiteCode %in% selected_sites, ]
 Gff.genind_rf <- Gff.genind[pop(Gff.genind) %in% selected_sites]
 
 # Report selected SiteCodes by region
-print(split(Gff_rf$SiteCode, Gff_rf$K2))
+# print(split(Gff_rf$SiteCode, Gff_rf$K2))
 
 # Report groupings and selected representative from each 5km cluster
 report_df <- data.frame(
@@ -292,7 +293,7 @@ report_df <- data.frame(
   group = sapply(report_list, function(x) paste(sort(unique(x)), collapse = ", ")),
   row.names = NULL
 )
-print(report_df)
+#print(report_df)
 ```
 Remove smaller sample size(s) of any 2-3 sites within 2 km of each other: 04-OM, 29-KO, 13-GOR, 34-AMI, 35-DK, 39-OC, 53-UWA, 77-NB, 80-SA
 
