@@ -1,0 +1,55 @@
+---
+author: "Norah Saarman"
+date: "`r Sys.Date()`"
+output:
+  github_document:
+    toc: true
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_dir = "../scripts_knitted_md", 
+      envir = globalenv()
+    )
+  })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  # Saves PNGs to the root /figures folder
+  fig.path = "../figures/knitted_mds/" 
+)
+```
+
+RStudio Configuration:  
+   - **R version:** R 4.4.0 (Geospatial packages)  
+   - **Number of cores:** 4 (up to 32 available)   
+   - **Account:** saarman-np  
+   - **Partition:** saarman-np (now auto allows multiple simultaneous jobs)  
+   - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)
+  
+  
+  
+  
+  
+  
+  
+---
+author: "Norah Saarman"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  # Saves PNGs to the root /figures folder
+  fig.path = "../figures/knitted_mds/" 
+)
+```
+
+RStudio Configuration:  
+   - **R version:** R 4.4.0 (Geospatial packages)  
+   - **Number of cores:** 4 (up to 32 available)   
+   - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)
+  

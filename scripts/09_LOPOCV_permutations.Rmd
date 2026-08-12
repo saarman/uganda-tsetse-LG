@@ -650,7 +650,7 @@ dev.off()
 
 GOAL: Create and test if different from full model: 67 x 100 matrix where each cell is the Spearmans's correlation for one LOPOCV fold (site) under a baseline model (geographic distance + sampling density only, excluding all environmental variables).
 
-## Chunk 7: Geodist-only baseline LOPOCV eval 
+## Chunk 7: Geographic distance-only baseline LOPOCV eval 
 
 This baseline model uses only:
 1. pix_dist
@@ -1283,8 +1283,8 @@ p_lopocv_vs_geodist <- ggplot(
     labels = c(
       "Observed.north" = "Full model North",
       "Observed.south" = "Full model South",
-      "Geodist.north"  = "GeoDist baseline North",
-      "Geodist.south"  = "Geodist baseline South"
+      "Geodist.north"  = "Distance-only North",
+      "Geodist.south"  = "Distance-only South"
     )
   ) +
 
