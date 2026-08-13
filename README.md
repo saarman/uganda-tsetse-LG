@@ -8,7 +8,8 @@ Core objectives include mapping genetic clusters, modeling connectivity via Rand
 ## Folder structure
 
 - **`scripts/`**  (see `scripts/README.md` for table of contents)   
-  – R, Python, and Bash scripts in numbered order (e.g., `01_prepare_data.R`, `02_run_PCA.R`).  
+  – R, Python, and Bash scripts in numbered order (e.g., `01_prepare_data.R`, `02_run_PCA.R`)
+  - Rough draft "development" scripts are available in **`scripts/development_and_prelim_scripts`** 
   
 - **`help/`**  (Long-form help and documentation; see `help/README.md` for details)  
       1. Connecting to RStudio on CHPC  
