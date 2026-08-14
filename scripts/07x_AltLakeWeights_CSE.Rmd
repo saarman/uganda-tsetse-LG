@@ -395,6 +395,12 @@ The lake multiplier of 1 corresponds to the value used in the final
 spatial evaluation.
 
 ```{r}
+
+results_dir_big <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/"
+lake_screen_dir <- file.path(
+  results_dir_big,
+  "lake_resistance_screening_LCPsum"
+)
 lake_summary <- read.csv(file.path(
     lake_screen_dir,
     "lake_resistance_comparison_metrics_LCPsum.csv"
@@ -424,7 +430,7 @@ plot(
   lake_summary$RSQ,
   type = "b",
   xlab = "Lake Resistance Multiplier",
-  ylab = "R2"
+  ylab = expression("Spatial " * R^2)
 )
 
 plot(
@@ -432,7 +438,7 @@ plot(
   lake_summary$MSE,
   type = "b",
   xlab = "Lake Resistance Multiplier",
-  ylab = "MSE"
+  ylab = "Spatial MSE"
 )
 
 plot(
@@ -446,6 +452,108 @@ plot(
 par(mfrow = c(1, 1))
 ```
 
-# Conclusion
+**Interpretation:**  
 
 Model performance was sensitive to low lake resistance but stabilized as lake resistance increased. Assigning lake cells 0.5 times the maximum predicted terrestrial resistance reduced performance (R2 = 0.46; Spearman's r = 0.69), whereas the value used in the final analysis, equal to the maximum terrestrial resistance, produced substantially higher performance (R2 = 0.62; Spearman's r = 0.80). Increasing lake resistance to 1.5 or 2 times the maximum produced only modest additional improvement, with performance reaching a plateau (R2 = 0.66; Spearman's r = 0.83 for both).
+
+## Visualize spatial sensitivity analyses
+
+```{r}
+
+# Load projection-scale results
+km_summary <- read.csv(
+  "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/projection_screening_LCPsum/projection_distance_comparison_metrics_LCPsum.csv"
+)
+
+# Load lake-resistance results
+lake_summary <- read.csv(
+  "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/lake_resistance_screening_LCPsum/lake_resistance_comparison_metrics_LCPsum.csv"
+)
+
+# Check
+print(km_summary)
+print(lake_summary)
+
+# Open PDF
+#pdf("/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/spatial_sensitivity_fig.pdf", width = 8, height = 5.5)
+
+# 2 rows x 3 columns
+par(
+  mfrow = c(2, 3),
+  mar = c(4, 4.5, 3, 1)
+)
+
+# --------------------------------------------------
+# Projection-scale sensitivity
+# --------------------------------------------------
+
+# (a) Spatial R2
+plot(
+  km_summary$projection_km,
+  km_summary$RSQ,
+  type = "b",
+  xlab = "Projection Scale (km)",
+  ylab = expression("Spatial " * R^2)
+)
+mtext("(a)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# (b) Spatial MSE
+plot(
+  km_summary$projection_km,
+  km_summary$MSE,
+  type = "b",
+  xlab = "Projection Scale (km)",
+  ylab = "Spatial MSE"
+)
+mtext("(b)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# (c) Spearman correlation
+plot(
+  km_summary$projection_km,
+  km_summary$Correlation,
+  type = "b",
+  xlab = "Projection Scale (km)",
+  ylab = "Spearman Correlation"
+)
+mtext("(c)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# --------------------------------------------------
+# Lake-resistance sensitivity
+# --------------------------------------------------
+
+# (d) Spatial R2
+plot(
+  lake_summary$lake_multiplier,
+  lake_summary$RSQ,
+  type = "b",
+  xlab = "Lake Resistance Multiplier",
+  ylab = expression("Spatial " * R^2)
+)
+mtext("(d)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# (e) Spatial MSE
+plot(
+  lake_summary$lake_multiplier,
+  lake_summary$MSE,
+  type = "b",
+  xlab = "Lake Resistance Multiplier",
+  ylab = "Spatial MSE"
+)
+mtext("(e)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# (f) Spearman correlation
+plot(
+  lake_summary$lake_multiplier,
+  lake_summary$Correlation,
+  type = "b",
+  xlab = "Lake Resistance Multiplier",
+  ylab = "Spearman Correlation"
+)
+mtext("(f)", side = 3, adj = 0, line = 0.5, font = 2)
+
+# Close PDF
+#dev.off()
+
+# Reset plotting layout
+par(mfrow = c(1, 1))
+```

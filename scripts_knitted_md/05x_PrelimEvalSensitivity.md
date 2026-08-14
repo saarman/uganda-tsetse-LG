@@ -71,6 +71,7 @@ Norah Saarman
     files](#observed-versus-predicted-plots-from-existing-saved-rds-files)
 - [2. Evaluates alternative river kernel density
   bandwidths](#2-evaluates-alternative-river-kernel-density-bandwidths)
+  - [Conclusion](#conclusion)
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
@@ -600,7 +601,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
   rmse <- sqrt(mse)
   mae  <- mean(abs(obs - pred_cal))
   rsq  <- 1 - (sse / sst)
-  corr <- cor(obs, pred_raw)
+  corr <- cor(obs, pred_raw, method = "spearman")
  
   data.frame(
     n = length(obs),
@@ -1093,7 +1094,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
   rmse <- sqrt(mse)
   mae  <- mean(abs(obs - pred_cal))
   rsq  <- 1 - (sse / sst)
-  corr <- cor(obs, pred_raw)
+  corr <- cor(obs, pred_raw, method = "spearman"))
  
   data.frame(
     n = length(obs),
@@ -1586,7 +1587,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
   rmse <- sqrt(mse)
   mae  <- mean(abs(obs - pred_cal))
   rsq  <- 1 - (sse / sst)
-  corr <- cor(obs, pred_raw)
+  corr <- cor(obs, pred_raw, method = "spearman")
  
   data.frame(
     n = length(obs),
@@ -1979,3 +1980,11 @@ river_sensitivity
     ## 3            3 0.001150979     85.80710     17.65572           0.1191877
     ## 4            5 0.001144724     85.88423     17.69374           0.1208015
     ## 5           10 0.001156357     85.74078     24.91706           0.1661086
+
+## Conclusion
+
+Model performance was insensitive to the river kernel-density bandwidth,
+with variance explained remaining between 85.74% and 85.88% and OOB MSE
+between 0.001145 and 0.001156 across bandwidths of 1 to 10 km. The 3-km
+bandwidth used in the final model produced performance effectively
+equivalent to alternative bandwidths.

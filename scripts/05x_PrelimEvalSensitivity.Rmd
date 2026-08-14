@@ -489,7 +489,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
   rmse <- sqrt(mse)
   mae  <- mean(abs(obs - pred_cal))
   rsq  <- 1 - (sse / sst)
-  corr <- cor(obs, pred_raw)
+  corr <- cor(obs, pred_raw, method = "spearman")
  
   data.frame(
     n = length(obs),
@@ -936,7 +936,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
   rmse <- sqrt(mse)
   mae  <- mean(abs(obs - pred_cal))
   rsq  <- 1 - (sse / sst)
-  corr <- cor(obs, pred_raw)
+  corr <- cor(obs, pred_raw, method = "spearman"))
  
   data.frame(
     n = length(obs),
@@ -1383,7 +1383,7 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
   rmse <- sqrt(mse)
   mae  <- mean(abs(obs - pred_cal))
   rsq  <- 1 - (sse / sst)
-  corr <- cor(obs, pred_raw)
+  corr <- cor(obs, pred_raw, method = "spearman")
  
   data.frame(
     n = length(obs),
