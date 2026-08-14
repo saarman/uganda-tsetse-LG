@@ -1,135 +1,109 @@
----
-title: "Spatial Evaluation - Lake Resistance Sensitivity"
-author: "Norah Saarman"
-date: "2026-08-14"
-output:
-  html_document:
-    keep_md: true
----
+Spatial Evaluation - Lake Resistance Sensitivity
+================
+Norah Saarman
+2026-08-14
 
-# Setup
+- [Load libraries](#load-libraries)
+- [Overview](#overview)
+- [Step 1. Inputs](#step-1-inputs)
+- [Step 2. Prepare site pairs and helper
+  functions](#step-2-prepare-site-pairs-and-helper-functions)
+- [Step 3. Prepare lake resistance
+  values](#step-3-prepare-lake-resistance-values)
+- [Step 4. Loop through lake resistance
+  multipliers](#step-4-loop-through-lake-resistance-multipliers)
+- [Step 5. Summarize results](#step-5-summarize-results)
+- [Step 6. Compare with final
+  analysis](#step-6-compare-with-final-analysis)
+- [Step 7. Visualize](#step-7-visualize)
+- [Conclusion](#conclusion)
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
-- **Number of cores:** 16 (up to 32 available)  
+- **Number of cores:** 4 (up to 32 available)  
 - **Account:** saarman-np  
-- **Partition:** saarman-np (allows multiple simultaneous jobs automatically now)  
-- **Memory per job:** 400G (cluster limit: 1000G total; avoid exceeding half)
+- **Partition:** saarman-np (now auto allows multiple simultaneous
+jobs)  
+- **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding
+half)
 
 ## Load libraries
-
 
 ``` r
 library(doParallel)
 ```
 
-```
-## Loading required package: foreach
-```
+    ## Loading required package: foreach
 
-```
-## Loading required package: iterators
-```
+    ## Loading required package: iterators
 
-```
-## Loading required package: parallel
-```
+    ## Loading required package: parallel
 
 ``` r
 library(foreach)
 library(raster)
 ```
 
-```
-## Loading required package: sp
-```
+    ## Loading required package: sp
 
 ``` r
 library(gdistance)
 ```
 
-```
-## Loading required package: igraph
-```
+    ## Loading required package: igraph
 
-```
-## 
-## Attaching package: 'igraph'
-```
+    ## 
+    ## Attaching package: 'igraph'
 
-```
-## The following object is masked from 'package:raster':
-## 
-##     union
-```
+    ## The following object is masked from 'package:raster':
+    ## 
+    ##     union
 
-```
-## The following objects are masked from 'package:stats':
-## 
-##     decompose, spectrum
-```
+    ## The following objects are masked from 'package:stats':
+    ## 
+    ##     decompose, spectrum
 
-```
-## The following object is masked from 'package:base':
-## 
-##     union
-```
+    ## The following object is masked from 'package:base':
+    ## 
+    ##     union
 
-```
-## Loading required package: Matrix
-```
+    ## Loading required package: Matrix
 
-```
-## 
-## Attaching package: 'gdistance'
-```
+    ## 
+    ## Attaching package: 'gdistance'
 
-```
-## The following object is masked from 'package:igraph':
-## 
-##     normalize
-```
+    ## The following object is masked from 'package:igraph':
+    ## 
+    ##     normalize
 
 ``` r
 library(sf)
 ```
 
-```
-## Linking to GEOS 3.10.2, GDAL 3.4.1, PROJ 8.2.1; sf_use_s2() is TRUE
-```
+    ## Linking to GEOS 3.10.2, GDAL 3.4.1, PROJ 8.2.1; sf_use_s2() is TRUE
 
 ``` r
 library(dplyr)
 ```
 
-```
-## 
-## Attaching package: 'dplyr'
-```
+    ## 
+    ## Attaching package: 'dplyr'
 
-```
-## The following objects are masked from 'package:igraph':
-## 
-##     as_data_frame, groups, union
-```
+    ## The following objects are masked from 'package:igraph':
+    ## 
+    ##     as_data_frame, groups, union
 
-```
-## The following objects are masked from 'package:raster':
-## 
-##     intersect, select, union
-```
+    ## The following objects are masked from 'package:raster':
+    ## 
+    ##     intersect, select, union
 
-```
-## The following objects are masked from 'package:stats':
-## 
-##     filter, lag
-```
+    ## The following objects are masked from 'package:stats':
+    ## 
+    ##     filter, lag
 
-```
-## The following objects are masked from 'package:base':
-## 
-##     intersect, setdiff, setequal, union
-```
+    ## The following objects are masked from 'package:base':
+    ## 
+    ##     intersect, setdiff, setequal, union
 
 ``` r
 library(ggplot2)
@@ -137,45 +111,31 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 ```
 
-```
-## 
-## Attaching package: 'rnaturalearthdata'
-```
+    ## 
+    ## Attaching package: 'rnaturalearthdata'
 
-```
-## The following object is masked from 'package:rnaturalearth':
-## 
-##     countries110
-```
+    ## The following object is masked from 'package:rnaturalearth':
+    ## 
+    ##     countries110
 
 ``` r
 library(randomForest)
 ```
 
-```
-## randomForest 4.7-1.2
-```
+    ## randomForest 4.7-1.2
 
-```
-## Type rfNews() to see new features/changes/bug fixes.
-```
+    ## Type rfNews() to see new features/changes/bug fixes.
 
-```
-## 
-## Attaching package: 'randomForest'
-```
+    ## 
+    ## Attaching package: 'randomForest'
 
-```
-## The following object is masked from 'package:ggplot2':
-## 
-##     margin
-```
+    ## The following object is masked from 'package:ggplot2':
+    ## 
+    ##     margin
 
-```
-## The following object is masked from 'package:dplyr':
-## 
-##     combine
-```
+    ## The following object is masked from 'package:dplyr':
+    ## 
+    ##     combine
 
 # Overview
 
@@ -184,12 +144,11 @@ assigned to lake cells during least-cost-path-based spatial evaluation
 of the final projected CSE surface.
 
 The final analysis assigns lake cells a resistance equal to the maximum
-predicted CSE value of the projected surface. Here, all other aspects
-of the spatial evaluation are held constant while lake resistance is
-set to 0.5, 1, 1.5, or 2 times the maximum predicted CSE.
+predicted CSE value of the projected surface. Here, all other aspects of
+the spatial evaluation are held constant while lake resistance is set to
+0.5, 1, 1.5, or 2 times the maximum predicted CSE.
 
 # Step 1. Inputs
-
 
 ``` r
 # Define Paths to directories
@@ -231,7 +190,6 @@ lake_mask <- raster(lake_file)
 ```
 
 # Step 2. Prepare site pairs and helper functions
-
 
 ``` r
 # keep only within-cluster comparisons
@@ -298,7 +256,6 @@ calc_metrics <- function(obs, pred_raw, pred_cal) {
 
 # Step 3. Prepare lake resistance values
 
-
 ``` r
 lake_multipliers <- c(0.5, 1, 1.5, 2)
 
@@ -331,7 +288,6 @@ surface_max
 ```
 
 # Step 4. Loop through lake resistance multipliers
-
 
 ``` r
 # output directory
@@ -511,7 +467,6 @@ stopCluster(cl)
 
 # Step 5. Summarize results
 
-
 ``` r
 lake_summary <- bind_rows(all_metrics)
 
@@ -531,7 +486,6 @@ lake_summary
 
 The lake multiplier of 1 corresponds to the value used in the final
 spatial evaluation.
-
 
 ``` r
 lake_summary <- read.csv(file.path(
@@ -553,26 +507,23 @@ lake_summary_relative <- lake_summary %>%
 lake_summary_relative
 ```
 
-```
-##   lake_multiplier lake_resistance  method    n         MSE       RMSE
-## 1             0.5       0.2169009 LCP_sum 1091 0.004391793 0.06627061
-## 2             1.0       0.4338018 LCP_sum 1091 0.003114933 0.05581158
-## 3             1.5       0.6507027 LCP_sum 1091 0.002758874 0.05252498
-## 4             2.0       0.8676035 LCP_sum 1091 0.002740965 0.05235422
-##          MAE       RSQ Correlation delta_Correlation   delta_RSQ   delta_RMSE
-## 1 0.05341737 0.4584411   0.6910518       -0.11268576 -0.15745171  0.010459027
-## 2 0.04540066 0.6158928   0.8037375        0.00000000  0.00000000  0.000000000
-## 3 0.04211561 0.6597989   0.8260684        0.02233085  0.04390614 -0.003286596
-## 4 0.04176063 0.6620074   0.8272099        0.02347236  0.04611455 -0.003457357
-##      delta_MAE
-## 1  0.008016704
-## 2  0.000000000
-## 3 -0.003285055
-## 4 -0.003640033
-```
+    ##   lake_multiplier lake_resistance  method    n         MSE       RMSE
+    ## 1             0.5       0.2169009 LCP_sum 1091 0.004391793 0.06627061
+    ## 2             1.0       0.4338018 LCP_sum 1091 0.003114933 0.05581158
+    ## 3             1.5       0.6507027 LCP_sum 1091 0.002758874 0.05252498
+    ## 4             2.0       0.8676035 LCP_sum 1091 0.002740965 0.05235422
+    ##          MAE       RSQ Correlation delta_Correlation   delta_RSQ   delta_RMSE
+    ## 1 0.05341737 0.4584411   0.6910518       -0.11268576 -0.15745171  0.010459027
+    ## 2 0.04540066 0.6158928   0.8037375        0.00000000  0.00000000  0.000000000
+    ## 3 0.04211561 0.6597989   0.8260684        0.02233085  0.04390614 -0.003286596
+    ## 4 0.04176063 0.6620074   0.8272099        0.02347236  0.04611455 -0.003457357
+    ##      delta_MAE
+    ## 1  0.008016704
+    ## 2  0.000000000
+    ## 3 -0.003285055
+    ## 4 -0.003640033
 
 # Step 7. Visualize
-
 
 ``` r
 par(mfrow = c(1, 3))
@@ -602,7 +553,7 @@ plot(
 )
 ```
 
-![](07x_AltLakeWeights_CSE_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
+![](../figures/knitted_mds/unnamed-chunk-8-1.png)<!-- -->
 
 ``` r
 par(mfrow = c(1, 1))
@@ -610,4 +561,12 @@ par(mfrow = c(1, 1))
 
 # Conclusion
 
-Model performance was sensitive to low lake resistance but stabilized as lake resistance increased. Assigning lake cells 0.5 times the maximum predicted terrestrial resistance reduced performance (R2 = 0.46; Spearman's r = 0.69), whereas the value used in the final analysis, equal to the maximum terrestrial resistance, produced substantially higher performance (R2 = 0.62; Spearman's r = 0.80). Increasing lake resistance to 1.5 or 2 times the maximum produced only modest additional improvement, with performance reaching a plateau (R2 = 0.66; Spearman's r = 0.83 for both).
+Model performance was sensitive to low lake resistance but stabilized as
+lake resistance increased. Assigning lake cells 0.5 times the maximum
+predicted terrestrial resistance reduced performance (R2 = 0.46;
+Spearman’s r = 0.69), whereas the value used in the final analysis,
+equal to the maximum terrestrial resistance, produced substantially
+higher performance (R2 = 0.62; Spearman’s r = 0.80). Increasing lake
+resistance to 1.5 or 2 times the maximum produced only modest additional
+improvement, with performance reaching a plateau (R2 = 0.66; Spearman’s
+r = 0.83 for both).
