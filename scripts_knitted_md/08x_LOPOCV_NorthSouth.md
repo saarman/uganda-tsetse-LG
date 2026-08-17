@@ -1,9 +1,13 @@
 LOPOCV: Random Forest (Internal) and Spatial Cross-Validation
 ================
 Norah Saarman
-2026-08-14
+2026-08-17
 
 - [Overview of script](#overview-of-script)
+- [Mean fold-level Spearman for full model (north vs
+  south)](#mean-fold-level-spearman-for-full-model-north-vs-south)
+- [Mean fold-level Spearman for distance-only model (north vs
+  south)](#mean-fold-level-spearman-for-distance-only-model-north-vs-south)
 
 RStudio Configuration:  
 - **R version:** R 4.4.0 (Geospatial packages)  
@@ -19,6 +23,8 @@ half)
 This script simply calculates the mean pooled out-of-fold R² and
 Spearman’s r for north and south separately, using pre-exisiting results
 files.
+
+# Mean fold-level Spearman for full model (north vs south)
 
 ``` r
 input_dir <- "../input"
@@ -123,3 +129,26 @@ sapply(
 
     ##     north     south 
     ## 0.7700091 0.8028254
+
+# Mean fold-level Spearman for distance-only model (north vs south)
+
+``` r
+metrics_geodist <- read.csv(
+  file.path(results_dir, "geodist_LOPOCV_summary.csv")
+)
+
+metrics_geodist$Cluster <- site_clusters$Cluster[
+  match(metrics_geodist$site, site_clusters$site)
+]
+
+aggregate(
+  Spearman ~ Cluster,
+  data = metrics_geodist,
+  FUN = mean,
+  na.rm = TRUE
+)
+```
+
+    ##   Cluster  Spearman
+    ## 1   north 0.7412128
+    ## 2   south 0.6453284

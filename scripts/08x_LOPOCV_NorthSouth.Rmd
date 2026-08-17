@@ -33,6 +33,8 @@ RStudio Configuration:
 ## Overview of script
 This script simply calculates the mean pooled out-of-fold R² and Spearman's r for north and south separately, using pre-exisiting results files.
 
+# Mean fold-level Spearman for full model (north vs south)
+
 ```{r extra-north-vs-south}
 input_dir <- "../input"
 data_dir  <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/data"
@@ -126,5 +128,25 @@ pooled_R2 <- function(x) {
 sapply(
   split(eval_all, eval_all$Cluster),
   pooled_R2
+)
+```
+
+# Mean fold-level Spearman for distance-only model (north vs south)
+
+
+```{r}
+metrics_geodist <- read.csv(
+  file.path(results_dir, "geodist_LOPOCV_summary.csv")
+)
+
+metrics_geodist$Cluster <- site_clusters$Cluster[
+  match(metrics_geodist$site, site_clusters$site)
+]
+
+aggregate(
+  Spearman ~ Cluster,
+  data = metrics_geodist,
+  FUN = mean,
+  na.rm = TRUE
 )
 ```

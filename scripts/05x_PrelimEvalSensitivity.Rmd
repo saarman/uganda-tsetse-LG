@@ -30,7 +30,6 @@ RStudio Configuration:
    - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding half)
   
   
-  
 # Overview of script
 
 **This script is not part of the final workflow.**
@@ -1678,3 +1677,75 @@ river_sen
 
 Model performance was insensitive to the river kernel-density bandwidth, with variance explained remaining between 85.74% and 85.88% and OOB MSE between 0.001145 and 0.001156 across bandwidths of 1 to 10 km. The 3-km bandwidth used in the final model produced performance effectively equivalent to alternative bandwidths.
 
+
+# Mtry and MSE stabilization across tree sampling:
+
+```{r mtry}
+# Load final tuned RF model
+final_rds <- "/uufs/chpc.utah.edu/common/home/saarman-group1/uganda-tsetse-LG/results/rf_mean_full_tuned.rds"
+rf_final <- readRDS(final_rds)
+
+# Confirm model settings
+rf_final$ntree
+rf_final$mtry
+
+# Plot OOB MSE across trees
+plot(
+  rf_final$mse,
+  type = "l",
+  xlab = "Number of Trees",
+  ylab = "OOB MSE"
+)
+
+# Compare OOB MSE toward the end of the run
+c(
+  tree_100 = rf_final$mse[100],
+  tree_200 = rf_final$mse[200],
+  tree_300 = rf_final$mse[300],
+  tree_400 = rf_final$mse[400],
+  tree_500 = rf_final$mse[500]
+)
+
+100 * (rf_final$mse[500] - rf_final$mse[400]) / rf_final$mse[400]
+```
+
+
+```{r sampling}
+# unique sites
+sites <- bind_rows(
+  V.table %>% select(site = Var1, lon = long1, lat = lat1),
+  V.table %>% select(site = Var2, lon = long2, lat = lat2)
+) %>%
+  distinct()
+
+# convert to sf and project to an appropriate metric CRS
+sites_sf <- st_as_sf(
+  sites,
+  coords = c("lon", "lat"),
+  crs = 4326
+)
+
+# distances in km
+d <- units::drop_units(st_distance(sites_sf)) / 1000
+
+# remove distance to self
+diag(d) <- NA
+
+# nearest-neighbor distance for each site
+nn_km <- apply(d, 1, min, na.rm = TRUE)
+
+summary(nn_km)
+quantile(nn_km, c(0.25, 0.5, 0.75, 0.9))
+
+# Site with the largest nearest-neighbor distance
+i <- which.max(nn_km)
+
+# Its nearest neighbor
+j <- which.min(d[i, ])
+
+data.frame(
+  site = sites$site[i],
+  nearest_site = sites$site[j],
+  distance_km = d[i, j]
+)
+```
