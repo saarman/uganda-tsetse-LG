@@ -1,9 +1,10 @@
 5 RF model full – raw CSE (1st LC lakes paths)
 ================
 Norah Saarman
-2026-04-20
+2026-08-18
 
-- [Directories](#directories)
+- [Setup](#setup)
+  - [Directories](#directories)
 - [Inputs](#inputs)
 - [1. Prepare the data](#1-prepare-the-data)
 - [2. Build full Random Forest model](#2-build-full-random-forest-model)
@@ -47,11 +48,12 @@ RStudio Configuration:
 - **R version:** R 4.4.0 (Geospatial packages)  
 - **Number of cores:** 4 (up to 32 available)  
 - **Account:** saarman-np  
-- **Partition:** saarman-np (allows multiple simultaneous jobs
-automatically now)  
+- **Partition:** saarman-np (now auto allows multiple simultaneous
+jobs)  
 - **Memory per job:** 100G (cluster limit: 1000G total; avoid exceeding
-half)  
-\# Setup
+half)
+
+# Setup
 
 ``` r
 # load only required packages
@@ -86,6 +88,43 @@ V.table <- read.csv(file.path(input_dir, "Gff_cse_envCostPaths.csv"),
 # Filter out western outlier "50-KB" 
 V.table <- V.table %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
+
+library(dplyr)
+library(readr)
+
+# read full pairwise table used downstream
+cse_raw <- read_csv("../input/Gff_cse_envCostPaths.csv")
+```
+
+    ## Rows: 1123 Columns: 82
+    ## ── Column specification ────────────────────────────────────────────────────────
+    ## Delimiter: ","
+    ## chr  (4): Var1, Var2, Pop1_cluster, Pop2_cluster
+    ## dbl (78): CSEdistance, lat1, long1, lat2, long2, pix_dist, BIO1_mean, BIO2_m...
+    ## 
+    ## ℹ Use `spec()` to retrieve the full column specification for this data.
+    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+``` r
+# final CSE table used in modeling
+cse_final <- cse_raw %>%
+  filter(Var1 != "50-KB", Var2 != "50-KB") %>%
+  filter(Pop1_cluster == Pop2_cluster) %>%
+  transmute(
+    site1    = Var1,
+    site2    = Var2,
+    CSE      = CSEdistance,
+    lat1     = lat1,
+    long1    = long1,
+    lat2     = lat2,
+    long2    = long2,
+    cluster1 = Pop1_cluster,
+    cluster2 = Pop2_cluster
+  ) %>%
+  arrange(cluster1, site1, site2)
+
+write_csv(cse_final, "../data/final_CSE_table.csv")
+
 
 # define coordinate reference system
 crs_geo <- 4326     # EPSG code for WGS84
@@ -165,8 +204,6 @@ mode_vars   <- grep("_mode$", names(rf_data), value = TRUE)
 
 # 2. Build full Random Forest model
 
-Note: Marked eval = FALSE to avoid re-running on knit
-
 ``` r
 # Build full RF model
 set.seed(1234)  # ensures reproducibility
@@ -178,9 +215,96 @@ rf_full <- randomForest(
 )
 
 print(rf_full)
+```
 
+    ## 
+    ## Call:
+    ##  randomForest(formula = CSEdistance ~ ., data = rf_data, importance = TRUE,      ntree = 500) 
+    ##                Type of random forest: regression
+    ##                      Number of trees: 500
+    ## No. of variables tried at each split: 24
+    ## 
+    ##           Mean of squared residuals: 0.001119129
+    ##                     % Var explained: 86.2
+
+``` r
 importance(rf_full)
 ```
+
+    ##                     %IncMSE IncNodePurity
+    ## pix_dist         58.3012131  3.0935298531
+    ## BIO1_mean         9.0020495  0.0301285131
+    ## BIO2_mean         6.4098370  0.0473834223
+    ## BIO3_mean        13.6026451  0.2721208278
+    ## BIO4_mean        10.2607730  0.0613038622
+    ## BIO5_mean        10.4818330  0.0291173353
+    ## BIO6_mean        11.8583425  0.1575919110
+    ## BIO7_mean        10.7247498  0.0484384046
+    ## BIO8S_mean        9.1198968  0.0389941449
+    ## BIO9S_mean        9.1545944  0.0757165381
+    ## BIO10S_mean      10.5581937  0.0348492182
+    ## BIO11S_mean      12.6650592  0.0999023193
+    ## BIO12_mean       10.2105738  0.0420781559
+    ## BIO13_mean       10.3447647  0.0557322008
+    ## BIO14_mean        8.6877132  0.1224180146
+    ## BIO15_mean        9.2166452  0.0942930637
+    ## BIO16S_mean       9.3860539  0.0266651745
+    ## BIO17S_mean       5.5162695  0.0419393147
+    ## BIO18S_mean       5.1426282  0.0318266777
+    ## BIO19S_mean       9.4523005  0.0313136617
+    ## alt_mean          9.6483998  0.0391622442
+    ## slope_mean       10.8249810  0.0391778902
+    ## riv_3km_mean     13.2872838  0.0527211941
+    ## samp_20km_mean   19.3440414  1.0712456972
+    ## lakes_mean        7.4531090  0.0780686943
+    ## BIO1_median       9.1525088  0.0410832893
+    ## BIO2_median       9.3369590  0.0473558188
+    ## BIO3_median      14.0929216  0.0892901654
+    ## BIO4_median      10.1173720  0.0507536064
+    ## BIO5_median       9.6663029  0.0497769331
+    ## BIO6_median      12.7588988  0.2462962100
+    ## BIO7_median      10.6655843  0.0495553419
+    ## BIO8S_median      9.9223161  0.0337600533
+    ## BIO9S_median      9.9244398  0.0804881296
+    ## BIO10S_median     9.5509941  0.0373292693
+    ## BIO11S_median    10.8215075  0.0844560970
+    ## BIO12_median     10.1568111  0.0327408721
+    ## BIO13_median     11.7315217  0.0719496005
+    ## BIO14_median      4.7695670  0.0209310192
+    ## BIO15_median     13.4686933  0.0706187410
+    ## BIO16S_median     8.9510772  0.0425605141
+    ## BIO17S_median    10.9025714  0.0276578250
+    ## BIO18S_median     7.7717184  0.0224679158
+    ## BIO19S_median     9.2931810  0.0334663036
+    ## alt_median       11.5067482  0.0603982245
+    ## slope_median     10.2245463  0.0471151689
+    ## riv_3km_median    7.1750996  0.0521492669
+    ## samp_20km_median 15.8059008  0.5984020935
+    ## lakes_median     -0.8027164  0.0002072142
+    ## BIO1_mode        11.2642008  0.0261941733
+    ## BIO2_mode        10.0272409  0.0582292777
+    ## BIO3_mode        13.2646204  0.0893638675
+    ## BIO4_mode        11.8018707  0.0319873963
+    ## BIO5_mode         8.5177924  0.0239607111
+    ## BIO6_mode         7.8889344  0.0905625124
+    ## BIO7_mode         9.7704289  0.0303038567
+    ## BIO8S_mode        7.5655875  0.0213594257
+    ## BIO9S_mode        9.0357805  0.0330665378
+    ## BIO10S_mode      12.3764817  0.0458989549
+    ## BIO11S_mode      10.8438312  0.0548054849
+    ## BIO12_mode        8.8893019  0.0300983290
+    ## BIO13_mode        9.4327509  0.0315015252
+    ## BIO14_mode        9.4888215  0.0268860615
+    ## BIO15_mode        9.1871791  0.1212897856
+    ## BIO16S_mode       8.6535206  0.0262811613
+    ## BIO17S_mode       7.9266488  0.0311551856
+    ## BIO18S_mode       8.6996598  0.0221932434
+    ## BIO19S_mode      10.2959906  0.0395754563
+    ## alt_mode          9.2601975  0.0278142951
+    ## slope_mode        8.3837670  0.0458055496
+    ## riv_3km_mode      7.3381090  0.0527243831
+    ## samp_20km_mode   11.6645843  0.2253255309
+    ## lakes_mode       -1.0010015  0.0000351668
 
 # 3. Mean-only pruning
 
@@ -208,6 +332,9 @@ c(mean = rf_mean$rsq[500] * 100,
   median = rf_median$rsq[500] * 100,
   mode = rf_mode$rsq[500] * 100)
 ```
+
+    ##     mean   median     mode 
+    ## 85.52060 84.86890 84.51402
 
 Including mean of env variable along least cost paths performs the best,
 adding median and mode does not greatly improve the model and increases
@@ -376,7 +503,7 @@ mean(V.table_full$samp_20km_mean, na.rm = TRUE)
 V.table <- V.table_full %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
 
-# Filter for within-cluster pairs AND geographic distance ≤ 100 km
+# Filter for within-cluster pairs AND geographic distance <= 100 km
 #V.table <- V.table_full %>%
 #  filter(Pop1_cluster == Pop2_cluster) %>%
 #  filter(pix_dist <= 100)
@@ -857,7 +984,7 @@ mean(V.table_full$samp_20km_mean, na.rm = TRUE)
 V.table <- V.table_full %>%
   filter(Var1 != "50-KB", Var2 != "50-KB")
 
-# Filter for within-cluster pairs AND geographic distance ≤ 100 km
+# Filter for within-cluster pairs AND geographic distance <= 100 km
 #V.table <- V.table_full %>%
 #  filter(Pop1_cluster == Pop2_cluster) %>%
 #  filter(pix_dist <= 100)

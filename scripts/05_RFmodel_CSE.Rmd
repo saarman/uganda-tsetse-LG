@@ -154,8 +154,7 @@ mode_vars   <- grep("_mode$", names(rf_data), value = TRUE)
   
 # 2. Build full Random Forest model 
 
-Note: Marked eval = FALSE to avoid re-running on knit
-```{r rf-full, warning=FALSE, eval = FALSE}
+```{r rf-full, warning=FALSE}
 # Build full RF model
 set.seed(1234)  # ensures reproducibility
 rf_full <- randomForest(
@@ -175,7 +174,7 @@ importance(rf_full)
 ## Compare mean versus median versus mode:  
 
 Note: Marked eval = FALSE to avoid re-running on knit
-```{r mean-v-median-v-mode, warning=FALSE, eval = FALSE}
+```{r mean-v-median-v-mode, warning=FALSE}
 # Extract groups of variables by suffix
 mean_vars   <- grep("_mean$", names(rf_data), value = TRUE)
 median_vars <- grep("_median$", names(rf_data), value = TRUE)
